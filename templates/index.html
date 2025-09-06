@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TRS-80 Color Computer</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='coco.css') }}">
+</head>
+<body>
+    <div class="computer-container">
+        <div class="screen-bezel">
+            <div class="screen-container">
+                <canvas id="display" width="512" height="384"></canvas>
+                <div id="cursor"></div>
+            </div>
+        </div>
+        <div class="input-area">
+            <input type="text" id="command-input" placeholder="Type BASIC commands here..." autocomplete="off">
+        </div>
+        <div class="info-panel">
+            <h3>TRS-80 Color Computer BASIC</h3>
+            <p>Try these commands:</p>
+            <ul>
+                <li><code>PRINT "HELLO WORLD"</code></li>
+                <li><code>10 FOR I=1 TO 5: PRINT I: NEXT</code></li>
+                <li><code>LIST</code> - Show program</li>
+                <li><code>RUN</code> - Run program</li>
+                <li><code>CLEAR</code> - Clear program</li>
+                <li><code>CLS</code> - Clear screen</li>
+            </ul>
+            <p>Graphics commands:</p>
+            <ul>
+                <li><code>PMODE 4,1: SCREEN 1,1</code> - Set graphics mode</li>
+                <li><code>PSET(128,96)</code> - Set pixel</li>
+                <li><code>LINE(0,0)-(255,191)</code> - Draw line</li>
+                <li><code>CIRCLE(128,96),50</code> - Draw circle</li>
+                <li><code>PCLS</code> - Clear graphics</li>
+                <li><code>COLOR 4,0</code> - Set colors (red on black)</li>
+                <li><code>SOUND 1000,30</code> - Play tone (1000Hz, 0.5sec)</li>
+            </ul>
+        </div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.0/socket.io.js"></script>
+    <script src="{{ url_for('static', filename='audio.js') }}"></script>
+    <script src="{{ url_for('static', filename='coco.js') }}"></script>
+</body>
+</html>
