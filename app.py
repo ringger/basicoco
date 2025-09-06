@@ -80,7 +80,7 @@ class CoCoBasic:
     
     def expand_line_to_sublines(self, line_num, code):
         """Expand a multi-statement line into virtual sub-lines"""
-        statements = [stmt.strip() for stmt in code.split(':') if stmt.strip()]
+        statements = self.split_statements(code)
         
         # Clear any existing sub-lines for this line number
         keys_to_remove = [key for key in self.expanded_program.keys() if key[0] == line_num]
@@ -186,6 +186,26 @@ class CoCoBasic:
                             # If can't find return position, just continue
                             current_pos_index += 1
                             jumped = True
+                        break
+                    elif item.get('type') == 'skip_for_loop':
+                        # Skip to after the matching NEXT for this variable
+                        var_name = item['var']
+                        # Find the matching NEXT statement
+                        for pos_idx in range(current_pos_index + 1, len(all_positions)):
+                            check_line, check_sub = all_positions[pos_idx]
+                            check_statement = self.expanded_program.get((check_line, check_sub), '')
+                            if check_statement.strip().startswith('NEXT'):
+                                # Check if it's the matching NEXT (same variable or no variable)
+                                next_parts = check_statement.strip().split()
+                                if len(next_parts) == 1 or next_parts[1] == var_name:
+                                    # Jump to the position after this NEXT
+                                    current_pos_index = pos_idx + 1
+                                    jumped = True
+                                    break
+                        if not jumped:
+                            output.append({'type': 'error', 'message': f'FOR WITHOUT NEXT'})
+                            self.running = False
+                            break
                         break
                     elif item.get('type') != 'input_request':  # Skip input_request as we handled it above
                         output.append(item)
@@ -303,9 +323,40 @@ class CoCoBasic:
         self.program_counter = None
         return output
     
+    def split_statements(self, code):
+        """Split a line into statements on colons, but respect quoted strings"""
+        statements = []
+        current_statement = ""
+        in_quotes = False
+        
+        for char in code:
+            if char == '"':
+                in_quotes = not in_quotes
+                current_statement += char
+            elif char == ':' and not in_quotes:
+                if current_statement.strip():
+                    statements.append(current_statement.strip())
+                current_statement = ""
+            else:
+                current_statement += char
+        
+        if current_statement.strip():
+            statements.append(current_statement.strip())
+        
+        return statements
+    
+    def format_number_for_output(self, value):
+        """Format a number for BASIC output - integers should not show decimal"""
+        if isinstance(value, (int, float)):
+            if isinstance(value, float) and value.is_integer():
+                return str(int(value))
+            else:
+                return str(value)
+        return str(value)
+    
     def execute_line(self, code):
         # Handle multi-statement lines separated by colons
-        statements = [stmt.strip() for stmt in code.split(':') if stmt.strip()]
+        statements = self.split_statements(code)
         if len(statements) > 1:
             # Execute each statement and collect results
             all_results = []
@@ -316,7 +367,7 @@ class CoCoBasic:
                     # Handle jumps in multi-statement lines
                     for item in result:
                         if item.get('type') == 'jump':
-                            return result  # Return immediately on jump
+                            return all_results  # Return all accumulated results including jump
             return all_results
         else:
             # Single statement
@@ -329,18 +380,23 @@ class CoCoBasic:
             
         first_part = parts[0]
         
-        # Handle commands with parentheses (graphics commands)
-        if first_part.startswith('PSET('):
-            return self.execute_pset(first_part[4:])  # Remove 'PSET'
-        elif first_part.startswith('PRESET('):
-            return self.execute_preset(first_part[6:])  # Remove 'PRESET'
-        elif first_part.startswith('CIRCLE('):
-            return self.execute_circle(first_part[6:])  # Remove 'CIRCLE'
-        elif first_part.startswith('LINE('):
-            return self.execute_line_graphics(first_part[4:])  # Remove 'LINE'
+        # Handle commands with parentheses (graphics commands) - case insensitive
+        first_part_upper = first_part.upper()
+        if first_part_upper.startswith('PSET('):
+            paren_pos = first_part.find('(')
+            return self.execute_pset(first_part[paren_pos:])
+        elif first_part_upper.startswith('PRESET('):
+            paren_pos = first_part.find('(')
+            return self.execute_preset(first_part[paren_pos:])
+        elif first_part_upper.startswith('CIRCLE('):
+            paren_pos = first_part.find('(')
+            return self.execute_circle(first_part[paren_pos:])
+        elif first_part_upper.startswith('LINE('):
+            paren_pos = first_part.find('(')
+            return self.execute_line_graphics(first_part[paren_pos:])
         
-        # Regular command parsing
-        command = first_part
+        # Regular command parsing (case insensitive)
+        command = first_part.upper()
         
         if command == 'PRINT':
             return self.execute_print(' '.join(parts[1:]))
@@ -367,7 +423,7 @@ class CoCoBasic:
         elif command == 'SCREEN':
             return self.execute_screen(' '.join(parts[1:]))
         elif command == 'PCLS':
-            return [{'type': 'clear_graphics'}]
+            return [{'type': 'pcls'}]
         elif command == 'COLOR':
             return self.execute_color(' '.join(parts[1:]))
         elif command == 'SOUND':
@@ -397,6 +453,9 @@ class CoCoBasic:
             return self.execute_put(' '.join(parts[1:]))
         elif command == 'DRAW':
             return self.execute_draw(' '.join(parts[1:]))
+        elif first_part_upper.startswith('PAINT('):
+            paren_pos = first_part.find('(')
+            return self.execute_paint(first_part[paren_pos:])
         elif '=' in code:
             # Variable assignment without LET
             return self.execute_let(code)
@@ -419,7 +478,7 @@ class CoCoBasic:
             try:
                 # Try to evaluate the expression
                 value = self.evaluate_expression(item)
-                output_parts.append(str(value))
+                output_parts.append(self.format_number_for_output(value))
             except ValueError as e:
                 # Check for specific BASIC errors that should be propagated
                 error_msg = str(e)
@@ -429,7 +488,7 @@ class CoCoBasic:
                 if item.startswith('"') and item.endswith('"'):
                     output_parts.append(item[1:-1])
                 elif item in self.variables:
-                    output_parts.append(str(self.variables[item]))
+                    output_parts.append(self.format_number_for_output(self.variables[item]))
                 elif item.replace('.', '').replace('-', '').isdigit():
                     output_parts.append(item)
                 else:
@@ -439,7 +498,7 @@ class CoCoBasic:
                 if item.startswith('"') and item.endswith('"'):
                     output_parts.append(item[1:-1])
                 elif item in self.variables:
-                    output_parts.append(str(self.variables[item]))
+                    output_parts.append(self.format_number_for_output(self.variables[item]))
                 elif item.replace('.', '').replace('-', '').isdigit():
                     output_parts.append(item)
                 else:
@@ -505,6 +564,13 @@ class CoCoBasic:
         parts = args.split('=', 1)
         var_name = parts[0].strip()
         expression = parts[1].strip()
+        
+        # Validate variable name
+        if not var_name:
+            return [{'type': 'error', 'message': 'SYNTAX ERROR'}]
+        
+        # Normalize variable name to uppercase for case insensitivity
+        var_name = var_name.upper()
         
         # Check if this is an array assignment (A(5) = 10)
         array_match = re.match(r'(\w+\$?)\(([^)]+)\)', var_name)
@@ -647,12 +713,24 @@ class CoCoBasic:
         if expr.startswith('"') and expr.endswith('"'):
             return expr[1:-1]  # Return string without quotes
         
-        # Replace variables with their values
+        # Check if this is a simple variable reference (case insensitive)
+        if re.match(r'^\w+\$?$', expr):
+            expr_upper = expr.upper()
+            if expr_upper in self.variables:
+                return self.variables[expr_upper]
+        
+        # Replace variables with their values for complex expressions (case insensitive)
         original_expr = expr
         for var, val in self.variables.items():
-            if var in expr:
-                # Be careful about partial matches
-                expr = re.sub(r'\b' + re.escape(var) + r'\b', str(val), expr)
+            # Use case insensitive matching
+            pattern = r'\b' + re.escape(var) + r'\b'
+            if re.search(pattern, expr, re.IGNORECASE):
+                if isinstance(val, str):
+                    # For string values, wrap in quotes for eval
+                    replacement = '"' + val.replace('"', '\\"') + '"'
+                else:
+                    replacement = str(val)
+                expr = re.sub(pattern, replacement, expr, flags=re.IGNORECASE)
         
         # Simple evaluation (dangerous in real code, but OK for demo)
         try:
@@ -1009,9 +1087,17 @@ class CoCoBasic:
             return [{'type': 'error', 'message': 'SYNTAX ERROR'}]
         
         var_name = match.group(1).strip()
-        start_val = int(self.evaluate_expression(match.group(2).strip()))
-        end_val = int(self.evaluate_expression(match.group(3).strip()))
-        step_val = int(self.evaluate_expression(match.group(4).strip())) if match.group(4) else 1
+        start_val = self.evaluate_expression(match.group(2).strip())
+        end_val = self.evaluate_expression(match.group(3).strip())
+        step_val = self.evaluate_expression(match.group(4).strip()) if match.group(4) else 1
+        
+        # Check if loop should execute at all
+        if ((step_val > 0 and start_val > end_val) or 
+            (step_val < 0 and start_val < end_val)):
+            # Skip the loop entirely - jump to NEXT and pop it
+            self.variables[var_name] = start_val  # Still set the variable
+            # Return a jump to find and skip past the matching NEXT
+            return [{'type': 'skip_for_loop', 'var': var_name}]
         
         self.variables[var_name] = start_val
         self.for_stack.append({
@@ -1123,7 +1209,7 @@ class CoCoBasic:
             self.graphics_mode = mode
             page = int(parts[1].strip()) if len(parts) > 1 else 1
             
-            return [{'type': 'set_pmode', 'mode': mode, 'page': page}]
+            return [{'type': 'pmode', 'mode': mode, 'page': page}]
         except:
             return [{'type': 'error', 'message': 'SYNTAX ERROR'}]
     
@@ -1247,6 +1333,39 @@ class CoCoBasic:
         except:
             return [{'type': 'error', 'message': 'SYNTAX ERROR'}]
     
+    def execute_paint(self, args):
+        # PAINT(x,y),color or PAINT(x,y),color,boundary_color
+        if not args.startswith('(') or ')' not in args:
+            return [{'type': 'error', 'message': 'SYNTAX ERROR'}]
+        
+        # Check if we're in graphics mode
+        if self.graphics_mode == 0:
+            return [{'type': 'error', 'message': 'ILLEGAL FUNCTION CALL'}]
+        
+        close_paren = args.index(')')
+        coords = args[1:close_paren].split(',')
+        rest = args[close_paren+1:].strip()
+        
+        if len(coords) != 2:
+            return [{'type': 'error', 'message': 'SYNTAX ERROR'}]
+        
+        if not rest.startswith(','):
+            return [{'type': 'error', 'message': 'SYNTAX ERROR'}]
+        
+        params = rest[1:].split(',')
+        if len(params) < 1:
+            return [{'type': 'error', 'message': 'SYNTAX ERROR'}]
+        
+        try:
+            x = int(float(self.evaluate_expression(coords[0].strip())))
+            y = int(float(self.evaluate_expression(coords[1].strip())))
+            fill_color = int(float(self.evaluate_expression(params[0].strip())))
+            boundary_color = int(float(self.evaluate_expression(params[1].strip()))) if len(params) > 1 else None
+            
+            return [{'type': 'paint', 'x': x, 'y': y, 'fill_color': fill_color, 'boundary_color': boundary_color}]
+        except (ValueError, TypeError):
+            return [{'type': 'error', 'message': 'SYNTAX ERROR'}]
+    
     def execute_color(self, args):
         # COLOR fg,bg
         parts = args.split(',')
@@ -1289,6 +1408,7 @@ class CoCoBasic:
         self.running = False
         self.waiting_for_input = False
         self.program_counter = None
+        self.graphics_mode = 0  # Reset to text mode
         return [{'type': 'text', 'text': 'READY'}]
     
     def execute_end(self):
