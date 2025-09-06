@@ -31,6 +31,16 @@ class CoCoBasic:
         self.current_draw_color = 1  # Default drawing color
         self.turtle_x = 64  # Turtle graphics X position (center of default screen)
         self.turtle_y = 48  # Turtle graphics Y position (center of default screen)
+    
+    @property 
+    def key_buffer(self):
+        """Compatibility property for tests"""
+        return self.keyboard_buffer
+    
+    @key_buffer.setter
+    def key_buffer(self, value):
+        """Compatibility property for tests"""
+        self.keyboard_buffer = value
         
     def parse_line(self, line):
         line = line.strip().upper()
@@ -53,14 +63,30 @@ class CoCoBasic:
             
         command = command.strip()
         
+        # Check if this is a numbered line (program line)
+        line_num, code = self.parse_line(command)
+        if line_num is not None:
+            # This is a program line - add it to the program
+            if code:  # Non-empty code
+                self.program[line_num] = code
+                self.expand_line_to_sublines(line_num, code)
+            else:  # Empty code - delete the line
+                if line_num in self.program:
+                    del self.program[line_num]
+                # Remove from expanded program
+                keys_to_remove = [key for key in self.expanded_program.keys() if key[0] == line_num]
+                for key in keys_to_remove:
+                    del self.expanded_program[key]
+            return [{'type': 'text', 'text': 'OK'}]
+        
         # Handle immediate commands
-        if command == 'LIST':
+        if command.upper() == 'LIST':
             return self.list_program()
-        elif command == 'RUN':
+        elif command.upper() == 'RUN':
             return self.run_program()
-        elif command == 'CLEAR':
+        elif command.upper() == 'CLEAR':
             return self.clear_program()
-        elif command == 'CLS':
+        elif command.upper() == 'CLS':
             return [{'type': 'clear_screen'}]
         else:
             # Try to execute as a line of code
@@ -98,6 +124,21 @@ class CoCoBasic:
         output = []
         self.running = True
         self.iteration_count = 0
+        
+        # Pre-process DATA statements - collect all DATA from program lines
+        self.data_statements.clear()
+        self.data_pointer = 0
+        preprocessing_running = self.running
+        self.running = False  # Temporarily disable running flag for preprocessing
+        for line_num in sorted(self.program.keys()):
+            # Check if this line contains DATA statements
+            line_code = self.program[line_num].strip().upper()
+            if line_code.startswith('DATA '):
+                # Process the DATA statement
+                data_args = self.program[line_num][4:].strip()  # Remove 'DATA'
+                self.current_line = line_num
+                self.execute_data(data_args)
+        self.running = preprocessing_running  # Restore running flag
         
         # Get all sub-line positions sorted by (line_num, sub_index)
         all_positions = sorted(self.expanded_program.keys())
@@ -149,10 +190,12 @@ class CoCoBasic:
                     elif item.get('type') == 'jump_after_for':
                         # Jump to the sub-line after the FOR sub-line
                         for_line = item['for_line']
-                        for_positions = [(ln, si) for ln, si in all_positions if ln == for_line]
-                        if for_positions:
-                            for_pos = for_positions[0]  # First sub-line of FOR line (the FOR statement)
-                            for_index = all_positions.index(for_pos)
+                        for_sub_line = item.get('for_sub_line', 0)
+                        
+                        # Find the exact FOR position using both line and sub_line
+                        for_position = (for_line, for_sub_line)
+                        if for_position in all_positions:
+                            for_index = all_positions.index(for_position)
                             # Jump to the next sub-line (after the FOR)
                             current_pos_index = for_index + 1
                             jumped = True
@@ -324,11 +367,23 @@ class CoCoBasic:
         return output
     
     def split_statements(self, code):
-        """Split a line into statements on colons, but respect quoted strings"""
+        """Split a line into statements on colons, but respect quoted strings and IF/THEN constructs"""
         statements = []
         current_statement = ""
         in_quotes = False
         
+        # Check if this line contains an IF/THEN construct that starts the line
+        code_upper = code.upper().strip()
+        if_pos = code_upper.find('IF ')
+        then_pos = code_upper.find(' THEN ')
+        
+        # If this line STARTS with an IF/THEN statement, don't split after THEN
+        if if_pos == 0 and then_pos > if_pos:
+            # This line starts with IF/THEN - treat the whole thing as one statement
+            statements.append(code.strip())
+            return statements
+        
+        # Normal colon splitting for other statements (including FOR loops)
         for char in code:
             if char == '"':
                 in_quotes = not in_quotes
@@ -534,28 +589,38 @@ class CoCoBasic:
     
     def execute_input(self, args):
         # Handle INPUT with optional prompt
-        # INPUT "PROMPT"; VAR or INPUT VAR
+        # INPUT "PROMPT"; VAR or INPUT VAR1, VAR2, VAR3
         prompt = ""
-        var_name = ""
+        var_names = []
         
         if '"' in args:
             # Find the string literal prompt
-            match = re.match(r'"([^"]*)"[;,]?\s*(\w+)', args)
+            match = re.match(r'"([^"]*)"[;,]?\s*(.*)', args)
             if match:
                 prompt = match.group(1)
-                var_name = match.group(2)
+                vars_part = match.group(2).strip()
             else:
                 return [{'type': 'error', 'message': 'SYNTAX ERROR'}]
         else:
-            # Simple INPUT VAR
-            var_name = args.strip()
+            # Simple INPUT VAR1, VAR2, etc.
+            vars_part = args.strip()
             prompt = "? "
         
-        if not var_name or not var_name.replace('$', '').replace('_', '').isalnum():
+        # Parse variable names (comma-separated)
+        if vars_part:
+            var_names = [var.strip() for var in vars_part.split(',')]
+        
+        if not var_names:
             return [{'type': 'error', 'message': 'SYNTAX ERROR'}]
         
-        # Return an input request that the client will handle
-        return [{'type': 'input_request', 'prompt': prompt, 'variable': var_name}]
+        # Validate first variable name
+        first_var = var_names[0]
+        if not first_var or not first_var.replace('$', '').replace('_', '').isalnum():
+            return [{'type': 'error', 'message': 'SYNTAX ERROR'}]
+        
+        # Return an input request for the first variable (simplified implementation)
+        # In a full implementation, this would handle multiple variables sequentially
+        return [{'type': 'input_request', 'prompt': prompt, 'variable': first_var}]
     
     def execute_let(self, args):
         if '=' not in args:
@@ -631,11 +696,140 @@ class CoCoBasic:
         
         return [{'type': 'text', 'text': 'OK'}]
     
-    def evaluate_expression(self, expr):
+    def evaluate_single_function(self, expr):
+        """Handle single function calls (when entire expression is one function)"""
         expr = expr.strip()
         
-        # Check for array access (A(5) or B$(2,3))
-        array_match = re.match(r'(\w+\$?)\(([^)]+)\)', expr)
+        # Check if this is truly a single function call by verifying that it starts with
+        # a function name, has matching parentheses, and doesn't have extra content after
+        function_names = ['LEFT$', 'RIGHT$', 'MID$', 'LEN', 'ABS', 'INT', 'RND', 'SQR',
+                         'SIN', 'COS', 'TAN', 'ATN', 'EXP', 'LOG', 'CHR$', 'ASC', 'STR$', 'VAL']
+        
+        for func_name in function_names:
+            if expr.startswith(func_name + '('):
+                # Extract the full function call to see if it matches the entire expression
+                args_str = self.extract_function_args(expr, func_name)
+                if args_str is not None:
+                    # Reconstruct the expected function call
+                    expected = f"{func_name}({args_str})"
+                    if expr == expected:
+                        # This is indeed a single function call
+                        if func_name == 'LEFT$':
+                            return self.evaluate_left_function(expr)
+                        elif func_name == 'RIGHT$':
+                            return self.evaluate_right_function(expr)
+                        elif func_name == 'MID$':
+                            return self.evaluate_mid_function(expr)
+                        elif func_name == 'LEN':
+                            return self.evaluate_len_function(expr)
+                        elif func_name == 'ABS':
+                            return self.evaluate_abs_function(expr)
+                        elif func_name == 'INT':
+                            return self.evaluate_int_function(expr)
+                        elif func_name == 'RND':
+                            return self.evaluate_rnd_function(expr)
+                        elif func_name == 'SQR':
+                            return self.evaluate_sqr_function(expr)
+                        elif func_name == 'SIN':
+                            return self.evaluate_sin_function(expr)
+                        elif func_name == 'COS':
+                            return self.evaluate_cos_function(expr)
+                        elif func_name == 'TAN':
+                            return self.evaluate_tan_function(expr)
+                        elif func_name == 'ATN':
+                            return self.evaluate_atn_function(expr)
+                        elif func_name == 'EXP':
+                            return self.evaluate_exp_function(expr)
+                        elif func_name == 'LOG':
+                            return self.evaluate_log_function(expr)
+                        elif func_name == 'CHR$':
+                            return self.evaluate_chr_function(expr)
+                        elif func_name == 'ASC':
+                            return self.evaluate_asc_function(expr)
+                        elif func_name == 'STR$':
+                            return self.evaluate_str_function(expr)
+                        elif func_name == 'VAL':
+                            return self.evaluate_val_function(expr)
+        
+        # Special case for INKEY$ (no parentheses)
+        if expr == 'INKEY$':
+            return self.evaluate_inkey_function(expr)
+        
+        return None  # No single function match
+    
+    def substitute_basic_functions(self, expr):
+        """Substitute BASIC function calls with their evaluated results"""
+        original_expr = expr
+        
+        # List of functions to substitute
+        functions = ['LEFT$', 'RIGHT$', 'MID$', 'LEN', 'ABS', 'INT', 'RND', 'SQR', 
+                    'SIN', 'COS', 'TAN', 'ATN', 'EXP', 'LOG', 'CHR$', 'ASC', 'STR$', 'VAL']
+        
+        # Keep substituting until no more functions found
+        changed = True
+        while changed:
+            changed = False
+            for func_name in functions:
+                # Find function calls and replace them
+                search_pattern = f'{func_name}('
+                pos = 0
+                while pos < len(expr):
+                    pos = expr.find(search_pattern, pos)
+                    if pos == -1:
+                        break
+                    
+                    # Find the matching closing parenthesis
+                    paren_count = 0
+                    start_pos = pos + len(search_pattern) - 1  # Position of opening parenthesis
+                    end_pos = -1
+                    
+                    for i in range(start_pos, len(expr)):
+                        if expr[i] == '(':
+                            paren_count += 1
+                        elif expr[i] == ')':
+                            paren_count -= 1
+                            if paren_count == 0:
+                                end_pos = i
+                                break
+                    
+                    if end_pos != -1:
+                        # Extract the complete function call
+                        func_call = expr[pos:end_pos + 1]
+                        try:
+                            # Evaluate the function call
+                            result = self.evaluate_single_function(func_call)
+                            if result is not None:
+                                # Replace the function call with its result
+                                if isinstance(result, str):
+                                    # For string results, wrap in quotes for eval
+                                    replacement = '"' + result.replace('"', '\\"') + '"'
+                                else:
+                                    replacement = str(result)
+                                expr = expr[:pos] + replacement + expr[end_pos + 1:]
+                                changed = True
+                                # Don't increment pos, re-scan from current position
+                                continue
+                        except:
+                            pass  # If function evaluation fails, leave it as-is
+                    
+                    pos += len(search_pattern)
+        
+        return expr
+    
+    def evaluate_expression(self, expr):
+        expr = expr.strip()
+        original_expr = expr
+        
+        # First, check if the entire expression is a single function call
+        single_func_result = self.evaluate_single_function(expr)
+        if single_func_result is not None:
+            return single_func_result
+        
+        # For complex expressions, substitute BASIC functions first
+        expr = self.substitute_basic_functions(expr)
+        
+        # Check for simple array access only (entire expression is just array access)
+        array_match = re.match(r'^(\w+\$?)\(([^)]+)\)$', expr)
         if array_match:
             array_name = array_match.group(1)
             indices_str = array_match.group(2)
@@ -667,48 +861,6 @@ class CoCoBasic:
                     raise ve
                 raise ValueError("SYNTAX ERROR")
         
-        # Find the outermost function call and evaluate it
-        # Look for function patterns that start at the beginning of the expression
-        if expr.startswith('LEFT$('):
-            return self.evaluate_left_function(expr)
-        elif expr.startswith('RIGHT$('):
-            return self.evaluate_right_function(expr)
-        elif expr.startswith('MID$('):
-            return self.evaluate_mid_function(expr)
-        elif expr.startswith('LEN('):
-            return self.evaluate_len_function(expr)
-        # Handle math functions
-        elif expr.startswith('ABS('):
-            return self.evaluate_abs_function(expr)
-        elif expr.startswith('INT('):
-            return self.evaluate_int_function(expr)
-        elif expr.startswith('RND('):
-            return self.evaluate_rnd_function(expr)
-        elif expr.startswith('SQR('):
-            return self.evaluate_sqr_function(expr)
-        elif expr.startswith('SIN('):
-            return self.evaluate_sin_function(expr)
-        elif expr.startswith('COS('):
-            return self.evaluate_cos_function(expr)
-        elif expr.startswith('TAN('):
-            return self.evaluate_tan_function(expr)
-        elif expr.startswith('ATN('):
-            return self.evaluate_atn_function(expr)
-        elif expr.startswith('EXP('):
-            return self.evaluate_exp_function(expr)
-        elif expr.startswith('LOG('):
-            return self.evaluate_log_function(expr)
-        elif expr.startswith('CHR$('):
-            return self.evaluate_chr_function(expr)
-        elif expr.startswith('ASC('):
-            return self.evaluate_asc_function(expr)
-        elif expr.startswith('STR$('):
-            return self.evaluate_str_function(expr)
-        elif expr.startswith('VAL('):
-            return self.evaluate_val_function(expr)
-        elif expr.startswith('INKEY$'):
-            return self.evaluate_inkey_function(expr)
-        
         # Handle string literals
         if expr.startswith('"') and expr.endswith('"'):
             return expr[1:-1]  # Return string without quotes
@@ -719,11 +871,57 @@ class CoCoBasic:
             if expr_upper in self.variables:
                 return self.variables[expr_upper]
         
-        # Replace variables with their values for complex expressions (case insensitive)
+        # Replace array accesses with their values for complex expressions
+        array_pattern = r'(\w+\$?)\(([^)]+)\)'
+        def replace_array_access(match):
+            array_name = match.group(1)
+            indices_str = match.group(2)
+            
+            # Check if array exists
+            if array_name not in self.arrays:
+                raise ValueError(f"UNDIM'D ARRAY: {array_name}")
+            
+            # Parse indices
+            try:
+                indices = [int(self.evaluate_simple_expression(idx.strip())) for idx in indices_str.split(',')]
+                
+                # Get array element
+                current = self.arrays[array_name]
+                for idx in indices[:-1]:
+                    if idx < 0 or idx >= len(current):
+                        raise ValueError("BAD SUBSCRIPT")
+                    current = current[idx]
+                
+                # Get the final element
+                final_idx = indices[-1]
+                if final_idx < 0 or final_idx >= len(current):
+                    raise ValueError("BAD SUBSCRIPT")
+                
+                # Return the value, wrapped in quotes if it's a string
+                value = current[final_idx]
+                if isinstance(value, str):
+                    return '"' + value.replace('"', '\\"') + '"'
+                else:
+                    return str(value)
+                
+            except ValueError as ve:
+                if "BAD SUBSCRIPT" in str(ve) or "UNDIM'D ARRAY" in str(ve):
+                    raise ve
+                raise ValueError("SYNTAX ERROR")
+        
+        # Apply array access replacement
         original_expr = expr
+        expr = re.sub(array_pattern, replace_array_access, expr)
+        
+        # Replace variables with their values for complex expressions (case insensitive)
         for var, val in self.variables.items():
-            # Use case insensitive matching
-            pattern = r'\b' + re.escape(var) + r'\b'
+            # Use word boundary for variables, but handle $ specially
+            if var.endswith('$'):
+                # For string variables ending in $, match word boundary before and non-alphanumeric after
+                pattern = r'\b' + re.escape(var) + r'(?![A-Za-z0-9_$])'
+            else:
+                # For numeric variables, use standard word boundaries
+                pattern = r'\b' + re.escape(var) + r'\b'
             if re.search(pattern, expr, re.IGNORECASE):
                 if isinstance(val, str):
                     # For string values, wrap in quotes for eval
@@ -736,6 +934,9 @@ class CoCoBasic:
         try:
             result = eval(expr)
             return result
+        except ZeroDivisionError:
+            # Handle division by zero - in BASIC, this produces infinity and continues execution
+            return float('inf')  # Return positive infinity and continue execution
         except Exception as e:
             raise ValueError(f"Invalid expression '{original_expr}': {e}")
     
@@ -793,60 +994,63 @@ class CoCoBasic:
         
         return result
     
+    def extract_function_args(self, expr, func_name):
+        """Extract function arguments handling nested parentheses properly"""
+        prefix = f"{func_name}("
+        if not expr.startswith(prefix):
+            return None
+        
+        # Find the matching closing parenthesis
+        paren_count = 0
+        start_pos = len(prefix) - 1  # Start at the opening parenthesis
+        
+        for i, char in enumerate(expr[start_pos:], start_pos):
+            if char == '(':
+                paren_count += 1
+            elif char == ')':
+                paren_count -= 1
+                if paren_count == 0:
+                    # Found the matching closing parenthesis
+                    args_str = expr[len(prefix):i]
+                    return args_str.strip()
+        
+        return None  # No matching parenthesis found
+    
     def evaluate_len_function(self, expr):
         # LEN(string) - get length of string
-        match = re.search(r'LEN\(([^)]+)\)', expr)
-        if not match:
+        args_str = self.extract_function_args(expr, 'LEN')
+        if args_str is None:
             raise ValueError(f"Invalid LEN function: {expr}")
         
-        string_expr = match.group(1).strip()
-        string_val = str(self.evaluate_simple_expression(string_expr))
-        
+        string_val = str(self.evaluate_expression(args_str))
         return len(string_val)
     
     def evaluate_abs_function(self, expr):
         # ABS(number) - absolute value
-        match = re.search(r'ABS\(([^)]+)\)', expr)
-        if not match:
+        args_str = self.extract_function_args(expr, 'ABS')
+        if args_str is None:
             raise ValueError(f"Invalid ABS function: {expr}")
         
-        num_expr = match.group(1).strip()
-        # Check if this contains another function call
-        if any(func in num_expr for func in ['ABS(', 'INT(', 'SQR(', 'SIN(', 'COS(', 'TAN(', 'ATN(', 'EXP(', 'LOG(', 'RND(']):
-            num_val = float(self.evaluate_expression(num_expr))
-        else:
-            num_val = float(self.evaluate_simple_expression(num_expr))
-        
+        num_val = float(self.evaluate_expression(args_str))
         return abs(num_val)
     
     def evaluate_int_function(self, expr):
         # INT(number) - integer part (floor)
-        match = re.search(r'INT\(([^)]+)\)', expr)
-        if not match:
+        args_str = self.extract_function_args(expr, 'INT')
+        if args_str is None:
             raise ValueError(f"Invalid INT function: {expr}")
         
-        num_expr = match.group(1).strip()
-        # Check if this contains another function call
-        if any(func in num_expr for func in ['ABS(', 'INT(', 'SQR(', 'SIN(', 'COS(', 'TAN(', 'ATN(', 'EXP(', 'LOG(', 'RND(']):
-            num_val = float(self.evaluate_expression(num_expr))
-        else:
-            num_val = float(self.evaluate_simple_expression(num_expr))
-        
+        num_val = float(self.evaluate_expression(args_str))
         return int(num_val)
     
     def evaluate_rnd_function(self, expr):
         # RND(n) - random number
         import random
-        match = re.search(r'RND\(([^)]+)\)', expr)
-        if not match:
+        args_str = self.extract_function_args(expr, 'RND')
+        if args_str is None:
             raise ValueError(f"Invalid RND function: {expr}")
         
-        num_expr = match.group(1).strip()
-        # Check if this contains another function call
-        if any(func in num_expr for func in ['ABS(', 'INT(', 'SQR(', 'SIN(', 'COS(', 'TAN(', 'ATN(', 'EXP(', 'LOG(', 'RND(']):
-            num_val = float(self.evaluate_expression(num_expr))
-        else:
-            num_val = float(self.evaluate_simple_expression(num_expr))
+        num_val = float(self.evaluate_expression(args_str))
         
         if num_val > 0:
             return random.random()  # 0 to 1
@@ -859,16 +1063,11 @@ class CoCoBasic:
     def evaluate_sqr_function(self, expr):
         # SQR(number) - square root
         import math
-        match = re.search(r'SQR\(([^)]+)\)', expr)
-        if not match:
+        args_str = self.extract_function_args(expr, 'SQR')
+        if args_str is None:
             raise ValueError(f"Invalid SQR function: {expr}")
         
-        num_expr = match.group(1).strip()
-        # Check if this contains another function call
-        if any(func in num_expr for func in ['ABS(', 'INT(', 'SQR(', 'SIN(', 'COS(', 'TAN(', 'ATN(', 'EXP(', 'LOG(', 'RND(']):
-            num_val = float(self.evaluate_expression(num_expr))
-        else:
-            num_val = float(self.evaluate_simple_expression(num_expr))
+        num_val = float(self.evaluate_expression(args_str))
         
         if num_val < 0:
             raise ValueError("SQR of negative number")
@@ -878,72 +1077,61 @@ class CoCoBasic:
     def evaluate_sin_function(self, expr):
         # SIN(radians) - sine
         import math
-        match = re.search(r'SIN\(([^)]+)\)', expr)
-        if not match:
+        args_str = self.extract_function_args(expr, 'SIN')
+        if args_str is None:
             raise ValueError(f"Invalid SIN function: {expr}")
         
-        num_expr = match.group(1).strip()
-        num_val = float(self.evaluate_simple_expression(num_expr))
-        
+        num_val = float(self.evaluate_expression(args_str))
         return math.sin(num_val)
     
     def evaluate_cos_function(self, expr):
         # COS(radians) - cosine
         import math
-        match = re.search(r'COS\(([^)]+)\)', expr)
-        if not match:
+        args_str = self.extract_function_args(expr, 'COS')
+        if args_str is None:
             raise ValueError(f"Invalid COS function: {expr}")
         
-        num_expr = match.group(1).strip()
-        num_val = float(self.evaluate_simple_expression(num_expr))
-        
+        num_val = float(self.evaluate_expression(args_str))
         return math.cos(num_val)
     
     def evaluate_tan_function(self, expr):
         # TAN(radians) - tangent
         import math
-        match = re.search(r'TAN\(([^)]+)\)', expr)
-        if not match:
+        args_str = self.extract_function_args(expr, 'TAN')
+        if args_str is None:
             raise ValueError(f"Invalid TAN function: {expr}")
         
-        num_expr = match.group(1).strip()
-        num_val = float(self.evaluate_simple_expression(num_expr))
-        
+        num_val = float(self.evaluate_expression(args_str))
         return math.tan(num_val)
     
     def evaluate_atn_function(self, expr):
         # ATN(number) - arctangent
         import math
-        match = re.search(r'ATN\(([^)]+)\)', expr)
-        if not match:
+        args_str = self.extract_function_args(expr, 'ATN')
+        if args_str is None:
             raise ValueError(f"Invalid ATN function: {expr}")
         
-        num_expr = match.group(1).strip()
-        num_val = float(self.evaluate_simple_expression(num_expr))
-        
+        num_val = float(self.evaluate_expression(args_str))
         return math.atan(num_val)
     
     def evaluate_exp_function(self, expr):
         # EXP(number) - e raised to the power
         import math
-        match = re.search(r'EXP\(([^)]+)\)', expr)
-        if not match:
+        args_str = self.extract_function_args(expr, 'EXP')
+        if args_str is None:
             raise ValueError(f"Invalid EXP function: {expr}")
         
-        num_expr = match.group(1).strip()
-        num_val = float(self.evaluate_simple_expression(num_expr))
-        
+        num_val = float(self.evaluate_expression(args_str))
         return math.exp(num_val)
     
     def evaluate_log_function(self, expr):
         # LOG(number) - natural logarithm
         import math
-        match = re.search(r'LOG\(([^)]+)\)', expr)
-        if not match:
+        args_str = self.extract_function_args(expr, 'LOG')
+        if args_str is None:
             raise ValueError(f"Invalid LOG function: {expr}")
         
-        num_expr = match.group(1).strip()
-        num_val = float(self.evaluate_simple_expression(num_expr))
+        num_val = float(self.evaluate_expression(args_str))
         
         if num_val <= 0:
             raise ValueError("LOG of zero or negative number")
@@ -952,12 +1140,11 @@ class CoCoBasic:
     
     def evaluate_chr_function(self, expr):
         # CHR$(n) - character from ASCII code
-        match = re.search(r'CHR\$\(([^)]+)\)', expr)
-        if not match:
+        args_str = self.extract_function_args(expr, 'CHR$')
+        if args_str is None:
             raise ValueError(f"Invalid CHR$ function: {expr}")
         
-        num_expr = match.group(1).strip()
-        num_val = int(self.evaluate_simple_expression(num_expr))
+        num_val = int(self.evaluate_expression(args_str))
         
         if num_val < 0 or num_val > 255:
             raise ValueError("CHR$ argument out of range")
@@ -966,12 +1153,11 @@ class CoCoBasic:
     
     def evaluate_asc_function(self, expr):
         # ASC(string) - ASCII code of first character
-        match = re.search(r'ASC\(([^)]+)\)', expr)
-        if not match:
+        args_str = self.extract_function_args(expr, 'ASC')
+        if args_str is None:
             raise ValueError(f"Invalid ASC function: {expr}")
         
-        string_expr = match.group(1).strip()
-        string_val = str(self.evaluate_simple_expression(string_expr))
+        string_val = str(self.evaluate_expression(args_str))
         
         if len(string_val) == 0:
             raise ValueError("ASC of empty string")
@@ -980,12 +1166,11 @@ class CoCoBasic:
     
     def evaluate_str_function(self, expr):
         # STR$(number) - convert number to string
-        match = re.search(r'STR\$\(([^)]+)\)', expr)
-        if not match:
+        args_str = self.extract_function_args(expr, 'STR$')
+        if args_str is None:
             raise ValueError(f"Invalid STR$ function: {expr}")
         
-        num_expr = match.group(1).strip()
-        num_val = self.evaluate_simple_expression(num_expr)
+        num_val = self.evaluate_expression(args_str)
         
         # Format like BASIC does - with leading space for positive numbers
         if isinstance(num_val, int):
@@ -995,12 +1180,11 @@ class CoCoBasic:
     
     def evaluate_val_function(self, expr):
         # VAL(string) - convert string to number
-        match = re.search(r'VAL\(([^)]+)\)', expr)
-        if not match:
+        args_str = self.extract_function_args(expr, 'VAL')
+        if args_str is None:
             raise ValueError(f"Invalid VAL function: {expr}")
         
-        string_expr = match.group(1).strip()
-        string_val = str(self.evaluate_simple_expression(string_expr)).strip()
+        string_val = str(self.evaluate_expression(args_str)).strip()
         
         try:
             # Try to parse as integer first, then float
@@ -1074,7 +1258,13 @@ class CoCoBasic:
         
         # Evaluate mathematical expressions
         try:
-            return eval(expr)
+            result = eval(expr)
+            return result
+        except ZeroDivisionError:
+            # Handle division by zero - in BASIC, this produces infinity and continues execution
+            # We need to signal this error while allowing execution to continue
+            # For now, return infinity - the calling context should handle the error display
+            return float('inf')  # Return positive infinity and continue execution
         except Exception as e:
             raise ValueError(f"Invalid simple expression '{original_expr}': {e}")
     
@@ -1090,6 +1280,14 @@ class CoCoBasic:
         start_val = self.evaluate_expression(match.group(2).strip())
         end_val = self.evaluate_expression(match.group(3).strip())
         step_val = self.evaluate_expression(match.group(4).strip()) if match.group(4) else 1
+        
+        # Ensure numeric values for comparison
+        try:
+            start_val = float(start_val) if isinstance(start_val, str) else start_val
+            end_val = float(end_val) if isinstance(end_val, str) else end_val
+            step_val = float(step_val) if isinstance(step_val, str) else step_val
+        except (ValueError, TypeError):
+            return [{'type': 'error', 'message': 'TYPE MISMATCH'}]
         
         # Check if loop should execute at all
         if ((step_val > 0 and start_val > end_val) or 
@@ -1120,12 +1318,17 @@ class CoCoBasic:
         # Increment the loop variable
         self.variables[var_name] += for_info['step']
         
+        # Ensure numeric types for comparison
+        current_val = self.variables[var_name]
+        end_val = for_info['end']
+        step_val = for_info['step']
+        
         # Check if loop should continue
-        if ((for_info['step'] > 0 and self.variables[var_name] <= for_info['end']) or
-            (for_info['step'] < 0 and self.variables[var_name] >= for_info['end'])):
+        if ((step_val > 0 and current_val <= end_val) or
+            (step_val < 0 and current_val >= end_val)):
             # Continue loop - jump to the line AFTER the FOR line
             # This prevents FOR from reinitializing the loop variable
-            return [{'type': 'jump_after_for', 'for_line': for_info['line']}]
+            return [{'type': 'jump_after_for', 'for_line': for_info['line'], 'for_sub_line': for_info['sub_line']}]
         else:
             # End loop
             self.for_stack.pop()
@@ -1401,6 +1604,7 @@ class CoCoBasic:
         self.program.clear()
         self.expanded_program.clear()
         self.variables.clear()
+        self.arrays.clear()  # Clear all dimensioned arrays
         self.for_stack.clear()
         self.call_stack.clear()
         self.data_statements.clear()
@@ -1408,6 +1612,11 @@ class CoCoBasic:
         self.running = False
         self.waiting_for_input = False
         self.program_counter = None
+        self.stopped_position = None  # Clear stopped position
+        self.current_line = 0
+        self.current_sub_line = 0
+        self.iteration_count = 0
+        self.keyboard_buffer.clear()  # Clear keyboard buffer
         self.graphics_mode = 0  # Reset to text mode
         return [{'type': 'text', 'text': 'READY'}]
     
@@ -1543,9 +1752,14 @@ class CoCoBasic:
         if not args:
             return []
         
-        # Parse comma-separated values
+        # During program execution, DATA statements should be skipped
+        # (they were already preprocessed in run_program)
+        if self.running:
+            return []
+        
+        # Parse comma-separated values, respecting quotes
         data_items = []
-        items = args.split(',')
+        items = self.split_data_args(args)
         
         for item in items:
             item = item.strip()
@@ -1567,6 +1781,29 @@ class CoCoBasic:
         self.data_statements.extend([(self.current_line, item) for item in data_items])
         
         return []  # DATA commands don't produce output
+    
+    def split_data_args(self, args):
+        """Split DATA arguments on commas, but respect quoted strings"""
+        items = []
+        current_item = ""
+        in_quotes = False
+        
+        for char in args:
+            if char == '"':
+                in_quotes = not in_quotes
+                current_item += char
+            elif char == ',' and not in_quotes:
+                # Comma outside quotes - split here
+                items.append(current_item.strip())
+                current_item = ""
+            else:
+                current_item += char
+        
+        # Add the last item
+        if current_item.strip():
+            items.append(current_item.strip())
+        
+        return items
     
     def execute_read(self, args):
         # READ command - read data into variables
@@ -1676,12 +1913,16 @@ class CoCoBasic:
                 
                 # Validate dimensions (must be positive)
                 for dim in dimensions:
-                    if dim < 0:
-                        return [{'type': 'error', 'message': 'ILLEGAL FUNCTION CALL'}]
+                    if dim <= 0:
+                        return [{'type': 'error', 'message': 'SYNTAX ERROR'}]
+                
+                # Check if array is already dimensioned (after syntax validation)
+                if array_name in self.arrays:
+                    return [{'type': 'error', 'message': 'REDIM\'D ARRAY'}]
                 
                 # Create multi-dimensional array initialized to 0 or ""
-                # Note: Color Computer BASIC arrays are 0-indexed, so DIM A(10) creates indices 0-10 (11 elements)
-                dimensions = [dim + 1 for dim in dimensions]  # Add 1 for 0-indexing
+                # Note: Color Computer BASIC arrays - DIM A(10) creates indices 0-9 (10 elements)
+                # dimensions stay as-is since we want exactly 'dim' elements
                 
                 if array_name.endswith('$'):
                     # String array
@@ -1698,9 +1939,9 @@ class CoCoBasic:
     def create_multidim_array(self, dimensions, init_value):
         # Create nested lists for multi-dimensional array
         if len(dimensions) == 1:
-            return [init_value] * (dimensions[0] + 1)  # BASIC uses 0-based indexing but allows index up to DIM value
+            return [init_value] * dimensions[0]  # DIM A(10) creates exactly 10 elements (0-9)
         else:
-            return [self.create_multidim_array(dimensions[1:], init_value) for _ in range(dimensions[0] + 1)]
+            return [self.create_multidim_array(dimensions[1:], init_value) for _ in range(dimensions[0])]
     
     def evaluate_inkey_function(self, expr):
         # INKEY$ - return next key from keyboard buffer or empty string

@@ -148,7 +148,7 @@ class InkeyCommandTest(BaseTestCase):
         self.basic.execute_command('NEW')  # Clear program state
         self.load_program(program)
         self.basic.key_buffer = ['Q']
-        results2 = self.execute_program(program)
+        results2 = self.basic.execute_command('RUN')
         text_outputs2 = self.get_text_output(results2)
         
         # Should have the key press message

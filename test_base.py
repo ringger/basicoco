@@ -102,24 +102,29 @@ class BaseTestCase(ABC):
 
     def run_all_tests(self) -> TestSuite:
         """Discover and run all test methods (methods starting with 'test_')"""
-        try:
-            self.setUp()
-        except Exception as e:
-            # If setup fails, return early with setup error
-            return self.test_suite
-
         test_methods = [method for method in dir(self) 
                        if method.startswith('test_') and callable(getattr(self, method))]
         
         for method_name in sorted(test_methods):
+            # Fresh setup for each test method
+            try:
+                self.setUp()
+            except Exception as e:
+                # If setup fails, record error and continue
+                result = TestResult(method_name, False, f"Setup failed: {str(e)}", e)
+                self.test_suite.add_result(result)
+                continue
+            
+            # Run the test method
             result = self.run_test_method(method_name)
             self.test_suite.add_result(result)
-
-        try:
-            self.tearDown()
-        except Exception as e:
-            # Teardown error is recorded but doesn't fail the tests
-            pass
+            
+            # Clean up after each test method
+            try:
+                self.tearDown()
+            except Exception as e:
+                # Teardown error is recorded but doesn't fail the test
+                pass
 
         return self.test_suite
 
@@ -242,6 +247,9 @@ class BaseTestCase(ABC):
         if not self.basic:
             raise AssertionError("CoCoBasic instance not initialized")
         
+        # Clear any existing program first
+        self.basic.execute_command('NEW')
+        
         for line in program_lines:
             line_num, code = self.basic.parse_line(line)
             if line_num is not None:
@@ -269,6 +277,13 @@ class BaseTestCase(ABC):
         # This would be used in conjunction with INPUT command testing
         # Implementation depends on how INPUT is handled in the emulator
         pass
+    
+    def simulate_key(self, key: str):
+        """Simulate a key press for INKEY$ testing"""
+        if not self.basic:
+            raise AssertionError("CoCoBasic instance not initialized")
+        
+        self.basic.add_key_to_buffer(key)
 
     def mock_graphics_output(self):
         """Mock graphics output for headless testing"""
