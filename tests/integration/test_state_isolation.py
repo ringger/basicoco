@@ -118,8 +118,8 @@ class StateIsolationTest(BaseTestCase):
         
         # Variables should be shared between main and subroutine
         combined = ' '.join(text_outputs)
-        self.assertIn('SUB A: 10', combined)  # A starts as 10
-        self.assertIn('MAIN A: 20', combined)  # A modified to 20 in subroutine
+        self.assertIn('SUB A:10', combined)  # A starts as 10 (semicolon concatenates without spaces)
+        self.assertIn('MAIN A:20', combined)  # A modified to 20 in subroutine
         
         # B should exist after return
         self.assert_variable_equals('B', 30)

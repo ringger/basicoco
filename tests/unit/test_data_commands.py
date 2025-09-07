@@ -278,6 +278,57 @@ class DataCommandTest(BaseTestCase):
         text_outputs = self.get_text_output(results)
         self.assertTrue(len(text_outputs) > 0, "Should produce output")
 
+    def test_out_of_data_halts_execution(self):
+        """Test that OUT OF DATA error stops program execution"""
+        program = [
+            '10 DATA 100, 200', 
+            '20 READ A',
+            '30 READ B', 
+            '40 READ C',  # Should trigger OUT OF DATA
+            '50 PRINT "SHOULD NOT REACH HERE"'
+        ]
+        
+        results = self.execute_program(program)
+        errors = self.get_error_messages(results)
+        text_outputs = self.get_text_output(results)
+        
+        # Should have OUT OF DATA error
+        self.assertTrue(any('OUT OF DATA' in error for error in errors), 
+                       f"Expected OUT OF DATA error, got: {errors}")
+        
+        # Should NOT reach line 50
+        self.assertFalse(any('SHOULD NOT REACH HERE' in output for output in text_outputs),
+                        "Program should halt at OUT OF DATA error")
+        
+        # Program should stop at line 40
+        self.assertEqual(self.basic.current_line, 40, 
+                        f"Expected program to stop at line 40, stopped at {self.basic.current_line}")
+        
+        # Program should not be running
+        self.assertFalse(self.basic.running, "Program should have stopped")
+
+    def test_out_of_data_with_continue_execution(self):
+        """Test OUT OF DATA error handling in continue execution context"""
+        program = [
+            '10 DATA 100',
+            '20 READ A',
+            '30 PRINT "A ="; A',
+            '40 READ B',  # Should trigger OUT OF DATA  
+            '50 PRINT "SHOULD NOT REACH HERE"'
+        ]
+        
+        results = self.execute_program(program)
+        errors = self.get_error_messages(results)
+        text_outputs = self.get_text_output(results)
+        
+        # Should have OUT OF DATA error
+        self.assertTrue(any('OUT OF DATA' in error for error in errors))
+        
+        # Should print A value but not reach line 50
+        self.assertTrue(any('A =100' in output for output in text_outputs), 
+                       "Should print A value before error")
+        self.assertFalse(any('SHOULD NOT REACH HERE' in output for output in text_outputs))
+
 
 if __name__ == '__main__':
     test = DataCommandTest("DATA/READ/RESTORE Command Tests")

@@ -79,11 +79,11 @@ class ProgramExecutionFlowTest(BaseTestCase):
         text_outputs = self.get_text_output(results)
         
         combined = ' '.join(text_outputs)
-        # Should see loop iterations and doubled values
-        self.assertIn('LOOP 1', combined)
-        self.assertIn('DOUBLE 2', combined)
-        self.assertIn('LOOP 3', combined)
-        self.assertIn('DOUBLE 6', combined)
+        # Should see loop iterations and doubled values (semicolon concatenates without spaces)
+        self.assertIn('LOOP1', combined)
+        self.assertIn('DOUBLE2', combined)
+        self.assertIn('LOOP3', combined)
+        self.assertIn('DOUBLE6', combined)
 
     def test_gosub_return_with_multi_statements(self):
         """Test GOSUB/RETURN with multi-statement lines"""
@@ -135,7 +135,7 @@ class ProgramExecutionFlowTest(BaseTestCase):
         self.assertIn('1', combined)
         self.assertIn('2', combined) 
         self.assertIn('3', combined)
-        self.assertIn('LAST 4', combined)
+        self.assertIn('LAST4', combined)  # Semicolon concatenates without spaces
 
     def test_error_handling_across_statements(self):
         """Test division by zero handling in multi-statement lines"""

@@ -42,6 +42,11 @@ class CoCoBasic:
         """Compatibility property for tests"""
         self.keyboard_buffer = value
         
+    def get_reserved_function_names(self):
+        """Return list of reserved function names that cannot be used as variable/array names"""
+        return ['LEFT$', 'RIGHT$', 'MID$', 'LEN', 'ABS', 'INT', 'RND', 'SQR', 
+                'SIN', 'COS', 'TAN', 'ATN', 'EXP', 'LOG', 'CHR$', 'ASC', 'STR$', 'VAL', 'INKEY$']
+        
     def parse_line(self, line):
         line = line.strip().upper()
         if not line:
@@ -252,6 +257,12 @@ class CoCoBasic:
                         break
                     elif item.get('type') != 'input_request':  # Skip input_request as we handled it above
                         output.append(item)
+                        # Check if this is an error that should halt execution
+                        if item.get('type') == 'error':
+                            self.running = False
+                            self.call_stack.clear()  # Clear call stack on error
+                            self.for_stack.clear()   # Clear FOR stack on error
+                            break
                 
                 if not jumped:
                     current_pos_index += 1
@@ -356,6 +367,12 @@ class CoCoBasic:
                         break
                     elif item.get('type') != 'input_request':
                         output.append(item)
+                        # Check if this is an error that should halt execution
+                        if item.get('type') == 'error':
+                            self.running = False
+                            self.call_stack.clear()  # Clear call stack on error
+                            self.for_stack.clear()   # Clear FOR stack on error
+                            break
                 
                 if not jumped:
                     current_pos_index += 1
@@ -439,16 +456,21 @@ class CoCoBasic:
         first_part_upper = first_part.upper()
         if first_part_upper.startswith('PSET('):
             paren_pos = first_part.find('(')
-            return self.execute_pset(first_part[paren_pos:])
+            # Reconstruct the full arguments from all parts
+            args = first_part[paren_pos:] + (' ' + ' '.join(parts[1:]) if len(parts) > 1 else '')
+            return self.execute_pset(args)
         elif first_part_upper.startswith('PRESET('):
             paren_pos = first_part.find('(')
-            return self.execute_preset(first_part[paren_pos:])
+            args = first_part[paren_pos:] + (' ' + ' '.join(parts[1:]) if len(parts) > 1 else '')
+            return self.execute_preset(args)
         elif first_part_upper.startswith('CIRCLE('):
             paren_pos = first_part.find('(')
-            return self.execute_circle(first_part[paren_pos:])
+            args = first_part[paren_pos:] + (' ' + ' '.join(parts[1:]) if len(parts) > 1 else '')
+            return self.execute_circle(args)
         elif first_part_upper.startswith('LINE('):
             paren_pos = first_part.find('(')
-            return self.execute_line_graphics(first_part[paren_pos:])
+            args = first_part[paren_pos:] + (' ' + ' '.join(parts[1:]) if len(parts) > 1 else '')
+            return self.execute_line_graphics(args)
         
         # Regular command parsing (case insensitive)
         command = first_part.upper()
@@ -481,6 +503,14 @@ class CoCoBasic:
             return [{'type': 'pcls'}]
         elif command == 'COLOR':
             return self.execute_color(' '.join(parts[1:]))
+        elif command == 'PSET':
+            return self.execute_pset(' '.join(parts[1:]))
+        elif command == 'PRESET':
+            return self.execute_preset(' '.join(parts[1:]))
+        elif command == 'CIRCLE':
+            return self.execute_circle(' '.join(parts[1:]))
+        elif command == 'LINE':
+            return self.execute_line_graphics(' '.join(parts[1:]))
         elif command == 'SOUND':
             return self.execute_sound(' '.join(parts[1:]))
         elif command == 'REM':
@@ -521,19 +551,19 @@ class CoCoBasic:
         if not args:
             return [{'type': 'text', 'text': ''}]
         
-        # Handle multiple print items separated by semicolons, but be careful with function parentheses
-        items = self.split_print_args(args)
+        # Handle multiple print items separated by semicolons and commas
+        items_with_separators = self.split_print_args_with_separators(args)
         output_parts = []
         
-        for item in items:
+        for i, (item, separator) in enumerate(items_with_separators):
             item = item.strip()
-            if not item:
+            if not item and i == 0:  # Skip empty first item
                 continue
                 
             try:
                 # Try to evaluate the expression
                 value = self.evaluate_expression(item)
-                output_parts.append(self.format_number_for_output(value))
+                formatted_value = self.format_number_for_output(value)
             except ValueError as e:
                 # Check for specific BASIC errors that should be propagated
                 error_msg = str(e)
@@ -541,25 +571,41 @@ class CoCoBasic:
                     return [{'type': 'error', 'message': error_msg.split(':')[0] if ':' in error_msg else error_msg}]
                 # If evaluation fails, try simple cases
                 if item.startswith('"') and item.endswith('"'):
-                    output_parts.append(item[1:-1])
+                    formatted_value = item[1:-1]
                 elif item in self.variables:
-                    output_parts.append(self.format_number_for_output(self.variables[item]))
+                    formatted_value = self.format_number_for_output(self.variables[item])
                 elif item.replace('.', '').replace('-', '').isdigit():
-                    output_parts.append(item)
+                    formatted_value = item
                 else:
-                    output_parts.append(item)  # Print as-is
+                    formatted_value = item  # Print as-is
             except Exception as e:
                 # For other exceptions, try simple cases
                 if item.startswith('"') and item.endswith('"'):
-                    output_parts.append(item[1:-1])
+                    formatted_value = item[1:-1]
                 elif item in self.variables:
-                    output_parts.append(self.format_number_for_output(self.variables[item]))
+                    formatted_value = self.format_number_for_output(self.variables[item])
                 elif item.replace('.', '').replace('-', '').isdigit():
-                    output_parts.append(item)
+                    formatted_value = item
                 else:
-                    output_parts.append(item)  # Print as-is
+                    formatted_value = item  # Print as-is
+            
+            # Add the formatted value
+            if formatted_value or i == 0:  # Always add first item, even if empty
+                output_parts.append(formatted_value)
+                
+                # Add separator if not the last item
+                if i < len(items_with_separators) - 1:
+                    if separator == ';':
+                        # Semicolon: no extra space
+                        pass
+                    elif separator == ',':
+                        # Comma: add spacing (tab stop simulation)
+                        output_parts.append('    ')  # 4 spaces for tab stop
+                    else:
+                        # Default: single space
+                        output_parts.append(' ')
         
-        text = ' '.join(output_parts)
+        text = ''.join(output_parts)
         return [{'type': 'text', 'text': text}]
     
     def split_print_args(self, args):
@@ -582,6 +628,84 @@ class CoCoBasic:
             else:
                 current_item += char
         
+        if current_item.strip():
+            items.append(current_item.strip())
+        
+        return items
+    
+    def split_print_args_with_separators(self, args):
+        # Split on semicolons and commas, but respect function parentheses and quoted strings
+        # Return list of (item, separator) tuples
+        items = []
+        current_item = ""
+        paren_depth = 0
+        in_quote = False
+        
+        for i, char in enumerate(args):
+            if char == '"' and not in_quote:
+                in_quote = True
+                current_item += char
+            elif char == '"' and in_quote:
+                in_quote = False
+                current_item += char
+            elif char == '(' and not in_quote:
+                paren_depth += 1
+                current_item += char
+            elif char == ')' and not in_quote:
+                paren_depth -= 1
+                current_item += char
+            elif char in [';', ','] and paren_depth == 0 and not in_quote:
+                # Found separator at top level (not inside quotes or parentheses)
+                separator = char
+                if current_item.strip():
+                    items.append((current_item.strip(), separator))
+                else:
+                    items.append(('', separator))
+                current_item = ""
+            else:
+                current_item += char
+        
+        # Add the last item (no separator after the last item)
+        if current_item.strip():
+            items.append((current_item.strip(), None))
+        elif items:  # If we have items but last is empty, still add it
+            items.append(('', None))
+        
+        return items
+    
+    def find_matching_paren(self, text, start_pos=0):
+        """Find the position of the matching closing parenthesis"""
+        paren_count = 0
+        for i in range(start_pos, len(text)):
+            if text[i] == '(':
+                paren_count += 1
+            elif text[i] == ')':
+                paren_count -= 1
+                if paren_count == 0:
+                    return i
+        return -1  # No matching parenthesis found
+    
+    def split_args_respecting_parentheses(self, args):
+        """Split arguments on commas while respecting parentheses"""
+        items = []
+        current_item = ""
+        paren_depth = 0
+        
+        for char in args:
+            if char == '(':
+                paren_depth += 1
+                current_item += char
+            elif char == ')':
+                paren_depth -= 1
+                current_item += char
+            elif char == ',' and paren_depth == 0:
+                # Found separator at top level
+                items.append(current_item.strip())
+                current_item = ""
+            else:
+                current_item += char
+        
+        # Add the last item
         if current_item.strip():
             items.append(current_item.strip())
         
@@ -613,9 +737,15 @@ class CoCoBasic:
         if not var_names:
             return [{'type': 'error', 'message': 'SYNTAX ERROR'}]
         
-        # Validate first variable name
+        # Validate first variable name (allow array notation like A$(1))
         first_var = var_names[0]
-        if not first_var or not first_var.replace('$', '').replace('_', '').isalnum():
+        if not first_var:
+            return [{'type': 'error', 'message': 'SYNTAX ERROR'}]
+        
+        # Check if it's a valid variable name or array element
+        # Valid: A, A$, A(1), A$(1), etc.
+        if not (re.match(r'^[A-Za-z]\w*\$?$', first_var) or 
+                re.match(r'^[A-Za-z]\w*\$?\([^)]+\)$', first_var)):
             return [{'type': 'error', 'message': 'SYNTAX ERROR'}]
         
         # Return an input request for the first variable (simplified implementation)
@@ -637,8 +767,13 @@ class CoCoBasic:
         # Normalize variable name to uppercase for case insensitivity
         var_name = var_name.upper()
         
-        # Check if this is an array assignment (A(5) = 10)
+        # Check if this is an array assignment (A(5) = 10) and validate reserved names
         array_match = re.match(r'(\w+\$?)\(([^)]+)\)', var_name)
+        base_var_name = array_match.group(1) if array_match else var_name
+        
+        # Check if variable name conflicts with reserved function names
+        if base_var_name in self.get_reserved_function_names():
+            return [{'type': 'error', 'message': 'SYNTAX ERROR'}]
         if array_match:
             # Array assignment
             array_name = array_match.group(1)
@@ -751,8 +886,8 @@ class CoCoBasic:
                         elif func_name == 'VAL':
                             return self.evaluate_val_function(expr)
         
-        # Special case for INKEY$ (no parentheses)
-        if expr == 'INKEY$':
+        # Special case for INKEY$ (with or without parentheses)
+        if expr == 'INKEY$' or re.match(r'INKEY\$\(\s*\)', expr):
             return self.evaluate_inkey_function(expr)
         
         return None  # No single function match
@@ -942,52 +1077,65 @@ class CoCoBasic:
     
     def evaluate_left_function(self, expr):
         # LEFT$(string, n) - get leftmost n characters
-        match = re.search(r'LEFT\$\(([^,]+),\s*([^)]+)\)', expr)
-        if not match:
+        args_str = self.extract_function_args(expr, 'LEFT$')
+        if args_str is None:
             raise ValueError(f"Invalid LEFT$ function: {expr}")
         
-        string_expr = match.group(1).strip()
-        n_expr = match.group(2).strip()
+        # Parse the comma-separated arguments with proper parentheses handling
+        args = self.parse_function_arguments(args_str, 2)
+        if len(args) != 2:
+            raise ValueError(f"LEFT$ requires exactly 2 arguments: {expr}")
         
-        # Evaluate the string and number parts (avoid recursion)
-        string_val = self.evaluate_simple_expression(string_expr)
-        n_val = int(self.evaluate_simple_expression(n_expr))
+        string_expr, n_expr = args
+        
+        # Evaluate the string and number parts
+        string_val = self.evaluate_expression(string_expr)
+        n_val = int(self.evaluate_expression(n_expr))
         
         result = str(string_val)[:n_val]
         return result
     
     def evaluate_right_function(self, expr):
         # RIGHT$(string, n) - get rightmost n characters
-        match = re.search(r'RIGHT\$\(([^,]+),\s*([^)]+)\)', expr)
-        if not match:
+        args_str = self.extract_function_args(expr, 'RIGHT$')
+        if args_str is None:
             raise ValueError(f"Invalid RIGHT$ function: {expr}")
         
-        string_expr = match.group(1).strip()
-        n_expr = match.group(2).strip()
+        # Parse the comma-separated arguments with proper parentheses handling
+        args = self.parse_function_arguments(args_str, 2)
+        if len(args) != 2:
+            raise ValueError(f"RIGHT$ requires exactly 2 arguments: {expr}")
+        
+        string_expr, n_expr = args
         
         # Evaluate the string and number parts
-        string_val = self.evaluate_simple_expression(string_expr)
-        n_val = int(self.evaluate_simple_expression(n_expr))
+        string_val = self.evaluate_expression(string_expr)
+        n_val = int(self.evaluate_expression(n_expr))
         
         result = str(string_val)[-n_val:] if n_val > 0 else ""
         return result
     
     def evaluate_mid_function(self, expr):
         # MID$(string, start, length) - get substring
-        match = re.search(r'MID\$\(([^,]+),\s*([^,]+)(?:,\s*([^)]+))?\)', expr)
-        if not match:
+        args_str = self.extract_function_args(expr, 'MID$')
+        if args_str is None:
             raise ValueError(f"Invalid MID$ function: {expr}")
         
-        string_expr = match.group(1).strip()
-        start_expr = match.group(2).strip()
-        length_expr = match.group(3).strip() if match.group(3) else None
+        # Parse the comma-separated arguments with proper parentheses handling
+        args = self.parse_function_arguments(args_str, 3)
+        if len(args) < 2 or len(args) > 3:
+            raise ValueError(f"MID$ requires 2 or 3 arguments: {expr}")
+        
+        string_expr = args[0]
+        start_expr = args[1]
+        length_expr = args[2] if len(args) == 3 else None
         
         # Evaluate the parts
-        string_val = str(self.evaluate_simple_expression(string_expr))
-        start_val = int(self.evaluate_simple_expression(start_expr)) - 1  # BASIC is 1-based, Python is 0-based
+        string_val = str(self.evaluate_expression(string_expr))
+        start_val = int(self.evaluate_expression(start_expr)) - 1  # BASIC is 1-based, Python is 0-based
         
         if length_expr:
-            length_val = int(self.evaluate_simple_expression(length_expr))
+            length_val = int(self.evaluate_expression(length_expr))
             result = string_val[start_val:start_val + length_val]
         else:
             result = string_val[start_val:]
@@ -1015,6 +1163,33 @@ class CoCoBasic:
                     return args_str.strip()
         
         return None  # No matching parenthesis found
+    
+    def parse_function_arguments(self, args_str, expected_count):
+        """Parse comma-separated function arguments handling nested parentheses"""
+        if not args_str.strip():
+            return []
+        
+        args = []
+        current_arg = ""
+        paren_count = 0
+        
+        for char in args_str:
+            if char == ',' and paren_count == 0:
+                # Found argument separator at top level
+                args.append(current_arg.strip())
+                current_arg = ""
+            else:
+                if char == '(':
+                    paren_count += 1
+                elif char == ')':
+                    paren_count -= 1
+                current_arg += char
+        
+        # Add the last argument
+        if current_arg.strip():
+            args.append(current_arg.strip())
+        
+        return args
     
     def evaluate_len_function(self, expr):
         # LEN(string) - get length of string
@@ -1437,14 +1612,21 @@ class CoCoBasic:
             return [{'type': 'error', 'message': 'SYNTAX ERROR'}]
     
     def execute_pset(self, args):
-        # PSET(x,y) or PSET(x,y,color)
+        # PSET(x,y) or PSET(x,y,color) or PSET x,y or PSET x,y,color
         args = args.strip()
-        if not args.startswith('(') or ')' not in args:
-            return [{'type': 'error', 'message': 'SYNTAX ERROR'}]
         
-        # Extract content between parentheses
-        paren_content = args[1:args.index(')')]
-        coords = paren_content.split(',')
+        # Handle parentheses format: PSET(x,y) or PSET(x,y,color)
+        if args.startswith('(') and ')' in args:
+            # Extract content between matching parentheses
+            close_paren_pos = self.find_matching_paren(args)
+            if close_paren_pos == -1:
+                return [{'type': 'error', 'message': 'SYNTAX ERROR'}]
+            paren_content = args[1:close_paren_pos]
+            coords = self.split_args_respecting_parentheses(paren_content)
+        else:
+            # Handle space-separated format: PSET x,y or PSET x,y,color
+            coords = self.split_args_respecting_parentheses(args)
+        
         if len(coords) < 2:
             return [{'type': 'error', 'message': 'SYNTAX ERROR'}]
         
@@ -1458,11 +1640,20 @@ class CoCoBasic:
             return [{'type': 'error', 'message': f'PSET ERROR: {str(e)}'}]
     
     def execute_preset(self, args):
-        # PRESET(x,y)
-        if not args.startswith('(') or ')' not in args:
-            return [{'type': 'error', 'message': 'SYNTAX ERROR'}]
+        # PRESET(x,y) or PRESET x,y
+        args = args.strip()
         
-        coords = args[1:args.index(')')].split(',')
+        # Handle parentheses format: PRESET(x,y)
+        if args.startswith('(') and ')' in args:
+            close_paren_pos = self.find_matching_paren(args)
+            if close_paren_pos == -1:
+                return [{'type': 'error', 'message': 'SYNTAX ERROR'}]
+            paren_content = args[1:close_paren_pos]
+            coords = self.split_args_respecting_parentheses(paren_content)
+        else:
+            # Handle space-separated format: PRESET x,y
+            coords = self.split_args_respecting_parentheses(args)
+            
         if len(coords) < 2:
             return [{'type': 'error', 'message': 'SYNTAX ERROR'}]
         
@@ -1475,66 +1666,108 @@ class CoCoBasic:
             return [{'type': 'error', 'message': 'SYNTAX ERROR'}]
     
     def execute_line_graphics(self, args):
-        # LINE(x1,y1)-(x2,y2) or LINE(x1,y1)-(x2,y2),color
-        if ')-(' not in args:
-            return [{'type': 'error', 'message': 'SYNTAX ERROR'}]
+        # LINE(x1,y1)-(x2,y2) or LINE(x1,y1)-(x2,y2),color or LINE x1,y1,x2,y2 or LINE x1,y1,x2,y2,color
+        args = args.strip()
         
-        parts = args.split(')-(',1)
-        if len(parts) != 2:
-            return [{'type': 'error', 'message': 'SYNTAX ERROR'}]
-        
-        # Parse first coordinate
-        start_coords = parts[0].strip()
-        if not start_coords.startswith('('):
-            return [{'type': 'error', 'message': 'SYNTAX ERROR'}]
-        start_coords = start_coords[1:].split(',')
-        
-        # Parse second coordinate and optional color
-        end_part = parts[1].strip()
-        if ')' not in end_part:
-            return [{'type': 'error', 'message': 'SYNTAX ERROR'}]
-        
-        close_paren = end_part.index(')')
-        end_coords = end_part[:close_paren].split(',')
-        color_part = end_part[close_paren+1:].strip()
-        
-        try:
-            x1 = int(self.evaluate_expression(start_coords[0].strip()))
-            y1 = int(self.evaluate_expression(start_coords[1].strip()))
-            x2 = int(self.evaluate_expression(end_coords[0].strip()))
-            y2 = int(self.evaluate_expression(end_coords[1].strip()))
+        # Handle parentheses format: LINE(x1,y1)-(x2,y2)
+        if ')-(' in args:
+            parts = args.split(')-(',1)
+            if len(parts) != 2:
+                return [{'type': 'error', 'message': 'SYNTAX ERROR'}]
             
-            color = None
-            if color_part.startswith(','):
-                color = int(self.evaluate_expression(color_part[1:].strip()))
+            # Parse first coordinate
+            start_coords = parts[0].strip()
+            if not start_coords.startswith('('):
+                return [{'type': 'error', 'message': 'SYNTAX ERROR'}]
+            start_paren_content = start_coords[1:]
+            start_coords = self.split_args_respecting_parentheses(start_paren_content)
             
-            return [{'type': 'line', 'x1': x1, 'y1': y1, 'x2': x2, 'y2': y2, 'color': color}]
-        except:
-            return [{'type': 'error', 'message': 'SYNTAX ERROR'}]
+            # Parse second coordinate and optional color
+            end_part = parts[1].strip()
+            if ')' not in end_part:
+                return [{'type': 'error', 'message': 'SYNTAX ERROR'}]
+            
+            close_paren = end_part.index(')')
+            end_paren_content = end_part[:close_paren]
+            end_coords = self.split_args_respecting_parentheses(end_paren_content)
+            color_part = end_part[close_paren+1:].strip()
+            
+            try:
+                x1 = int(self.evaluate_expression(start_coords[0].strip()))
+                y1 = int(self.evaluate_expression(start_coords[1].strip()))
+                x2 = int(self.evaluate_expression(end_coords[0].strip()))
+                y2 = int(self.evaluate_expression(end_coords[1].strip()))
+                
+                color = None
+                if color_part.startswith(','):
+                    color = int(self.evaluate_expression(color_part[1:].strip()))
+                
+                return [{'type': 'line', 'x1': x1, 'y1': y1, 'x2': x2, 'y2': y2, 'color': color}]
+            except:
+                return [{'type': 'error', 'message': 'SYNTAX ERROR'}]
+        else:
+            # Handle space-separated format: LINE x1,y1,x2,y2 or LINE x1,y1,x2,y2,color
+            coords = self.split_args_respecting_parentheses(args)
+            if len(coords) < 4:
+                return [{'type': 'error', 'message': 'SYNTAX ERROR'}]
+            
+            try:
+                x1 = int(self.evaluate_expression(coords[0].strip()))
+                y1 = int(self.evaluate_expression(coords[1].strip()))
+                x2 = int(self.evaluate_expression(coords[2].strip()))
+                y2 = int(self.evaluate_expression(coords[3].strip()))
+                color = int(self.evaluate_expression(coords[4].strip())) if len(coords) > 4 else None
+                
+                return [{'type': 'line', 'x1': x1, 'y1': y1, 'x2': x2, 'y2': y2, 'color': color}]
+            except:
+                return [{'type': 'error', 'message': 'SYNTAX ERROR'}]
     
     def execute_circle(self, args):
-        # CIRCLE(x,y),radius or CIRCLE(x,y),radius,color
-        if not args.startswith('(') or ')' not in args:
-            return [{'type': 'error', 'message': 'SYNTAX ERROR'}]
+        # CIRCLE(x,y),radius or CIRCLE(x,y),radius,color or CIRCLE x,y,radius or CIRCLE x,y,radius,color
+        args = args.strip()
         
-        close_paren = args.index(')')
-        coords = args[1:close_paren].split(',')
-        rest = args[close_paren+1:].strip()
-        
-        if not rest.startswith(','):
-            return [{'type': 'error', 'message': 'SYNTAX ERROR'}]
-        
-        params = rest[1:].split(',')
-        
-        try:
-            x = int(self.evaluate_expression(coords[0].strip()))
-            y = int(self.evaluate_expression(coords[1].strip()))
-            radius = int(self.evaluate_expression(params[0].strip()))
-            color = int(self.evaluate_expression(params[1].strip())) if len(params) > 1 else None
+        # Handle parentheses format: CIRCLE(x,y),radius
+        if args.startswith('(') and ')' in args:
+            close_paren = self.find_matching_paren(args)
+            if close_paren == -1:
+                return [{'type': 'error', 'message': 'SYNTAX ERROR'}]
+            paren_content = args[1:close_paren]
+            coords = self.split_args_respecting_parentheses(paren_content)
+            rest = args[close_paren+1:].strip()
             
-            return [{'type': 'circle', 'x': x, 'y': y, 'radius': radius, 'color': color}]
-        except:
-            return [{'type': 'error', 'message': 'SYNTAX ERROR'}]
+            if not rest.startswith(','):
+                return [{'type': 'error', 'message': 'SYNTAX ERROR'}]
+            
+            params = self.split_args_respecting_parentheses(rest[1:])
+            
+            if len(coords) < 2 or len(params) < 1:
+                return [{'type': 'error', 'message': 'SYNTAX ERROR'}]
+            
+            try:
+                x = int(self.evaluate_expression(coords[0].strip()))
+                y = int(self.evaluate_expression(coords[1].strip()))
+                radius = int(self.evaluate_expression(params[0].strip()))
+                color = int(self.evaluate_expression(params[1].strip())) if len(params) > 1 else None
+                
+                return [{'type': 'circle', 'x': x, 'y': y, 'radius': radius, 'color': color}]
+            except:
+                return [{'type': 'error', 'message': 'SYNTAX ERROR'}]
+        else:
+            # Handle space-separated format: CIRCLE x,y,radius or CIRCLE x,y,radius,color
+            params = self.split_args_respecting_parentheses(args)
+            
+            if len(params) < 3:
+                return [{'type': 'error', 'message': 'SYNTAX ERROR'}]
+            
+            try:
+                x = int(self.evaluate_expression(params[0].strip()))
+                y = int(self.evaluate_expression(params[1].strip()))
+                radius = int(self.evaluate_expression(params[2].strip()))
+                color = int(self.evaluate_expression(params[3].strip())) if len(params) > 3 else None
+                
+                return [{'type': 'circle', 'x': x, 'y': y, 'radius': radius, 'color': color}]
+            except:
+                return [{'type': 'error', 'message': 'SYNTAX ERROR'}]
     
     def execute_paint(self, args):
         # PAINT(x,y),color or PAINT(x,y),color,boundary_color
@@ -1736,6 +1969,12 @@ class CoCoBasic:
                         break
                     elif item.get('type') != 'input_request':
                         output.append(item)
+                        # Check if this is an error that should halt execution
+                        if item.get('type') == 'error':
+                            self.running = False
+                            self.call_stack.clear()  # Clear call stack on error
+                            self.for_stack.clear()   # Clear FOR stack on error
+                            break
                 
                 if not jumped:
                     current_pos_index += 1
@@ -1822,10 +2061,56 @@ class CoCoBasic:
             line_num, data_value = self.data_statements[self.data_pointer]
             self.data_pointer += 1
             
-            # Store in variable
-            self.variables[var_name] = data_value
+            # Check if this is an array element assignment
+            if '(' in var_name and ')' in var_name:
+                # Handle array element assignment
+                result = self.assign_array_element(var_name, data_value)
+                if result:  # If there was an error
+                    return result
+            else:
+                # Store in variable
+                self.variables[var_name] = data_value
         
         return []  # READ commands don't produce output unless there's an error
+    
+    def assign_array_element(self, var_name, value):
+        """Assign a value to an array element, return error result if there's an issue"""
+        # Check if this is an array assignment (A(5) = 10)
+        array_match = re.match(r'(\w+\$?)\(([^)]+)\)', var_name)
+        if not array_match:
+            return [{'type': 'error', 'message': 'SYNTAX ERROR'}]
+            
+        # Array assignment
+        array_name = array_match.group(1)
+        indices_str = array_match.group(2)
+        
+        # Check if array exists
+        if array_name not in self.arrays:
+            return [{'type': 'error', 'message': 'UNDIM\'D ARRAY'}]
+        
+        # Parse indices
+        try:
+            indices = [int(self.evaluate_expression(idx.strip())) for idx in indices_str.split(',')]
+            
+            # Set array element
+            current = self.arrays[array_name]
+            for i, idx in enumerate(indices[:-1]):
+                if idx < 0 or idx >= len(current):
+                    return [{'type': 'error', 'message': 'BAD SUBSCRIPT'}]
+                current = current[idx]
+            
+            # Set the final element
+            final_idx = indices[-1]
+            if final_idx < 0 or final_idx >= len(current):
+                return [{'type': 'error', 'message': 'BAD SUBSCRIPT'}]
+            
+            current[final_idx] = value
+            return None  # No error
+            
+        except ValueError:
+            return [{'type': 'error', 'message': 'SYNTAX ERROR'}]
+        except Exception:
+            return [{'type': 'error', 'message': 'BAD SUBSCRIPT'}]
     
     def execute_restore(self):
         # RESTORE command - reset data pointer to beginning
@@ -1907,6 +2192,10 @@ class CoCoBasic:
             array_name = match.group(1)
             dimensions_str = match.group(2)
             
+            # Check if array name conflicts with reserved function names
+            if array_name in self.get_reserved_function_names():
+                return [{'type': 'error', 'message': 'SYNTAX ERROR'}]
+            
             # Parse dimensions (comma-separated numbers)
             try:
                 dimensions = [int(dim.strip()) for dim in dimensions_str.split(',')]
@@ -1921,8 +2210,8 @@ class CoCoBasic:
                     return [{'type': 'error', 'message': 'REDIM\'D ARRAY'}]
                 
                 # Create multi-dimensional array initialized to 0 or ""
-                # Note: Color Computer BASIC arrays - DIM A(10) creates indices 0-9 (10 elements)
-                # dimensions stay as-is since we want exactly 'dim' elements
+                # Note: Color Computer BASIC arrays - DIM A(10) creates indices 0-10 (11 elements)
+                # Each dimension N creates N+1 elements with indices 0 to N
                 
                 if array_name.endswith('$'):
                     # String array
@@ -1939,9 +2228,9 @@ class CoCoBasic:
     def create_multidim_array(self, dimensions, init_value):
         # Create nested lists for multi-dimensional array
         if len(dimensions) == 1:
-            return [init_value] * dimensions[0]  # DIM A(10) creates exactly 10 elements (0-9)
+            return [init_value] * (dimensions[0] + 1)  # DIM A(10) creates 11 elements (0-10)
         else:
-            return [self.create_multidim_array(dimensions[1:], init_value) for _ in range(dimensions[0])]
+            return [self.create_multidim_array(dimensions[1:], init_value) for _ in range(dimensions[0] + 1)]
     
     def evaluate_inkey_function(self, expr):
         # INKEY$ - return next key from keyboard buffer or empty string

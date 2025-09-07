@@ -104,6 +104,99 @@ class PrintCommandTest(BaseTestCase):
         except (AssertionError, Exception):
             pass  # Skip if string functions not implemented
 
+    def test_comprehensive_separator_behavior(self):
+        """Test comprehensive PRINT separator behavior with mixed types"""
+        # Set up test variables
+        self.basic.execute_command('A = 42')
+        self.basic.execute_command('B = 3.14')
+        self.basic.execute_command('S$ = "HELLO"')
+        self.basic.execute_command('T$ = "WORLD"')
+        
+        # Test semicolon separator (no spaces - concatenation)
+        result = self.basic.execute_command('PRINT "A";"B";"C"')
+        self.assertTrue(len(result) > 0 and result[0]['type'] == 'text')
+        # Should be "ABC" with no spaces
+        self.assertIn('ABC', result[0]['text'])
+        
+        # Test comma separator (tab spacing)
+        result = self.basic.execute_command('PRINT "A","B","C"')
+        self.assertTrue(len(result) > 0 and result[0]['type'] == 'text')
+        # Should have spacing between items
+        output_text = result[0]['text']
+        self.assertIn('A', output_text)
+        self.assertIn('B', output_text)
+        self.assertIn('C', output_text)
+        
+        # Test mixed types with semicolons (no spaces)
+        result = self.basic.execute_command('PRINT "NUMBER:";A;"!"')
+        self.assertTrue(len(result) > 0 and result[0]['type'] == 'text')
+        self.assertIn('NUMBER:42!', result[0]['text'])
+        
+        # Test mixed types with commas (spacing)
+        result = self.basic.execute_command('PRINT "VALUE",A,"DONE"')
+        self.assertTrue(len(result) > 0 and result[0]['type'] == 'text')
+        output_text = result[0]['text']
+        self.assertIn('VALUE', output_text)
+        self.assertIn('42', output_text)
+        self.assertIn('DONE', output_text)
+        # Should have spaces/tabs between items
+        self.assertTrue(len(output_text) > len('VALUE42DONE'))
+        
+        # Test string variables with semicolons
+        result = self.basic.execute_command('PRINT S$;"!";T$')
+        self.assertTrue(len(result) > 0 and result[0]['type'] == 'text')
+        self.assertIn('HELLO!WORLD', result[0]['text'])
+        
+        # Test mixed variable types with different separators
+        result = self.basic.execute_command('PRINT S$;":";A;",";B')
+        self.assertTrue(len(result) > 0 and result[0]['type'] == 'text')
+        self.assertIn('HELLO:42', result[0]['text'])  # Semicolons concatenate without spaces
+        self.assertIn('3.14', result[0]['text'])
+        
+        # Test complex expression with separators
+        result = self.basic.execute_command('PRINT "RESULT:";"(";"A+B=";" ";A+B;")"')
+        self.assertTrue(len(result) > 0 and result[0]['type'] == 'text')
+        # Should show something like "RESULT:(A+B= 45.14)"
+        output_text = result[0]['text']
+        self.assertIn('RESULT:', output_text)
+        self.assertIn('45.14', output_text)
+        
+        # Test trailing separator behavior
+        result = self.basic.execute_command('PRINT "LINE1";')
+        self.assertTrue(len(result) > 0 and result[0]['type'] == 'text')
+        # Trailing semicolon should suppress newline (but this might vary by implementation)
+        
+        result = self.basic.execute_command('PRINT "LINE2",')
+        self.assertTrue(len(result) > 0 and result[0]['type'] == 'text')
+        # Trailing comma should position cursor at next tab stop
+
+    def test_advanced_separator_patterns(self):
+        """Test advanced separator patterns and edge cases"""
+        # Test alternating separators
+        result = self.basic.execute_command('PRINT "A";"B","C";"D"')
+        self.assertTrue(len(result) > 0 and result[0]['type'] == 'text')
+        output_text = result[0]['text']
+        self.assertIn('A', output_text)
+        self.assertIn('B', output_text) 
+        self.assertIn('C', output_text)
+        self.assertIn('D', output_text)
+        
+        # Test function results with separators
+        self.basic.execute_command('X = 16')
+        result = self.basic.execute_command('PRINT "SQRT(";X;")=";SQR(X)')
+        self.assertTrue(len(result) > 0 and result[0]['type'] == 'text')
+        # Semicolons concatenate without spaces
+        output_text = result[0]['text']
+        self.assertIn('SQRT(', output_text)
+        self.assertIn('16', output_text)
+        self.assertIn(')=', output_text)
+        self.assertIn('4', output_text)
+        
+        # Test empty strings with separators
+        result = self.basic.execute_command('PRINT "";"";"CONTENT";""')
+        self.assertTrue(len(result) > 0 and result[0]['type'] == 'text')
+        self.assertIn('CONTENT', result[0]['text'])
+
 
 if __name__ == '__main__':
     test = PrintCommandTest("PRINT Command Tests")

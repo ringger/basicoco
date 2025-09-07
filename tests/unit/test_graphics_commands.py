@@ -175,6 +175,95 @@ class GraphicsCommandTest(BaseTestCase):
         errors = self.get_error_messages(results)
         self.assertEqual(len(errors), 0, f"Graphics with variables should work: {errors}")
 
+    def test_graphics_command_syntax_variations(self):
+        """Test various graphics command syntax parsing variations"""
+        # Set up graphics mode
+        self.basic.execute_command('PMODE 1,1')
+        
+        # Test PSET with different syntax variations
+        # Traditional space-separated syntax
+        result1 = self.basic.execute_command('PSET 10, 20')
+        self.assertTrue(len([r for r in result1 if r.get('type') == 'error']) == 0)
+        
+        # Parentheses syntax
+        result2 = self.basic.execute_command('PSET(30, 40)')
+        self.assertTrue(len([r for r in result2 if r.get('type') == 'error']) == 0)
+        
+        # Test PRESET with different syntax
+        result3 = self.basic.execute_command('PRESET 50, 60')
+        self.assertTrue(len([r for r in result3 if r.get('type') == 'error']) == 0)
+        
+        result4 = self.basic.execute_command('PRESET(70, 80)')
+        self.assertTrue(len([r for r in result4 if r.get('type') == 'error']) == 0)
+        
+        # Test CIRCLE with different syntax variations
+        result5 = self.basic.execute_command('CIRCLE 100, 100, 25')
+        self.assertTrue(len([r for r in result5 if r.get('type') == 'error']) == 0)
+        
+        result6 = self.basic.execute_command('CIRCLE(120, 120), 30')
+        self.assertTrue(len([r for r in result6 if r.get('type') == 'error']) == 0)
+        
+        # Test LINE with different syntax
+        result7 = self.basic.execute_command('LINE 10, 10, 50, 50')
+        self.assertTrue(len([r for r in result7 if r.get('type') == 'error']) == 0)
+        
+        result8 = self.basic.execute_command('LINE(60, 60)-(90, 90)')
+        self.assertTrue(len([r for r in result8 if r.get('type') == 'error']) == 0)
+
+    def test_graphics_with_expressions_and_functions(self):
+        """Test graphics commands with complex expressions and function calls"""
+        # Set up graphics mode and variables
+        self.basic.execute_command('PMODE 2,1')
+        self.basic.execute_command('CENTERX = 128')
+        self.basic.execute_command('CENTERY = 96')
+        self.basic.execute_command('SIZE = 25')
+        
+        # Test PSET with mathematical expressions
+        result1 = self.basic.execute_command('PSET(CENTERX + 10, CENTERY - 5)')
+        self.assertTrue(len([r for r in result1 if r.get('type') == 'error']) == 0)
+        
+        # Test CIRCLE with function calls
+        result2 = self.basic.execute_command('CIRCLE(CENTERX, CENTERY), ABS(SIZE)')
+        self.assertTrue(len([r for r in result2 if r.get('type') == 'error']) == 0)
+        
+        # Test PSET with nested expressions
+        self.basic.execute_command('OFFSET = 15')
+        result3 = self.basic.execute_command('PSET(CENTERX + SQR(OFFSET), CENTERY + INT(SIZE/2))')
+        self.assertTrue(len([r for r in result3 if r.get('type') == 'error']) == 0)
+        
+        # Test LINE with complex coordinate expressions
+        result4 = self.basic.execute_command('LINE(CENTERX - SIZE, CENTERY - SIZE)-(CENTERX + SIZE, CENTERY + SIZE)')
+        self.assertTrue(len([r for r in result4 if r.get('type') == 'error']) == 0)
+
+    def test_graphics_syntax_edge_cases(self):
+        """Test graphics command syntax edge cases and error handling"""
+        # Set up graphics mode
+        self.basic.execute_command('PMODE 1,1')
+        
+        # Test with spaces in different places
+        result1 = self.basic.execute_command('PSET( 10 , 20 )')
+        self.assertTrue(len([r for r in result1 if r.get('type') == 'error']) == 0)
+        
+        result2 = self.basic.execute_command('CIRCLE( 50 , 50 ) , 25')
+        self.assertTrue(len([r for r in result2 if r.get('type') == 'error']) == 0)
+        
+        # Test with variables in parentheses
+        self.basic.execute_command('X = 75')
+        self.basic.execute_command('Y = 85')
+        result3 = self.basic.execute_command('PSET(X, Y)')
+        self.assertTrue(len([r for r in result3 if r.get('type') == 'error']) == 0)
+        
+        # Test parentheses with expressions
+        result4 = self.basic.execute_command('PSET(X + 10, Y - 5)')
+        self.assertTrue(len([r for r in result4 if r.get('type') == 'error']) == 0)
+        
+        # Test color parameters with parentheses
+        result5 = self.basic.execute_command('PSET(100, 100), 1')
+        self.assertTrue(len([r for r in result5 if r.get('type') == 'error']) == 0)
+        
+        result6 = self.basic.execute_command('PSET(110, 110), ABS(-2)')
+        self.assertTrue(len([r for r in result6 if r.get('type') == 'error']) == 0)
+
 
 if __name__ == '__main__':
     test = GraphicsCommandTest("Graphics Commands Tests")

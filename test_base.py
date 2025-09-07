@@ -196,7 +196,15 @@ class BaseTestCase(ABC):
         if not self.basic:
             raise AssertionError("CoCoBasic instance not initialized")
         
-        actual_value = self.basic.variables.get(variable_name)
+        # Check if this is array element notation (e.g., "A(3)")
+        if '(' in variable_name and ')' in variable_name:
+            try:
+                # Evaluate the array element expression
+                actual_value = self.basic.evaluate_expression(variable_name)
+            except Exception as e:
+                actual_value = None
+        else:
+            actual_value = self.basic.variables.get(variable_name)
         
         if actual_value != expected_value:
             raise AssertionError(f"Variable '{variable_name}': expected {expected_value}, got {actual_value}")
@@ -240,6 +248,36 @@ class BaseTestCase(ABC):
         """Assert that item is not in container"""
         if item in container:
             raise AssertionError(message or f"Expected {item} not to be in {container}")
+
+    def assertIsNone(self, obj, message: str = None):
+        """Assert that obj is None"""
+        if obj is not None:
+            raise AssertionError(message or f"Expected None, got {obj}")
+
+    def assertIsNotNone(self, obj, message: str = None):
+        """Assert that obj is not None"""
+        if obj is None:
+            raise AssertionError(message or f"Expected not None, got None")
+
+    def assertGreater(self, first, second, message: str = None):
+        """Assert that first > second"""
+        if not first > second:
+            raise AssertionError(message or f"Expected {first} > {second}")
+
+    def assertGreaterEqual(self, first, second, message: str = None):
+        """Assert that first >= second"""
+        if not first >= second:
+            raise AssertionError(message or f"Expected {first} >= {second}")
+
+    def assertLess(self, first, second, message: str = None):
+        """Assert that first < second"""
+        if not first < second:
+            raise AssertionError(message or f"Expected {first} < {second}")
+
+    def assertLessEqual(self, first, second, message: str = None):
+        """Assert that first <= second"""
+        if not first <= second:
+            raise AssertionError(message or f"Expected {first} <= {second}")
 
     # Helper methods for common test operations
     def load_program(self, program_lines: List[str]):

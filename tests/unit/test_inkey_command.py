@@ -199,6 +199,56 @@ class InkeyCommandTest(BaseTestCase):
         result = self.basic.execute_command('PRINT INKEY$')
         self.assertTrue(any(item.get('text') == '' for item in result if item.get('type') == 'text'))
 
+    def test_function_syntax_variations(self):
+        """Test various function syntax variations across different functions"""
+        # Set up test data
+        self.basic.execute_command('N = 16')
+        self.basic.execute_command('S$ = "HELLO"')
+        self.basic.key_buffer = ['X']
+        
+        # Test INKEY$ variations (with and without parentheses)
+        result1 = self.basic.execute_command('K1$ = INKEY$')
+        result2 = self.basic.execute_command('K2$ = INKEY$()')
+        # Both should work (though second might be empty if buffer consumed)
+        self.assertTrue(len([r for r in result1 if r.get('type') == 'error']) == 0)
+        self.assertTrue(len([r for r in result2 if r.get('type') == 'error']) == 0)
+        
+        # Test mathematical functions (should work with parentheses)
+        self.assert_text_output('PRINT SQR(N)', '4')
+        self.assert_text_output('PRINT ABS(-5)', '5')
+        self.assert_text_output('PRINT INT(3.7)', '3')
+        
+        # Test string functions with proper parentheses
+        self.assert_text_output('PRINT LEN(S$)', '5')
+        self.assert_text_output('PRINT ASC("A")', '65')
+        self.assert_text_output('PRINT CHR$(65)', 'A')
+        
+        # Test functions in expressions with variables
+        self.assert_text_output('PRINT SQR(N) + LEN(S$)', '9')  # 4 + 5 = 9
+        
+        # Test nested function syntax
+        self.assert_text_output('PRINT LEN(CHR$(65))', '1')  # Length of "A"
+        self.assert_text_output('PRINT ASC(CHR$(66))', '66')  # Round trip B
+        
+        # Test function calls in different contexts
+        self.basic.execute_command('RESULT = SQR(N)')
+        self.assert_variable_equals('RESULT', 4)
+        
+        self.basic.execute_command('LENGTH = LEN(S$)')
+        self.assert_variable_equals('LENGTH', 5)
+        
+        # Test functions in conditional contexts (IF statements)
+        program = [
+            '10 N = 16',
+            '20 S$ = "HELLO"',
+            '30 IF LEN(S$) > 3 THEN PRINT "LONG"',
+            '40 IF SQR(N) = 4 THEN PRINT "PERFECT"'
+        ]
+        results = self.execute_program(program)
+        text_outputs = self.get_text_output(results)
+        self.assertIn('LONG', ' '.join(text_outputs))
+        self.assertIn('PERFECT', ' '.join(text_outputs))
+
 
 if __name__ == '__main__':
     test = InkeyCommandTest("INKEY$ Command Tests")
