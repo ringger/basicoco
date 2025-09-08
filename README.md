@@ -108,19 +108,35 @@ RUN
 RUN
 ```
 
+### Multi-Variable Input
+```basic
+10 INPUT "NAME, AGE, SCORE"; N$, A, S
+20 PRINT N$; " IS "; A; " YEARS OLD"
+30 PRINT "SCORED "; S; " POINTS"
+RUN
+```
+
 ## 🏗️ Architecture
 
 ### Core Components
-- **CoCoBasic Class**: Main interpreter with program storage and execution
-- **Expression Evaluator**: Comprehensive BASIC expression evaluation with nested function support
-- **Graphics Engine**: HTML5 Canvas with authentic MC6847 VDG emulation
-- **Web Interface**: Flask-SocketIO for real-time communication
-- **Parser System**: Advanced parentheses-aware parsing with dual syntax support
+- **Modular Architecture**: Clean separation of concerns across specialized modules
+- **CoCoBasic Class**: Main interpreter orchestrating program storage and execution
+- **Advanced Parser**: Parentheses-aware parsing with complex expression evaluation
+- **Graphics Engine**: HTML5 Canvas with authentic MC6847 VDG emulation and nested function support
+- **Variable Manager**: Comprehensive variable and array handling with type validation
+- **I/O System**: Multi-variable INPUT support and interactive keyboard integration
+- **Web Interface**: Flask-SocketIO for real-time communication and responsive display
 
 ### File Structure
 ```
 trs80/
-├── app.py                 # Main Flask application and BASIC interpreter
+├── app.py                 # Flask web application server
+├── emulator/             # Core emulator modules
+│   ├── core.py           # Main CoCoBasic interpreter class
+│   ├── parser.py         # Command parsing and tokenization
+│   ├── graphics.py       # Graphics commands and canvas operations
+│   ├── variables.py      # Variable and array management
+│   └── io.py            # Input/output command handling
 ├── templates/
 │   └── index.html        # Web interface
 ├── static/
@@ -129,8 +145,13 @@ trs80/
 ├── tests/
 │   ├── unit/            # Unit tests for individual commands
 │   ├── integration/     # Integration tests for complex programs
-│   └── test_base.py     # Test framework base class
-├── run_tests.py         # Test runner
+│   ├── test_base.py     # Test framework base class
+│   └── README.md        # Testing documentation
+├── docs/
+│   └── claude-code-architecture-reference.md  # Development tools reference
+├── run_tests.py         # Comprehensive test runner
+├── smoke_test.py        # Quick functionality verification
+├── CLAUDE.md            # Development guide and roadmap
 └── README.md           # This file
 ```
 
@@ -138,12 +159,25 @@ trs80/
 
 The emulator features **comprehensive test coverage** with **229 tests** achieving **100% success rate**.
 
-### Run All Tests
+### Quick Verification
 ```bash
-python run_tests.py
+# Fast smoke test for essential functionality
+python smoke_test.py
+
+# Quick mode for rapid verification
+python smoke_test.py --quick
 ```
 
-### Run Specific Test Suite
+### Comprehensive Testing
+```bash
+# Run all test suites with detailed reporting
+python run_tests.py
+
+# Run with verbose output
+python run_tests.py -v
+```
+
+### Specific Test Suites
 ```bash
 python tests/unit/test_print_command.py
 python tests/unit/test_graphics_commands.py
@@ -151,11 +185,17 @@ python tests/integration/test_complex_programs.py
 ```
 
 ### Test Categories
-- **Unit Tests**: Individual command functionality
-- **Integration Tests**: Complex program execution
+- **Unit Tests**: Individual command functionality (graphics, variables, I/O)
+- **Integration Tests**: Complex program execution and multi-feature interaction
+- **Smoke Tests**: Essential functionality verification for deployment
 - **Error Recovery**: State consistency and error handling
-- **Graphics Tests**: Drawing and display operations
 - **Parser Tests**: Expression evaluation and syntax handling
+
+### Test Infrastructure
+- **Base Framework**: Comprehensive assertion methods and utilities (`tests/test_base.py`)
+- **Mock Systems**: Graphics, sound, and input simulation for isolated testing
+- **Automated Discovery**: Recursive test file detection and execution
+- **Detailed Reporting**: Success rates, failure analysis, and progress tracking
 
 ## 🎮 Authentic TRS-80 Behavior
 

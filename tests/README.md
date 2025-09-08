@@ -220,6 +220,6 @@ python tests/unit/test_graphics_commands.py
 - `test_base.py` - Core testing framework
 - `run_tests.py` - Test discovery and execution
 - `test_utilities.py` - Testing utilities and helpers
-- `TEST_SUITE_README.md` - This documentation
+- `tests/README.md` - This documentation
 
 The test suite provides a solid foundation for validating the TRS-80 Color Computer BASIC emulator functionality and ensuring quality as new features are added.

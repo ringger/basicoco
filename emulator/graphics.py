@@ -1,0 +1,505 @@
+"""
+Graphics module for TRS-80 Color Computer BASIC Emulator
+
+This module contains all graphics-related commands and operations including
+PMODE, SCREEN, PSET, LINE, CIRCLE, PAINT, GET, PUT, and DRAW commands.
+Extracted from the main CoCoBasic class for better organization.
+"""
+
+from .parser import BasicParser
+from .commands import CommandRegistry
+
+
+class BasicGraphics:
+    """Handler for BASIC graphics commands"""
+    
+    def __init__(self, emulator):
+        """Initialize graphics handler with reference to main emulator"""
+        self.emulator = emulator
+    
+    def register_commands(self, registry):
+        """Register graphics commands with the command registry"""
+        registry.register('PMODE', self.execute_pmode)
+        registry.register('SCREEN', self.execute_screen)
+        registry.register('COLOR', self.execute_color)
+        registry.register('PSET', self.execute_pset)
+        registry.register('PRESET', self.execute_preset)
+        registry.register('LINE', self.execute_line_graphics)
+        registry.register('CIRCLE', self.execute_circle)
+        registry.register('PAINT', self.execute_paint)
+        registry.register('GET', self.execute_get)
+        registry.register('PUT', self.execute_put)
+        registry.register('DRAW', self.execute_draw)
+        registry.register('PCLS', lambda args: [{'type': 'pcls'}])
+    
+    def _find_matching_parenthesis(self, text, start):
+        """Find the matching closing parenthesis for the opening one at start"""
+        if start >= len(text) or text[start] != '(':
+            return -1
+        
+        paren_count = 0
+        for i in range(start, len(text)):
+            if text[i] == '(':
+                paren_count += 1
+            elif text[i] == ')':
+                paren_count -= 1
+                if paren_count == 0:
+                    return i
+        return -1
+    
+    def _split_arguments_respecting_parentheses(self, args):
+        """Split arguments by comma, respecting parentheses"""
+        parts = []
+        current_part = ""
+        paren_depth = 0
+        
+        for char in args:
+            if char == '(':
+                paren_depth += 1
+                current_part += char
+            elif char == ')':
+                paren_depth -= 1
+                current_part += char
+            elif char == ',' and paren_depth == 0:
+                parts.append(current_part.strip())
+                current_part = ""
+            else:
+                current_part += char
+        
+        if current_part.strip():
+            parts.append(current_part.strip())
+        return parts
+    
+    def execute_pmode(self, args):
+        """Execute PMODE command to set graphics mode"""
+        try:
+            # Parse arguments: PMODE mode[,page]
+            parts = [p.strip() for p in args.split(',')]
+            mode = int(self.emulator.evaluate_expression(parts[0]))
+            page = 1
+            
+            if len(parts) > 1:
+                page = int(self.emulator.evaluate_expression(parts[1]))
+            
+            if mode < 0 or mode > 4:
+                return [{'type': 'error', 'message': 'ILLEGAL FUNCTION CALL'}]
+            
+            self.emulator.graphics_mode = mode
+            
+            return [{'type': 'pmode', 'mode': mode, 'page': page}]
+        except Exception as e:
+            return [{'type': 'error', 'message': f'Error in PMODE: {str(e)}'}]
+    
+    def execute_screen(self, args):
+        """Execute SCREEN command to set screen/color mode"""
+        try:
+            # Parse SCREEN mode[,page] parameters
+            if ',' in args:
+                parts = args.split(',')
+                mode = int(self.emulator.evaluate_expression(parts[0].strip()))
+                page = int(self.emulator.evaluate_expression(parts[1].strip()))
+            else:
+                mode = int(self.emulator.evaluate_expression(args))
+                page = 1  # Default page
+            
+            if mode < 1 or mode > 2:
+                return [{'type': 'error', 'message': 'ILLEGAL FUNCTION CALL'}]
+            
+            self.emulator.screen_mode = mode
+            
+            return [{'type': 'set_screen', 'mode': mode, 'page': page}]
+        except Exception as e:
+            return [{'type': 'error', 'message': f'Error in SCREEN: {str(e)}'}]
+    
+    def execute_color(self, args):
+        """Execute COLOR command to set foreground/background colors"""
+        try:
+            if ',' in args:
+                fg_str, bg_str = args.split(',', 1)
+                fg = int(self.emulator.evaluate_expression(fg_str.strip())) if fg_str.strip() else None
+                bg = int(self.emulator.evaluate_expression(bg_str.strip())) if bg_str.strip() else None
+            else:
+                fg = int(self.emulator.evaluate_expression(args))
+                bg = None
+            
+            return [{'type': 'set_color', 'fg': fg, 'bg': bg}]
+        except Exception as e:
+            return [{'type': 'error', 'message': f'Error in COLOR: {str(e)}'}]
+    
+    def execute_pset(self, args):
+        """Execute PSET command to set a pixel"""
+        try:
+            # Check if we're in graphics mode
+            if self.emulator.graphics_mode == 0:
+                return [{'type': 'error', 'message': 'ILLEGAL FUNCTION CALL'}]
+            
+            # Parse PSET (x,y)[,color] or PSET x,y[,color]
+            if args.startswith('(') and ')' in args:
+                # Parentheses syntax: PSET(x,y)[,color]
+                coords_end = self._find_matching_parenthesis(args, 0)
+                if coords_end == -1:
+                    return [{'type': 'error', 'message': 'SYNTAX ERROR in PSET'}]
+                coords = args[1:coords_end]
+                coord_parts = self._split_arguments_respecting_parentheses(coords)
+                if len(coord_parts) != 2:
+                    return [{'type': 'error', 'message': 'SYNTAX ERROR in PSET'}]
+                x = int(self.emulator.evaluate_expression(coord_parts[0].strip()))
+                y = int(self.emulator.evaluate_expression(coord_parts[1].strip()))
+                
+                # Check for color parameter
+                color = None
+                remainder = args[coords_end + 1:].strip()
+                if remainder.startswith(','):
+                    color_str = remainder[1:].strip()
+                    if color_str:
+                        color = int(self.emulator.evaluate_expression(color_str))
+                
+                return [{'type': 'pset', 'x': x, 'y': y, 'color': color}]
+            else:
+                # Space-separated syntax: PSET x,y[,color]
+                parts = self._split_arguments_respecting_parentheses(args)
+                if len(parts) < 2:
+                    return [{'type': 'error', 'message': 'SYNTAX ERROR in PSET'}]
+                
+                x = int(self.emulator.evaluate_expression(parts[0].strip()))
+                y = int(self.emulator.evaluate_expression(parts[1].strip()))
+                
+                # Check for color parameter
+                color = None
+                if len(parts) > 2 and parts[2].strip():
+                    color = int(self.emulator.evaluate_expression(parts[2].strip()))
+                
+                return [{'type': 'pset', 'x': x, 'y': y, 'color': color}]
+        except Exception as e:
+            return [{'type': 'error', 'message': f'Error in PSET: {str(e)}'}]
+    
+    def execute_preset(self, args):
+        """Execute PRESET command to reset a pixel to background color"""
+        try:
+            # Check if we're in graphics mode
+            if self.emulator.graphics_mode == 0:
+                return [{'type': 'error', 'message': 'ILLEGAL FUNCTION CALL'}]
+            
+            # Parse PRESET (x,y) or PRESET x,y
+            if args.startswith('(') and ')' in args:
+                # Parentheses syntax: PRESET(x,y)
+                coords_end = self._find_matching_parenthesis(args, 0)
+                if coords_end == -1:
+                    return [{'type': 'error', 'message': 'SYNTAX ERROR in PRESET'}]
+                coords = args[1:coords_end]
+                coord_parts = self._split_arguments_respecting_parentheses(coords)
+                if len(coord_parts) != 2:
+                    return [{'type': 'error', 'message': 'SYNTAX ERROR in PRESET'}]
+                x = int(self.emulator.evaluate_expression(coord_parts[0].strip()))
+                y = int(self.emulator.evaluate_expression(coord_parts[1].strip()))
+                
+                return [{'type': 'preset', 'x': x, 'y': y}]
+            else:
+                # Space-separated syntax: PRESET x,y
+                parts = self._split_arguments_respecting_parentheses(args)
+                if len(parts) != 2:
+                    return [{'type': 'error', 'message': 'SYNTAX ERROR in PRESET'}]
+                
+                x = int(self.emulator.evaluate_expression(parts[0].strip()))
+                y = int(self.emulator.evaluate_expression(parts[1].strip()))
+                
+                return [{'type': 'preset', 'x': x, 'y': y}]
+        except Exception as e:
+            return [{'type': 'error', 'message': f'Error in PRESET: {str(e)}'}]
+    
+    def execute_line_graphics(self, args):
+        """Execute LINE command to draw a line"""
+        try:
+            # Check if we're in graphics mode
+            if self.emulator.graphics_mode == 0:
+                return [{'type': 'error', 'message': 'ILLEGAL FUNCTION CALL'}]
+            
+            # Parse LINE (x1,y1)-(x2,y2)[,color] or LINE x1,y1,x2,y2[,color]
+            if '-(' in args:
+                # Standard syntax: LINE (x1,y1)-(x2,y2)[,color]
+                # Split into line spec and optional color
+                color_part = None
+                if ',' in args and args.rfind(',') > args.rfind(')'):
+                    # There's a color parameter after the coordinates
+                    line_spec, color_part = args.rsplit(',', 1)
+                    color_part = color_part.strip()
+                else:
+                    line_spec = args
+                
+                # Use CommandRegistry to parse coordinates
+                start_coords, end_coords = CommandRegistry.parse_line_coordinates(line_spec)
+                
+                x1_str, y1_str = start_coords
+                x2_str, y2_str = end_coords
+                
+                x1 = int(self.emulator.evaluate_expression(x1_str.strip()))
+                y1 = int(self.emulator.evaluate_expression(y1_str.strip()))
+                x2 = int(self.emulator.evaluate_expression(x2_str.strip()))
+                y2 = int(self.emulator.evaluate_expression(y2_str.strip()))
+                
+                # Handle optional color parameter
+                color = None
+                if color_part:
+                    color = int(self.emulator.evaluate_expression(color_part))
+                
+                return [{'type': 'line', 'x1': x1, 'y1': y1, 'x2': x2, 'y2': y2, 'color': color}]
+            else:
+                # Space-separated syntax: LINE x1,y1,x2,y2[,color]
+                parts = self._split_arguments_respecting_parentheses(args)
+                if len(parts) < 4:
+                    return [{'type': 'error', 'message': 'SYNTAX ERROR in LINE'}]
+                
+                x1 = int(self.emulator.evaluate_expression(parts[0].strip()))
+                y1 = int(self.emulator.evaluate_expression(parts[1].strip()))
+                x2 = int(self.emulator.evaluate_expression(parts[2].strip()))
+                y2 = int(self.emulator.evaluate_expression(parts[3].strip()))
+                
+                # Handle optional color parameter
+                color = None
+                if len(parts) > 4 and parts[4].strip():
+                    color = int(self.emulator.evaluate_expression(parts[4].strip()))
+                
+                return [{'type': 'line', 'x1': x1, 'y1': y1, 'x2': x2, 'y2': y2, 'color': color}]
+        except Exception as e:
+            return [{'type': 'error', 'message': f'Error in LINE: {str(e)}'}]
+    
+    def execute_circle(self, args):
+        """Execute CIRCLE command to draw a circle"""
+        try:
+            # Check if we're in graphics mode
+            if self.emulator.graphics_mode == 0:
+                return [{'type': 'error', 'message': 'ILLEGAL FUNCTION CALL'}]
+            
+            # Parse CIRCLE (x,y),radius[,color] or CIRCLE x,y,radius[,color]
+            if args.startswith('(') and ')' in args:
+                # Parentheses syntax: CIRCLE(x,y),radius[,color]
+                coords_end = self._find_matching_parenthesis(args, 0)
+                if coords_end == -1:
+                    return [{'type': 'error', 'message': 'SYNTAX ERROR in CIRCLE'}]
+                coords = args[1:coords_end]
+                coord_parts = self._split_arguments_respecting_parentheses(coords)
+                if len(coord_parts) != 2:
+                    return [{'type': 'error', 'message': 'SYNTAX ERROR in CIRCLE'}]
+                x = int(self.emulator.evaluate_expression(coord_parts[0].strip()))
+                y = int(self.emulator.evaluate_expression(coord_parts[1].strip()))
+                
+                remainder = args[coords_end + 1:].strip()  # Skip ')' and whitespace
+                if remainder.startswith(','):
+                    remainder = remainder[1:].strip()  # Skip comma and whitespace
+                parts = remainder.split(',')
+                radius = int(self.emulator.evaluate_expression(parts[0].strip()))
+                
+                # Check for color parameter
+                color = None
+                if len(parts) > 1 and parts[1].strip():
+                    color = int(self.emulator.evaluate_expression(parts[1].strip()))
+                
+                return [{'type': 'circle', 'x': x, 'y': y, 'radius': radius, 'color': color}]
+            else:
+                # Space-separated syntax: CIRCLE x,y,radius[,color]
+                parts = self._split_arguments_respecting_parentheses(args)
+                if len(parts) < 3:
+                    return [{'type': 'error', 'message': 'SYNTAX ERROR in CIRCLE'}]
+                
+                x = int(self.emulator.evaluate_expression(parts[0].strip()))
+                y = int(self.emulator.evaluate_expression(parts[1].strip()))
+                radius = int(self.emulator.evaluate_expression(parts[2].strip()))
+                
+                # Check for color parameter
+                color = None
+                if len(parts) > 3 and parts[3].strip():
+                    color = int(self.emulator.evaluate_expression(parts[3].strip()))
+                
+                return [{'type': 'circle', 'x': x, 'y': y, 'radius': radius, 'color': color}]
+        except Exception as e:
+            return [{'type': 'error', 'message': f'Error in CIRCLE: {str(e)}'}]
+    
+    def execute_paint(self, args):
+        """Execute PAINT command for flood fill"""
+        try:
+            # Check if we're in graphics mode
+            if self.emulator.graphics_mode == 0:
+                return [{'type': 'error', 'message': 'ILLEGAL FUNCTION CALL'}]
+            
+            # Parse PAINT (x,y)[,color[,border_color]]
+            if args.startswith('(') and ')' in args:
+                coords_end = self._find_matching_parenthesis(args, 0)
+                if coords_end == -1:
+                    return [{'type': 'error', 'message': 'SYNTAX ERROR in PAINT'}]
+                coords = args[1:coords_end]
+                
+                # Must have exactly 2 coordinates
+                coord_parts = coords.split(',')
+                if len(coord_parts) != 2:
+                    return [{'type': 'error', 'message': 'SYNTAX ERROR in PAINT'}]
+                
+                x_str, y_str = coord_parts
+                x = int(self.emulator.evaluate_expression(x_str.strip()))
+                y = int(self.emulator.evaluate_expression(y_str.strip()))
+                
+                # Parse optional color parameters
+                paint_color = 1  # Default paint color
+                border_color = None
+                
+                remainder = args[coords_end + 1:].strip()
+                if remainder.startswith(','):
+                    parts = remainder[1:].split(',')
+                    if parts[0].strip():
+                        paint_color = int(self.emulator.evaluate_expression(parts[0].strip()))
+                    if len(parts) > 1 and parts[1].strip():
+                        border_color = int(self.emulator.evaluate_expression(parts[1].strip()))
+                elif remainder == '':
+                    # PAINT(x,y) without color is a syntax error
+                    return [{'type': 'error', 'message': 'SYNTAX ERROR in PAINT'}]
+                
+                # Use the key names expected by tests
+                return [{'type': 'paint', 'x': x, 'y': y, 'fill_color': paint_color, 'boundary_color': border_color}]
+            else:
+                return [{'type': 'error', 'message': 'SYNTAX ERROR in PAINT'}]
+        except Exception as e:
+            return [{'type': 'error', 'message': f'Error in PAINT: {str(e)}'}]
+    
+    def execute_get(self, args):
+        """Execute GET command to capture graphics area"""
+        try:
+            # Check if we're in graphics mode
+            if self.emulator.graphics_mode == 0:
+                return [{'type': 'error', 'message': 'ILLEGAL FUNCTION CALL'}]
+            
+            # Parse GET (x1,y1)-(x2,y2), array_name
+            if '-(' in args and ',' in args:
+                coords_part, array_name = args.rsplit(',', 1)
+                array_name = array_name.strip()
+                
+                # Parse coordinates
+                start_coords, end_coords = coords_part.split('-(', 1)
+                if start_coords.startswith('('):
+                    start_coords = start_coords[1:]
+                
+                end_coords = end_coords.rstrip(')')
+                
+                x1_str, y1_str = start_coords.split(',')
+                x2_str, y2_str = end_coords.split(',')
+                
+                x1 = int(self.emulator.evaluate_expression(x1_str.strip()))
+                y1 = int(self.emulator.evaluate_expression(y1_str.strip()))
+                x2 = int(self.emulator.evaluate_expression(x2_str.strip()))
+                y2 = int(self.emulator.evaluate_expression(y2_str.strip()))
+                
+                return [{'type': 'get', 'x1': x1, 'y1': y1, 'x2': x2, 'y2': y2, 'array': array_name}]
+            else:
+                return [{'type': 'error', 'message': 'SYNTAX ERROR in GET'}]
+        except Exception as e:
+            return [{'type': 'error', 'message': f'Error in GET: {str(e)}'}]
+    
+    def execute_put(self, args):
+        """Execute PUT command to display stored graphics"""
+        try:
+            # Check if we're in graphics mode
+            if self.emulator.graphics_mode == 0:
+                return [{'type': 'error', 'message': 'ILLEGAL FUNCTION CALL'}]
+            
+            # Parse PUT (x,y), array_name [,action]
+            parts = args.split(',')
+            if len(parts) >= 2 and parts[0].strip().startswith('('):
+                coords = parts[0].strip()
+                if coords.startswith('(') and coords.endswith(')'):
+                    coord_parts = coords[1:-1].split(',')
+                    x = int(self.emulator.evaluate_expression(coord_parts[0].strip()))
+                    y = int(self.emulator.evaluate_expression(coord_parts[1].strip()))
+                    
+                    array_name = parts[1].strip()
+                    action = 'PSET'  # Default action
+                    
+                    if len(parts) > 2 and parts[2].strip():
+                        action = parts[2].strip().upper()
+                    
+                    return [{'type': 'put', 'x': x, 'y': y, 'array': array_name, 'action': action}]
+                else:
+                    return [{'type': 'error', 'message': 'SYNTAX ERROR in PUT coordinates'}]
+            else:
+                return [{'type': 'error', 'message': 'SYNTAX ERROR in PUT'}]
+        except Exception as e:
+            return [{'type': 'error', 'message': f'Error in PUT: {str(e)}'}]
+    
+    def execute_draw(self, args):
+        """Execute DRAW command for turtle graphics"""
+        try:
+            # Check if we're in graphics mode
+            if self.emulator.graphics_mode == 0:
+                return [{'type': 'error', 'message': 'ILLEGAL FUNCTION CALL'}]
+            
+            # Evaluate the draw string expression
+            draw_string = self.emulator.evaluate_expression(args)
+            if not isinstance(draw_string, str):
+                return [{'type': 'error', 'message': 'DRAW requires string argument'}]
+            
+            # Parse the draw commands
+            commands = BasicParser.parse_draw_commands(draw_string)
+            
+            output = []
+            for command in commands:
+                result = self._execute_draw_command(command)
+                if result:
+                    output.extend(result)
+            
+            return output
+        except Exception as e:
+            return [{'type': 'error', 'message': f'Error in DRAW: {str(e)}'}]
+    
+    def _execute_draw_command(self, command):
+        """Execute a single DRAW command"""
+        cmd_type = command.get('command', '')
+        
+        if cmd_type in ['U', 'D', 'L', 'R', 'E', 'F', 'G', 'H']:
+            # Movement commands
+            distance = command.get('distance', 1)
+            
+            old_x, old_y = self.emulator.turtle_x, self.emulator.turtle_y
+            
+            # Calculate new position
+            if cmd_type == 'U':
+                self.emulator.turtle_y -= distance
+            elif cmd_type == 'D':
+                self.emulator.turtle_y += distance
+            elif cmd_type == 'L':
+                self.emulator.turtle_x -= distance
+            elif cmd_type == 'R':
+                self.emulator.turtle_x += distance
+            elif cmd_type == 'E':  # Up-Right diagonal
+                self.emulator.turtle_x += distance
+                self.emulator.turtle_y -= distance
+            elif cmd_type == 'F':  # Down-Right diagonal
+                self.emulator.turtle_x += distance
+                self.emulator.turtle_y += distance
+            elif cmd_type == 'G':  # Down-Left diagonal
+                self.emulator.turtle_x -= distance
+                self.emulator.turtle_y += distance
+            elif cmd_type == 'H':  # Up-Left diagonal
+                self.emulator.turtle_x -= distance
+                self.emulator.turtle_y -= distance
+            
+            # Draw line from old position to new position
+            return [{'type': 'line', 'x1': old_x, 'y1': old_y, 
+                    'x2': self.emulator.turtle_x, 'y2': self.emulator.turtle_y, 
+                    'color': self.emulator.current_draw_color}]
+        
+        elif cmd_type == 'M':
+            # Move to position
+            x = command.get('x', self.emulator.turtle_x)
+            y = command.get('y', self.emulator.turtle_y)
+            relative = command.get('relative', False)
+            
+            if relative:
+                self.emulator.turtle_x += x
+                self.emulator.turtle_y += y
+            else:
+                self.emulator.turtle_x = x
+                self.emulator.turtle_y = y
+        
+        elif cmd_type == 'C':
+            # Set color
+            color = command.get('color', 1)
+            self.emulator.current_draw_color = color
+        
+        return []

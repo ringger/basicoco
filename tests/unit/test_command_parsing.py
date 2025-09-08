@@ -78,6 +78,9 @@ class CommandParsingTest(BaseTestCase):
 
     def test_parentheses_in_commands(self):
         """Test commands with complex parentheses structures"""
+        # Set graphics mode first
+        self.basic.execute_command('PMODE 4,1')
+        
         # Graphics commands with coordinates
         self.assert_graphics_output('PSET(100,200)', 'pset')
         self.assert_graphics_output('LINE(10,20)-(30,40)', 'line')

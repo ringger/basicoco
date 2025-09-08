@@ -1,8 +1,37 @@
 # TRS-80 Color Computer BASIC Emulator - Development Guide
 
+## Current Status ✅
+
+**Production Ready**: 229/229 tests passing (100% success rate)  
+**Modular Architecture**: Clean separation of concerns across specialized modules  
+**Core Features Complete**: All major BASIC commands, graphics, I/O, and control flow working  
+**Comprehensive Testing**: Unit tests, integration tests, and smoke testing infrastructure  
+
 ## Development Priorities 🎯
 
-### Phase 4: Advanced String Processing
+### Phase 1: Simple CLI Client
+- **Standalone Terminal Interface**
+  - Create `cli_client.py` for direct command-line interaction
+  - Pure text interface without web browser dependency
+  - Direct socket connection to Flask-SocketIO server
+  - Command history and line editing support (readline/prompt_toolkit)
+- **Development Benefits**
+  - Faster testing and debugging without browser overhead
+  - Scriptable automation for batch program execution
+  - Headless server operation for educational deployment
+  - Integration with terminal-based development workflows
+- **Implementation Approach**
+  - Separate client connects to existing Flask server
+  - Maintain full compatibility with web interface
+  - Support all BASIC commands and interactive features
+  - Optional: Save/load programs directly from filesystem
+
+### Phase 2: Advanced String Processing & Expression Enhancement
+- **Nested Function Calls** 
+  - Complete implementation for complex expressions like `MID$(STR$(INT(SQR(16))), 1, 2)`
+  - Enhanced parser support for deeply nested function compositions
+  - Proper precedence and evaluation order for nested operations
+  - Addresses TODO in `emulator/parser.py`
 - **INSTR** - Find substring position within string
   - Implementation: `INSTR(string$, search$)` returns position (1-based) or 0 if not found
   - Usage: `POS = INSTR("HELLO WORLD", "WORLD")` returns 7
@@ -13,7 +42,7 @@
   - Implementation: `STRING$(n, char$)` or `STRING$(n, ascii_code)`
   - Usage: `PRINT STRING$(10, "*")` produces "**********"
 
-### Phase 5: Enhanced Control Flow
+### Phase 3: Enhanced Control Flow
 - **IF/THEN/ELSE Implementation**
   - Multi-line IF/THEN/ELSE/ENDIF structures
   - Nested conditional support
@@ -23,7 +52,7 @@
   - WHILE/WEND loops for condition-based iteration
   - DO/LOOP with UNTIL and WHILE variants
 
-### Phase 6: System Functions
+### Phase 4: System Functions
 - **Memory Access Simulation**
   - PEEK(address) - Read simulated memory location
   - POKE address, value - Write to simulated memory location
@@ -36,19 +65,25 @@
   - RANDOMIZE [seed] - Initialize random seed
   - Enhanced RND with better distribution
 
-### Phase 7: File Operations (Web Storage)
+### Phase 5: File Operations (Web Storage & Filesystem Integration)
 - **Program Storage**
   - SAVE "filename" - Save program to browser localStorage
   - LOAD "filename" - Load program from browser localStorage
   - FILES - List saved programs
   - KILL "filename" - Delete saved program
+- **Filesystem Integration**
+  - Server-side program caching: Mirror web storage to UNIX filesystem
+  - Repository integration: Save programs to `programs/` directory for version control
+  - Backup and restore: Automatic filesystem backup of user programs
+  - Cross-session persistence: Programs survive server restarts and browser clearing
+  - Export functionality: Download programs as `.BAS` files directly to user's filesystem
 - **Data File Operations**
   - OPEN "filename" FOR INPUT/OUTPUT AS #n
   - PRINT #n, data - Write to file
   - INPUT #n, variable - Read from file
   - CLOSE #n - Close file
 
-### Phase 8: Advanced Error Handling
+### Phase 6: Advanced Error Handling
 - **Structured Error Handling**
   - ON ERROR GOTO line - Error trapping
   - RESUME [line] - Resume execution after error
@@ -249,6 +284,18 @@
   - XSS protection for user programs
   - Safe evaluation of user expressions
 
+## Current Architecture Status 🏗️
+
+**Completed Architecture** (January 2025):
+- ✅ **Modular Design**: Clean separation across `emulator/` modules
+- ✅ **Core Interpreter** (`emulator/core.py`): 100% test success with orchestration focus
+- ✅ **Advanced Parser** (`emulator/parser.py`): Parentheses-aware expression evaluation
+- ✅ **Graphics Engine** (`emulator/graphics.py`): Complete MC6847 VDG emulation
+- ✅ **Variable Manager** (`emulator/variables.py`): Array and variable handling
+- ✅ **I/O System** (`emulator/io.py`): Multi-variable INPUT and interactive features
+- ✅ **Web Interface** (`app.py`): Flask-SocketIO real-time communication
+- ✅ **Testing Infrastructure**: Comprehensive unit, integration, and smoke tests
+
 ---
 
-This development guide provides a roadmap for evolving the TRS-80 Color Computer BASIC emulator from its current production-ready state into an even more comprehensive and modern educational platform while preserving authentic vintage computing experience.
+This development guide provides a roadmap for evolving the TRS-80 Color Computer BASIC emulator from its current **production-ready state with 100% test success** into an even more comprehensive and modern educational platform while preserving authentic vintage computing experience.
