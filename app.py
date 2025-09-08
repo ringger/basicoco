@@ -6,8 +6,13 @@ app = Flask(__name__)
 app.config['SECRET_KEY'] = 'trs80-secret-key'
 socketio = SocketIO(app, cors_allowed_origins="*")
 
-# Global BASIC interpreter instance
-basic = CoCoBasic()
+# Output callback for real-time streaming
+def output_callback(output):
+    """Emit output to all connected clients in real-time"""
+    socketio.emit('output', output)
+
+# Global BASIC interpreter instance with streaming callback
+basic = CoCoBasic(output_callback=output_callback)
 
 @app.route('/')
 def index():

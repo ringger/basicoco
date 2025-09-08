@@ -1,17 +1,18 @@
 # TRS-80 Color Computer BASIC Emulator
 
-A comprehensive, web-based TRS-80 Color Computer BASIC interpreter with authentic graphics emulation and modern web technologies.
+A comprehensive TRS-80 Color Computer BASIC interpreter with both web interface and standalone CLI client, featuring authentic graphics emulation, real-time streaming output, and modern educational tools.
 
 ![Production Ready](https://img.shields.io/badge/Status-Production%20Ready-brightgreen)
 ![Test Coverage](https://img.shields.io/badge/Tests-229%2F229%20Passing-brightgreen)
 ![Success Rate](https://img.shields.io/badge/Success%20Rate-100%25-brightgreen)
+![CLI Client](https://img.shields.io/badge/CLI-Real--time%20Streaming-blue)
 ![Python](https://img.shields.io/badge/Python-3.8%2B-blue)
 ![License](https://img.shields.io/badge/License-MIT-blue)
 
 ## 🚀 Features
 
 ### Complete BASIC Language Support
-- **Core Commands**: NEW, RUN, LIST, END, STOP, CONT, CLEAR
+- **Core Commands**: NEW, RUN, LIST, END, STOP, CONT, CLEAR, LOAD
 - **I/O Operations**: PRINT (with separators), INPUT (with prompts), CLS
 - **Variables & Math**: Numeric and string variables, all operators (+, -, *, /, ^, =, <, >, <=, >=, <>)
 - **Control Flow**: FOR/NEXT loops (with STEP), IF/THEN, GOTO, GOSUB/RETURN, ON GOTO/GOSUB
@@ -19,6 +20,7 @@ A comprehensive, web-based TRS-80 Color Computer BASIC interpreter with authenti
 - **Math Functions**: ABS, INT, SQR, SIN, COS, TAN, ATN, EXP, LOG, RND
 - **String Functions**: LEN, LEFT$, RIGHT$, MID$, CHR$, ASC, STR$, VAL
 - **Arrays**: DIM with multi-dimensional support and authentic TRS-80 bounds behavior
+- **Modern Enhancements**: PAUSE command for precise timing control
 
 ### Advanced Graphics & Sound
 - **Graphics Modes**: PMODE 0-4 with authentic MC6847 VDG emulation
@@ -31,6 +33,9 @@ A comprehensive, web-based TRS-80 Color Computer BASIC interpreter with authenti
 - **INKEY$**: Non-blocking keyboard input with web interface integration
 - **Real-time Display**: HTML5 Canvas with authentic CRT styling
 - **WebSocket Communication**: Interactive keyboard and display updates
+- **Standalone CLI Client**: Terminal-based interface with real-time streaming output
+- **Program Management**: LOAD command with smart file discovery from programs/ directory
+- **Real-time Animations**: Carriage return support and inline PRINT for smooth animations
 
 ## 🎯 Quick Start
 
@@ -59,12 +64,21 @@ A comprehensive, web-based TRS-80 Color Computer BASIC interpreter with authenti
    ```
 
 4. **Run the emulator**
+   
+   **Web Interface:**
    ```bash
    python app.py
    ```
-
-5. **Open your browser**
-   Navigate to `http://localhost:5000`
+   Then navigate to `http://localhost:5000` in your browser
+   
+   **CLI Client (Alternative):**
+   ```bash
+   # In terminal 1 - Start server
+   python app.py
+   
+   # In terminal 2 - Start CLI client
+   python cli_client.py
+   ```
 
 ## 💻 Usage Examples
 
@@ -116,27 +130,67 @@ RUN
 RUN
 ```
 
+### Program File Management
+```basic
+# Save your programs as .bas files in the programs/ directory
+# Then load and run them:
+
+LOAD "bounce_realtime"      # Load a program file
+LIST                        # View the loaded program
+RUN                        # Execute it
+
+# Programs automatically searched in:
+# - Current directory
+# - programs/ subdirectory
+```
+
+### Real-Time Animation
+```basic
+10 REM BOUNCING STAR ANIMATION
+20 CLS: POS = 1: DIR = 1
+30 FOR I = 1 TO 20
+40 PRINT "          "; CHR$(13);  # Clear line
+50 LINE$ = ""
+60 FOR J = 1 TO 10
+70 IF J = POS THEN LINE$ = LINE$ + "*"
+80 IF J <> POS THEN LINE$ = LINE$ + " "
+90 NEXT J
+100 PRINT LINE$; CHR$(13);       # Print star position
+110 PAUSE 0.3                    # Real-time pause
+120 POS = POS + DIR
+130 IF POS = 10 THEN DIR = -1
+140 IF POS = 1 THEN DIR = 1
+150 NEXT I
+RUN
+```
+
 ## 🏗️ Architecture
 
 ### Core Components
 - **Modular Architecture**: Clean separation of concerns across specialized modules
-- **CoCoBasic Class**: Main interpreter orchestrating program storage and execution
+- **CoCoBasic Class**: Main interpreter orchestrating program storage and execution with real-time streaming
 - **Advanced Parser**: Parentheses-aware parsing with complex expression evaluation
 - **Graphics Engine**: HTML5 Canvas with authentic MC6847 VDG emulation and nested function support
 - **Variable Manager**: Comprehensive variable and array handling with type validation
 - **I/O System**: Multi-variable INPUT support and interactive keyboard integration
 - **Web Interface**: Flask-SocketIO for real-time communication and responsive display
+- **CLI Client**: Standalone terminal interface with real-time streaming output and program management
 
 ### File Structure
 ```
 trs80/
-├── app.py                 # Flask web application server
+├── app.py                 # Flask web application server with real-time streaming
+├── cli_client.py          # Standalone CLI client with terminal interface
 ├── emulator/             # Core emulator modules
-│   ├── core.py           # Main CoCoBasic interpreter class
+│   ├── core.py           # Main CoCoBasic interpreter class with streaming support
 │   ├── parser.py         # Command parsing and tokenization
 │   ├── graphics.py       # Graphics commands and canvas operations
 │   ├── variables.py      # Variable and array management
-│   └── io.py            # Input/output command handling
+│   └── io.py            # Input/output command handling with inline PRINT support
+├── programs/             # BASIC program files directory
+│   ├── README.md         # Program directory documentation
+│   ├── bounce_realtime.bas # Real-time bouncing star animation
+│   └── test_streaming.bas  # Streaming output test program
 ├── templates/
 │   └── index.html        # Web interface
 ├── static/
@@ -242,8 +296,10 @@ We welcome contributions! Please:
 This emulator is perfect for:
 - **Teaching BASIC programming** with authentic vintage experience
 - **Computer history education** demonstrating 1980s computing
-- **Retro programming projects** with modern web accessibility
+- **Retro programming projects** with modern web accessibility and CLI convenience
 - **Learning computer graphics** through simple BASIC commands
+- **Real-time animations** and interactive programming demonstrations
+- **Terminal-based development** with the standalone CLI client
 
 ## 🎓 Example Programs
 
@@ -278,10 +334,15 @@ RUN
 - 50MB disk space
 - 256MB RAM minimum
 
-### Browser Requirements
+### Browser Requirements (Web Interface)
 - Modern web browser with WebSocket support
 - HTML5 Canvas support
 - Web Audio API support (for sound)
+
+### CLI Client Requirements
+- Terminal with ANSI escape sequence support
+- Python readline library (usually included)
+- Socket.IO client support (automatically installed)
 
 ## 📄 License
 

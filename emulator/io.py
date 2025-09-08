@@ -107,7 +107,17 @@ class IOHandler:
                 except Exception as e:
                     return [{'type': 'error', 'message': f'Error in PRINT: {str(e)}'}]
             
-            return [{'type': 'text', 'text': result_text}]
+            # Check if the last part had a trailing separator (semicolon or comma)
+            has_trailing_separator = False
+            if parts_with_separators and parts_with_separators[-1][1] is not None:
+                has_trailing_separator = True
+            
+            # Check if result contains carriage return (CHR$(13)) or has trailing separator
+            if '\r' in result_text or has_trailing_separator:
+                # Handle inline output (carriage return or trailing semicolon)
+                return [{'type': 'text', 'text': result_text, 'inline': True}]
+            else:
+                return [{'type': 'text', 'text': result_text}]
         except Exception as e:
             return [{'type': 'error', 'message': f'Error in PRINT: {str(e)}'}]
     
@@ -154,8 +164,11 @@ class IOHandler:
             else:
                 current_part += char
         
-        # Add the last part (no separator after it)
-        parts_with_separators.append((current_part, None))
+        # Check if the string ends with a separator (indicates no newline)
+        trailing_separator = args.rstrip()[-1:] if args.rstrip() and args.rstrip()[-1] in [';', ','] else None
+        
+        # Add the last part with trailing separator info
+        parts_with_separators.append((current_part, trailing_separator))
         return parts_with_separators
     
     def _split_print_arguments(self, args):

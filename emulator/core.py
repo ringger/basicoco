@@ -13,13 +13,14 @@ from .io import IOHandler
 from .commands import CommandRegistry
 
 class CoCoBasic:
-    def __init__(self):
+    def __init__(self, output_callback=None):
         self.program = {}  # Line number -> code (original for LIST display)
         self.expanded_program = {}  # (line_num, sub_index) -> statement (for execution)
         self.variables = {}
         self.data_statements = []
         self.data_pointer = 0
         self.running = False
+        self.output_callback = output_callback  # Callback for real-time output
         self.current_line = 0
         self.current_sub_line = 0
         self.call_stack = []
@@ -27,7 +28,7 @@ class CoCoBasic:
         self.graphics_mode = 0  # 0 = text mode, 1-4 = PMODE graphics
         self.screen_mode = 1    # Screen/color mode
         self.iteration_count = 0  # Safety counter for infinite loops
-        self.max_iterations = 10000  # Maximum iterations to prevent infinite loops
+        self.max_iterations = 50000  # Maximum iterations to prevent infinite loops
         self.waiting_for_input = False  # Flag to indicate we're waiting for user input
         self.program_counter = None  # For resuming execution after input
         self.stopped_position = None  # For CONT command - stores (line, sub_line) where STOP occurred
@@ -50,6 +51,12 @@ class CoCoBasic:
         # Initialize command registry
         self.command_registry = CommandRegistry()
         self._register_all_commands()
+    
+    def emit_output(self, output):
+        """Emit output immediately if callback is available, otherwise return it"""
+        if self.output_callback:
+            self.output_callback(output)
+        return output
     
     @property 
     def key_buffer(self):
@@ -101,6 +108,8 @@ class CoCoBasic:
             return self.clear_program()
         elif command.upper() == 'CLS':
             return [{'type': 'clear_screen'}]
+        elif command.upper().startswith('LOAD'):
+            return self.load_program(command[4:].strip())
         else:
             # Try to execute as a line of code
             return self.execute_line(command)
@@ -116,6 +125,77 @@ class CoCoBasic:
         self.expanded_program.clear()
         self.variable_manager.clear_variables()
         return [{'type': 'text', 'text': 'OK'}]
+    
+    def load_program(self, filename):
+        """Load a BASIC program from a file"""
+        import os
+        
+        # Parse filename - handle quotes
+        filename = filename.strip()
+        if filename.startswith('"') and filename.endswith('"'):
+            filename = filename[1:-1]
+        elif filename.startswith("'") and filename.endswith("'"):
+            filename = filename[1:-1]
+        
+        if not filename:
+            return [{'type': 'error', 'message': 'SYNTAX ERROR: Filename required'}]
+        
+        # Add .bas extension if not present
+        if not filename.lower().endswith('.bas'):
+            filename += '.bas'
+        
+        try:
+            original_filename = filename
+            
+            # Search order: current dir -> programs/ -> project root
+            search_paths = [
+                filename,  # Current directory
+                os.path.join('programs', filename),  # programs subdirectory
+                os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), filename),  # project root
+                os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'programs', filename)  # project root/programs
+            ]
+            
+            found_file = None
+            for path in search_paths:
+                if os.path.exists(path):
+                    found_file = path
+                    break
+            
+            if not found_file:
+                return [{'type': 'error', 'message': f'FILE NOT FOUND: {os.path.basename(original_filename)}'}]
+            
+            filename = found_file
+            
+            # Clear current program
+            self.program.clear()
+            self.expanded_program.clear()
+            
+            # Load and parse the file
+            with open(filename, 'r') as f:
+                lines_loaded = 0
+                for line in f:
+                    line = line.strip()
+                    if line and not line.startswith('#'):  # Skip empty lines and comments
+                        # Parse each line as if it were entered directly
+                        line_num, code = self.parse_line(line)
+                        if line_num is not None:
+                            if code:
+                                self.program[line_num] = code
+                                self.expand_line_to_sublines(line_num, code)
+                                lines_loaded += 1
+                            # Skip lines that are just line numbers with no code
+                        else:
+                            # Handle lines without line numbers - treat as comments or ignore
+                            pass
+            
+            return [{'type': 'text', 'text': f'LOADED {lines_loaded} LINES FROM {os.path.basename(filename)}'}]
+            
+        except FileNotFoundError:
+            return [{'type': 'error', 'message': f'FILE NOT FOUND: {os.path.basename(filename)}'}]
+        except PermissionError:
+            return [{'type': 'error', 'message': f'PERMISSION DENIED: {os.path.basename(filename)}'}]
+        except Exception as e:
+            return [{'type': 'error', 'message': f'LOAD ERROR: {str(e)}'}]
     
     def expand_line_to_sublines(self, line_num, code):
         """Expand line using BasicParser"""
@@ -255,7 +335,11 @@ class CoCoBasic:
                             break
                         break
                     elif item.get('type') != 'input_request':  # Skip input_request as we handled it above
-                        output.append(item)
+                        # During program execution, filter out "OK" messages
+                        if not (item.get('type') == 'text' and item.get('text') == 'OK'):
+                            output.append(item)
+                            # Emit output immediately for real-time streaming
+                            self.emit_output([item])
                         # Check if this is an error that should halt execution
                         if item.get('type') == 'error':
                             self.running = False
@@ -365,7 +449,11 @@ class CoCoBasic:
                             jumped = True
                         break
                     elif item.get('type') != 'input_request':
-                        output.append(item)
+                        # During program execution, filter out "OK" messages
+                        if not (item.get('type') == 'text' and item.get('text') == 'OK'):
+                            output.append(item)
+                            # Emit output immediately for real-time streaming
+                            self.emit_output([item])
                         # Check if this is an error that should halt execution
                         if item.get('type') == 'error':
                             self.running = False
@@ -1208,6 +1296,31 @@ class CoCoBasic:
         except:
             return [{'type': 'error', 'message': 'SYNTAX ERROR'}]
     
+    def execute_pause(self, args):
+        """Execute PAUSE command - pause execution for specified time"""
+        import time
+        
+        try:
+            if not args.strip():
+                # Default pause of 1 second
+                pause_time = 1.0
+            else:
+                # Evaluate the pause time argument
+                pause_time = float(self.evaluate_expression(args.strip()))
+                
+            # Limit pause time for safety (max 10 seconds)
+            if pause_time < 0:
+                pause_time = 0
+            elif pause_time > 10:
+                pause_time = 10
+                
+            # Perform the pause
+            time.sleep(pause_time)
+            return []  # No output
+            
+        except:
+            return [{'type': 'error', 'message': 'SYNTAX ERROR IN PAUSE'}]
+    
     def execute_new(self):
         # NEW command - clear program and variables
         self.program.clear()
@@ -1349,7 +1462,11 @@ class CoCoBasic:
                             jumped = True
                         break
                     elif item.get('type') != 'input_request':
-                        output.append(item)
+                        # During program execution, filter out "OK" messages
+                        if not (item.get('type') == 'text' and item.get('text') == 'OK'):
+                            output.append(item)
+                            # Emit output immediately for real-time streaming
+                            self.emit_output([item])
                         # Check if this is an error that should halt execution
                         if item.get('type') == 'error':
                             self.running = False
@@ -1651,6 +1768,7 @@ class CoCoBasic:
         self.command_registry.register('CLS', lambda args: [{'type': 'clear_screen'}])
         self.command_registry.register('NEW', lambda args: self.execute_new())
         self.command_registry.register('SOUND', self.execute_sound)
+        self.command_registry.register('PAUSE', self.execute_pause)
         
         # Comments
         self.command_registry.register('REM', lambda args: [])

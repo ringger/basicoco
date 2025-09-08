@@ -1,32 +1,32 @@
 # TRS-80 Color Computer BASIC Emulator - Development Guide
 
-## Current Status ✅
+## Current Status ✅ (January 2025)
 
 **Production Ready**: 229/229 tests passing (100% success rate)  
+**Advanced CLI Client**: Full-featured terminal interface with real-time streaming  
+**Real-time Architecture**: Streaming output during program execution  
+**Enhanced I/O**: LOAD command, PAUSE timing, and inline animations  
 **Modular Architecture**: Clean separation of concerns across specialized modules  
-**Core Features Complete**: All major BASIC commands, graphics, I/O, and control flow working  
-**Comprehensive Testing**: Unit tests, integration tests, and smoke testing infrastructure  
 
-## Development Priorities 🎯
+## Recent Major Achievements 🚀
 
-### Phase 1: Simple CLI Client
-- **Standalone Terminal Interface**
-  - Create `cli_client.py` for direct command-line interaction
-  - Pure text interface without web browser dependency
-  - Direct socket connection to Flask-SocketIO server
-  - Command history and line editing support (readline/prompt_toolkit)
-- **Development Benefits**
-  - Faster testing and debugging without browser overhead
-  - Scriptable automation for batch program execution
-  - Headless server operation for educational deployment
-  - Integration with terminal-based development workflows
-- **Implementation Approach**
-  - Separate client connects to existing Flask server
-  - Maintain full compatibility with web interface
-  - Support all BASIC commands and interactive features
-  - Optional: Save/load programs directly from filesystem
+### ✅ **Phase 1 Complete: Advanced CLI Client**
+- **Standalone Terminal Interface** - `cli_client.py` with Socket.IO connection
+- **Real-time Streaming Output** - Programs display output as they execute  
+- **Command History & Editing** - Full readline support with tab completion
+- **Program Management** - LOAD command with smart file discovery
+- **Animation Support** - Carriage return (CHR$(13)) and inline PRINT
+- **Modern Timing Control** - PAUSE command for precise animation timing
 
-### Phase 2: Advanced String Processing & Expression Enhancement
+### ✅ **Enhanced Architecture Features**
+- **Streaming Callback System** - Real-time output emission during program execution
+- **Clean Output Filtering** - Proper "OK" message handling (direct vs program mode)
+- **Programs Directory** - Organized file management with `programs/` subdirectory
+- **Inline Text Support** - Same-line updates for smooth animations
+
+## Forward-Looking Development Priorities 🎯
+
+### Phase 2: Next Priority - Advanced String Processing & Expression Enhancement
 - **Nested Function Calls** 
   - Complete implementation for complex expressions like `MID$(STR$(INT(SQR(16))), 1, 2)`
   - Enhanced parser support for deeply nested function compositions
@@ -42,35 +42,49 @@
   - Implementation: `STRING$(n, char$)` or `STRING$(n, ascii_code)`
   - Usage: `PRINT STRING$(10, "*")` produces "**********"
 
-### Phase 3: Enhanced Control Flow
-- **IF/THEN/ELSE Implementation**
+### Phase 3: Enhanced Control Flow & Program Structure
+- **Multi-line IF/THEN/ELSE Implementation**
   - Multi-line IF/THEN/ELSE/ENDIF structures
-  - Nested conditional support
+  - Nested conditional support with proper indentation
   - Enhanced condition evaluation with complex expressions
-- **Enhanced Loop Controls**
+- **Advanced Loop Controls**
   - EXIT FOR statement for early loop termination
   - WHILE/WEND loops for condition-based iteration
   - DO/LOOP with UNTIL and WHILE variants
 
-### Phase 4: System Functions
-- **Memory Access Simulation**
-  - PEEK(address) - Read simulated memory location
+### Phase 4: Enhanced CLI Client Features
+- **Extended Program Management**
+  - SAVE command to write programs back to files
+  - FILES command to list available programs in directories
+  - KILL command to delete program files
+  - Directory navigation and management
+- **CLI Client Enhancements**
+  - Syntax highlighting for program entry
+  - Line number auto-generation and editing
+  - Copy/paste improvements for multi-line programs
+  - Session history and program bookmarking
+- **Debug and Development Tools**
+  - TRACE ON/OFF for step-by-step execution in CLI
+  - Variable watch windows during program execution  
+  - Breakpoint support for interactive debugging
+
+### Phase 5: Advanced System Functions & Memory Simulation
+- **Authentic Memory Access**
+  - PEEK(address) - Read simulated memory location with TRS-80 memory map
   - POKE address, value - Write to simulated memory location
   - VARPTR(variable) - Return memory address of variable
-- **System Information**
+  - Memory visualization tools for educational use
+- **System Functions**
   - MEM - Return available memory
-  - TIMER - System timer value for timing operations
+  - TIMER - System timer value for precise timing operations
   - FRE(0) - Free memory function
-- **Random Number Enhancement**
-  - RANDOMIZE [seed] - Initialize random seed
-  - Enhanced RND with better distribution
+  - RANDOMIZE [seed] - Initialize random seed with better distribution
 
-### Phase 5: File Operations (Web Storage & Filesystem Integration)
-- **Program Storage**
-  - SAVE "filename" - Save program to browser localStorage
-  - LOAD "filename" - Load program from browser localStorage
-  - FILES - List saved programs
-  - KILL "filename" - Delete saved program
+### Phase 6: Complete File System Integration
+- **Enhanced Web Storage**
+  - SAVE "filename" - Save program to browser localStorage (complement to existing LOAD)
+  - Advanced file management in web interface
+  - Program versioning and backup systems
 - **Filesystem Integration**
   - Server-side program caching: Mirror web storage to UNIX filesystem
   - Repository integration: Save programs to `programs/` directory for version control
@@ -83,30 +97,29 @@
   - INPUT #n, variable - Read from file
   - CLOSE #n - Close file
 
-### Phase 6: Advanced Error Handling
+### Phase 7: Advanced Error Handling & Recovery
 - **Structured Error Handling**
-  - ON ERROR GOTO line - Error trapping
-  - RESUME [line] - Resume execution after error
-  - ERR - Error code function
-  - ERL - Error line function
-- **Enhanced Debugging**
-  - TRACE ON/OFF - Execution tracing
-  - STOP statement debugging enhancements
-  - Line-by-line execution mode
+  - ON ERROR GOTO line - Error trapping with proper stack management
+  - RESUME [line] - Resume execution after error handling
+  - ERR - Error code function returning specific error numbers
+  - ERL - Error line function showing where error occurred
+- **Enhanced Debugging Integration**
+  - Integration with CLI client debugging tools
+  - Error context preservation and reporting
+  - Stack trace visualization for educational debugging
 
 ## User Experience Enhancements 🎨
 
-### Terminal Experience Upgrade
-- **Authentic Text Display**
-  - Cursor blinking animation
-  - Character-by-character output timing
-  - Authentic Color Computer font rendering
-  - Screen scroll behavior matching original hardware
-- **Input Enhancement**
-  - Command history with up/down arrows
-  - Tab completion for BASIC keywords
-  - Syntax highlighting in program editor
-  - Line number auto-generation
+### Next-Generation CLI Experience  
+- **Enhanced Terminal Features** (Building on current real-time streaming)
+  - Authentic cursor blinking and character timing effects
+  - Optional retro font rendering for authentic feel
+  - Screen scroll behavior matching original hardware behavior
+- **Advanced Input Features** (Extending current readline support)
+  - Enhanced syntax highlighting during program entry
+  - Intelligent line number management and auto-insertion
+  - Multi-line editing with proper BASIC formatting
+  - Context-aware help system for commands and functions
 
 ### Dual Monitor Interface (Revolutionary Feature)
 - **Split-Screen Architecture**
@@ -287,15 +300,40 @@
 ## Current Architecture Status 🏗️
 
 **Completed Architecture** (January 2025):
-- ✅ **Modular Design**: Clean separation across `emulator/` modules
-- ✅ **Core Interpreter** (`emulator/core.py`): 100% test success with orchestration focus
+- ✅ **Advanced Modular Design**: Clean separation with streaming architecture
+- ✅ **Enhanced Core Interpreter** (`emulator/core.py`): Real-time streaming with callback system
 - ✅ **Advanced Parser** (`emulator/parser.py`): Parentheses-aware expression evaluation
 - ✅ **Graphics Engine** (`emulator/graphics.py`): Complete MC6847 VDG emulation
-- ✅ **Variable Manager** (`emulator/variables.py`): Array and variable handling
-- ✅ **I/O System** (`emulator/io.py`): Multi-variable INPUT and interactive features
-- ✅ **Web Interface** (`app.py`): Flask-SocketIO real-time communication
-- ✅ **Testing Infrastructure**: Comprehensive unit, integration, and smoke tests
+- ✅ **Enhanced Variable Manager** (`emulator/variables.py`): Context-aware output filtering
+- ✅ **Advanced I/O System** (`emulator/io.py`): Inline PRINT, carriage return, and timing control
+- ✅ **Dual Interface Architecture**: Web and CLI clients with real-time streaming
+- ✅ **Production CLI Client** (`cli_client.py`): Full-featured terminal interface
+- ✅ **Program Management System**: LOAD command with intelligent file discovery
+- ✅ **Real-time Streaming Infrastructure**: Live output during program execution
+- ✅ **Comprehensive Testing**: 229/229 tests with 100% success rate
+
+## Key Architectural Innovations Achieved 🌟
+
+### **Real-time Streaming Architecture**
+The emulator now features a sophisticated callback-based streaming system that emits output immediately during program execution, enabling:
+- Live animations with precise timing control (PAUSE command)
+- Interactive programs with immediate feedback
+- Smooth terminal experience matching modern expectations
+- Educational debugging with real-time program flow visualization
+
+### **Dual-Interface Design**  
+Both web and CLI interfaces share the same core engine while providing interface-specific optimizations:
+- Web interface: Rich graphics, mouse interaction, HTML5 canvas
+- CLI interface: Terminal-native experience, keyboard shortcuts, real-time streaming
+- Unified command processing with context-aware output filtering
+
+### **Intelligent Program Management**
+The LOAD command system demonstrates smart file discovery and educational workflow support:
+- Automatic .bas extension handling
+- Multi-directory search (current, programs/, project root)
+- Clean error handling with educational feedback
+- Foundation for expanded file operations (SAVE, FILES, KILL)
 
 ---
 
-This development guide provides a roadmap for evolving the TRS-80 Color Computer BASIC emulator from its current **production-ready state with 100% test success** into an even more comprehensive and modern educational platform while preserving authentic vintage computing experience.
+**Next Development Focus**: With the foundational streaming architecture and CLI client complete, development can focus on enhanced language features (Phase 2: String processing) and advanced educational tools (Phase 4: CLI debugging features). The robust architecture now supports rapid feature development while maintaining the 100% test success rate.
