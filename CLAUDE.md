@@ -6,93 +6,7 @@
 
 *Note: Advanced String Processing, Expression Enhancement, Control Flow features, and critical WebSocket architecture fixes have been completed. Program Management commands (SAVE, FILES, KILL, LOAD) are now fully functional. The roadmap reflects remaining priorities for enhanced user experience.*
 
-### Phase 1: Enhanced CLI Client Features (IN PROGRESS)
-
-**✅ Program Management (COMPLETED)**
-- ✅ **SAVE** - Write programs back to files with automatic .bas extension  
-- ✅ **FILES** - List available programs in current and programs/ directories
-- ✅ **KILL** - Delete program files with confirmation prompts
-- ✅ **LOAD** - Load programs with smart file discovery
-
-**🎯 NEXT PRIORITY: CLI Client Enhancements**
-- **Syntax highlighting** - Color-coded BASIC keywords during program entry
-- **Line number auto-generation** - Smart line numbering and editing  
-- **Multi-line editing** - Improved copy/paste for program blocks
-- **Session history** - Program bookmarking and recent file access
-- **Directory navigation** - CD command for changing directories
-
-**🔧 Debug and Development Tools**
-- **TRACE ON/OFF** - Step-by-step execution with variable display
-- **Variable watch windows** - Real-time variable monitoring during execution
-- **Breakpoint support** - Interactive debugging with pause/continue
-
-### Phase 2: Advanced System Functions & Memory Simulation
-- **Authentic Memory Access**
-  - PEEK(address) - Read simulated memory location with TRS-80 memory map
-  - POKE address, value - Write to simulated memory location
-  - VARPTR(variable) - Return memory address of variable
-  - Memory visualization tools for educational use
-- **System Functions**
-  - MEM - Return available memory
-  - TIMER - System timer value for precise timing operations
-  - FRE(0) - Free memory function
-  - RANDOMIZE [seed] - Initialize random seed with better distribution
-
-### Phase 3: Complete File System Integration
-- **Enhanced Web Storage**
-  - **Web SAVE** - Save programs to browser localStorage with auto-sync
-  - **Advanced file management** - Organize, rename, delete programs in web interface
-  - **Program versioning** - Automatic backup and restore points
-- **Cross-Platform Persistence**
-  - **Server-side mirroring** - Sync web storage to filesystem for persistence
-  - **Repository integration** - Auto-commit programs to version control
-  - **Export/Import** - Download/upload .BAS files between web and desktop
-  - **Cross-session survival** - Programs persist through server restarts
-- **Data File Operations** (sequential file I/O)
-  - **OPEN "filename" FOR INPUT/OUTPUT AS #n** - File handle management
-  - **PRINT #n, data** - Write structured data to files
-  - **INPUT #n, variable** - Read data from files with type conversion
-  - **CLOSE #n** - Proper file handle cleanup
-
-### Phase 4: Advanced Error Handling & Recovery
-- **Structured Error Handling**
-  - ON ERROR GOTO line - Error trapping with proper stack management
-  - RESUME [line] - Resume execution after error handling
-  - ERR - Error code function returning specific error numbers
-  - ERL - Error line function showing where error occurred
-- **Enhanced Debugging Integration**
-  - Integration with CLI client debugging tools
-  - Error context preservation and reporting
-  - Stack trace visualization for educational debugging
-
-## Architecture Stability Status ✅
-
-**🔧 Core Stability Achieved (September 2025)**
-The emulator architecture has reached a stable state with critical WebSocket and program execution bugs resolved:
-
-- **✅ Program Counter Architecture**: Tuple-based program counter system working correctly across all execution contexts
-- **✅ WebSocket Integration**: Robust completion signal architecture with 100% test coverage (32 integration tests) 
-- **✅ Real-time Animations**: PAUSE command and program continuation working reliably
-- **✅ Multi-variable INPUT**: Complex input scenarios handling program counter transitions properly
-- **✅ Error Messaging**: Clean distinction between direct command and program execution errors
-
-**🎯 Development Focus Shift**
-With core architecture stable, development priorities now shift to **user experience enhancements** and **advanced features** rather than foundational fixes.
-
-## User Experience Enhancements 🎨
-
-### Next-Generation CLI Experience  
-- **Enhanced Terminal Features**
-  - Authentic cursor blinking and character timing effects
-  - Optional retro font rendering for authentic feel
-  - Screen scroll behavior matching original hardware behavior
-- **Advanced Input Features**
-  - Enhanced syntax highlighting during program entry
-  - Intelligent line number management and auto-insertion
-  - Multi-line editing with proper BASIC formatting
-  - Context-aware help system for commands and functions
-
-### Dual Monitor Interface (Revolutionary Feature)
+### Phase 1: Dual Monitor Interface - Revolutionary Feature (NEXT PRIORITY)
 - **Split-Screen Architecture**
   - Persistent REPL panel (left/top)
   - Dedicated graphics display (right/bottom)
@@ -107,6 +21,85 @@ With core architecture stable, development priorities now shift to **user experi
   - Session saving and restoration
   - Export graphics as PNG/SVG
   - Program sharing via URL
+
+### Phase 2: Essential Disk BASIC File Operations (HIGH PRIORITY)
+- **Core File I/O Commands**
+  - OPEN "mode",#device,"filename" - Open files for sequential/random access (#1-#15)
+  - CLOSE #device - Close opened file buffers
+  - PRINT #device, data - Write data to opened file
+  - INPUT #device, variables - Read data from opened file
+- **Random File Access**
+  - FIELD #device, width AS variable$ - Organize file buffer into named fields
+  - GET #device [,record] - Read specific record from random access file
+  - PUT #device [,record] - Write current buffer to random access file
+- **Directory Operations**
+  - DIR [drive] [filespec] - Display directory listing of files
+  - DRIVE drive_number - Change default disk drive
+
+### Phase 3: Advanced System Functions & Memory Simulation
+- **Authentic Memory Access**
+  - PEEK(address) - Read simulated memory location with TRS-80 memory map
+  - POKE address, value - Write to simulated memory location
+  - VARPTR(variable) - Return memory address of variable
+  - Memory visualization tools for educational use
+- **System Functions**
+  - MEM - Return available memory
+  - TIMER - System timer value for precise timing operations
+  - FRE(0) - Free memory function
+  - RANDOMIZE [seed] - Initialize random seed with better distribution
+- **Machine Language Support**
+  - EXEC [address] - Execute machine language program
+  - USR[n](parameter) - Call user-defined machine language subroutine
+  - LOADM "filename" [,offset] - Load machine language program from disk
+  - SAVEM "filename",start,end,execute - Save machine language program to disk
+
+### Phase 4: Enhanced File Operations & Program Management
+- **Enhanced Web Storage**
+  - **Web SAVE** - Save programs to browser localStorage with auto-sync
+  - **Advanced file management** - Organize, rename, delete programs in web interface
+  - **Program versioning** - Automatic backup and restore points
+- **Cross-Platform Persistence**
+  - **Server-side mirroring** - Sync web storage to filesystem for persistence
+  - **Repository integration** - Auto-commit programs to version control
+  - **Export/Import** - Download/upload .BAS files between web and desktop
+  - **Cross-session survival** - Programs persist through server restarts
+- **Enhanced Disk BASIC Commands**
+  - MERGE "filename" - Merge BASIC program with current program
+  - RENAME "oldname","newname" - Rename disk files
+  - COPY "source","destination" - Copy files on disk
+  - RENUM [start],[increment] - Renumber program lines
+  - DELETE start[-end] - Delete range of program lines
+- **Tape/Cassette Operations**
+  - CLOAD ["filename"] - Load program from cassette tape
+  - CSAVE ["filename"] - Save program to cassette tape
+  - CLOADM "filename" [,offset] - Load machine language from tape
+  - CSAVEM "filename",start,end,execute - Save machine language to tape
+  - MOTOR ON/OFF - Control cassette motor
+
+### Phase 5: Advanced Error Handling & Recovery
+- **Structured Error Handling**
+  - ON ERROR GOTO line - Error trapping with proper stack management
+  - RESUME [line] - Resume execution after error handling
+  - ERR - Error code function returning specific error numbers
+  - ERL - Error line function showing where error occurred
+- **Enhanced Debugging Integration**
+  - Integration with CLI client debugging tools
+  - Error context preservation and reporting
+  - Stack trace visualization for educational debugging
+
+## User Experience Enhancements 🎨
+
+### Next-Generation CLI Experience  
+- **Enhanced Terminal Features**
+  - Authentic cursor blinking and character timing effects
+  - Optional retro font rendering for authentic feel
+  - Screen scroll behavior matching original hardware behavior
+- **Advanced Input Features**
+  - Enhanced syntax highlighting during program entry
+  - Intelligent line number management and auto-insertion
+  - Multi-line editing with proper BASIC formatting
+  - Context-aware help system for commands and functions
+
 
 ### Mobile and Accessibility
 - **Responsive Design**
@@ -266,6 +259,35 @@ With core architecture stable, development priorities now shift to **user experi
   - Content Security Policy implementation
   - XSS protection for user programs
   - Safe evaluation of user expressions
+
+## Additional Missing Commands Inventory 📋
+
+### **Missing String & Conversion Functions**
+- **HEX$(number)** - Convert number to hexadecimal string
+- **OCT$(number)** - Convert number to octal string  
+
+### **Advanced Graphics Commands**
+- **PCLEAR [pages]** - Allocate graphics memory pages
+- **PPOINT(x,y)** - Return color of pixel at coordinates
+- **Enhanced SCREEN** command with full type/colorset support
+
+### **File Status Functions** 
+- **EOF(device)** - Test for end-of-file condition
+- **LOC(device)** - Return current file position
+- **LOF(device)** - Return file length
+- **FREE(drive)** - Return free disk space in granules
+
+### **Advanced Disk Management**
+- **BACKUP source_drive TO dest_drive** - Duplicate entire disk contents  
+- **DSKINI drive [,name] [,tracks]** - Format/initialize disk
+- **VERIFY ON/OFF** - Toggle disk write verification
+
+### **Development & Debug Tools**
+- **EDIT line_number** - Edit specific line interactively
+- **LLIST** - List program to printer
+- **TRON/TROFF** - Trace program execution on/off
+
+*Note: This inventory represents the complete set of authentic TRS-80 Color Computer BASIC and Extended Disk BASIC commands not currently implemented in the emulator.*
 
 ## Long-term Vision 🔮
 
