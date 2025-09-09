@@ -291,28 +291,29 @@ class ASTParserTest(BaseTestCase):
         self.assertIn('*', token_values)
         self.assertIn(2, token_values)
 
-    def test_feature_flag_integration(self):
-        """Test AST parser integration with feature flag"""
-        # Test with AST parsing disabled (default)
-        self.assertFalse(self.basic.expression_evaluator.use_ast_parser)
-        
-        # Enable AST parsing
-        self.basic.expression_evaluator.enable_ast_parsing(True)
-        self.assertTrue(self.basic.expression_evaluator.use_ast_parser)
-        
-        # Test that expressions still work with AST enabled
+    def test_ast_parser_integration(self):
+        """Test AST parser integration"""
+        # Test that AST parsing works correctly
         result = self.basic.expression_evaluator.evaluate("2 + 3 * 4")
         self.assertEqual(result, 14)
-
-    def test_fallback_mechanism(self):
-        """Test fallback to legacy parser when AST parsing fails"""
-        # Enable AST parsing
-        self.basic.expression_evaluator.enable_ast_parsing(True)
         
-        # Test expression that might fail in AST but work in legacy
-        # (This tests the fallback mechanism)
+        # Test with variables
         result = self.basic.expression_evaluator.evaluate("A + B")
-        self.assertEqual(result, 15)
+        self.assertEqual(result, 15)  # A=10, B=5
+        
+        # Test with function calls
+        result = self.basic.expression_evaluator.evaluate("ABS(-5)")
+        self.assertEqual(result, 5)
+
+    def test_expression_consistency(self):
+        """Test that AST parsing handles all expression types consistently"""
+        # Test complex expressions
+        result = self.basic.expression_evaluator.evaluate("A + B * 2 - 1")
+        self.assertEqual(result, 19)  # 10 + 5*2 - 1 = 19
+        
+        # Test string operations
+        result = self.basic.expression_evaluator.evaluate('"HELLO" + " " + "WORLD"')
+        self.assertEqual(result, "HELLO WORLD")
 
     def test_performance_comparison(self):
         """Test performance characteristics of AST vs legacy parsing"""
@@ -329,22 +330,16 @@ class ASTParserTest(BaseTestCase):
             '"HELLO" + " " + "WORLD" + "!"'
         ] * 10  # Repeat for timing
         
-        # Time legacy parsing
-        start_time = time.time()
-        for expr in expressions:
-            self.basic.expression_evaluator.evaluate(expr)
-        legacy_time = time.time() - start_time
-        
         # Time AST parsing
-        self.basic.expression_evaluator.enable_ast_parsing(True)
         start_time = time.time()
         for expr in expressions:
             self.basic.expression_evaluator.evaluate(expr)
         ast_time = time.time() - start_time
         
-        # AST parsing might be slower initially but should be comparable
+        # AST parsing should be reasonably fast
         # This is more for monitoring than strict assertion
-        print(f"Legacy time: {legacy_time:.4f}s, AST time: {ast_time:.4f}s")
+        print(f"AST parsing time: {ast_time:.4f}s for {len(expressions)} expressions")
+        self.assertLess(ast_time, 1.0, "AST parsing should complete within 1 second")
 
     def test_visitor_pattern(self):
         """Test the visitor pattern implementation"""

@@ -212,11 +212,13 @@ class ErrorContextManager:
         )
     
     def type_error(self, message: str, expected_type: str, actual_type: str,
-                  line: Optional[int] = None) -> BasicError:
+                  line: Optional[int] = None, suggestions: Optional[List[str]] = None) -> BasicError:
         """Create a type mismatch error"""
         context = self.create_context(line)
         details = f"Expected {expected_type}, got {actual_type}"
-        suggestions = [f"Ensure the value is of type {expected_type}"]
+        
+        if suggestions is None:
+            suggestions = [f"Ensure the value is of type {expected_type}"]
         
         return BasicError(
             message=message,
@@ -262,18 +264,20 @@ class ErrorContextManager:
         )
     
     def arithmetic_error(self, message: str, operation: str,
-                        line: Optional[int] = None) -> BasicError:
+                        line: Optional[int] = None, suggestions: Optional[List[str]] = None) -> BasicError:
         """Create an arithmetic error"""
         context = self.create_context(line)
         details = f"Operation: {operation}"
-        suggestions = []
         
-        if "division by zero" in message.lower():
-            suggestions.append("Check that the divisor is not zero")
-            suggestions.append("Use conditional logic to handle zero divisors")
-        elif "overflow" in message.lower():
-            suggestions.append("Use smaller numbers to avoid overflow")
-            suggestions.append("Break the calculation into smaller steps")
+        if suggestions is None:
+            suggestions = []
+            
+            if "division by zero" in message.lower():
+                suggestions.append("Check that the divisor is not zero")
+                suggestions.append("Use conditional logic to handle zero divisors")
+            elif "overflow" in message.lower():
+                suggestions.append("Use smaller numbers to avoid overflow")
+                suggestions.append("Break the calculation into smaller steps")
         
         return BasicError(
             message=message,

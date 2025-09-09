@@ -1,20 +1,14 @@
 # TRS-80 Color Computer BASIC Emulator - Forward Development Roadmap
 
-## Current Status: Production Ready ✅
-**Phase 1.6 Complete**: 339 tests, 100% success rate - Advanced modular architecture with comprehensive test coverage
-
-**Recent Achievements**: Complete BASIC language implementation, real-time streaming CLI client, advanced graphics engine, comprehensive I/O system, and robust architectural foundation. See README.md and recent commits for details.
+*This roadmap focuses exclusively on future enhancements and development priorities. Current capabilities and recent achievements are documented in README.md and git commit history.*
 
 ## Forward Development Priorities 🎯
 
-*This roadmap focuses on future enhancements. Current capabilities and recent achievements are documented in README.md.*
-
-### Phase 2: Advanced String Processing & Expression Enhancement (NEXT PRIORITY)
+### Phase 1: Advanced String Processing & Expression Enhancement (NEXT PRIORITY)
 - **Enhanced Nested Function Calls** 
   - Complete implementation for complex expressions like `MID$(STR$(INT(SQR(16))), 1, 2)`
   - Enhanced parser support for deeply nested function compositions
   - Proper precedence and evaluation order for nested operations
-  - Addresses remaining TODOs in parser for complex expression handling
 - **Missing String Functions**
   - **INSTR** - Find substring position: `INSTR("HELLO WORLD", "WORLD")` returns 7
   - **SPACE$** - Generate spaces: `SPACE$(5)` returns "     "
@@ -24,9 +18,9 @@
   - Improved parentheses nesting for function calls within expressions
   - Enhanced error reporting for malformed nested expressions
 
-### Phase 3: Enhanced Control Flow & Program Structure
+### Phase 2: Enhanced Control Flow & Program Structure
 - **Multi-line IF/THEN/ELSE Implementation**
-  - Multi-line IF/THEN/ELSE/ENDIF structures (single-line IF/THEN with colons is complete)
+  - Multi-line IF/THEN/ELSE/ENDIF structures beyond single-line constructs
   - Nested conditional support with proper indentation and scope management
   - Enhanced condition evaluation with complex expressions
 - **Advanced Loop Controls**
@@ -37,13 +31,13 @@
   - Better program counter management for complex nested structures
   - Improved error handling within nested control blocks
 
-### Phase 4: Enhanced CLI Client Features
-- **Extended Program Management** (LOAD is complete)
+### Phase 3: Enhanced CLI Client Features
+- **Extended Program Management**
   - **SAVE** - Write programs back to files with automatic .bas extension
   - **FILES** - List available programs in current and programs/ directories  
   - **KILL** - Delete program files with confirmation prompts
   - **Directory navigation** - CD command for changing directories
-- **CLI Client Enhancements** (real-time streaming and readline support complete)
+- **CLI Client Enhancements**
   - **Syntax highlighting** - Color-coded BASIC keywords during program entry
   - **Line number auto-generation** - Smart line numbering and editing
   - **Multi-line editing** - Improved copy/paste for program blocks
@@ -53,7 +47,7 @@
   - **Variable watch windows** - Real-time variable monitoring during execution  
   - **Breakpoint support** - Interactive debugging with pause/continue
 
-### Phase 5: Advanced System Functions & Memory Simulation
+### Phase 4: Advanced System Functions & Memory Simulation
 - **Authentic Memory Access**
   - PEEK(address) - Read simulated memory location with TRS-80 memory map
   - POKE address, value - Write to simulated memory location
@@ -65,8 +59,8 @@
   - FRE(0) - Free memory function
   - RANDOMIZE [seed] - Initialize random seed with better distribution
 
-### Phase 6: Complete File System Integration
-- **Enhanced Web Storage** (basic LOAD is complete)
+### Phase 5: Complete File System Integration
+- **Enhanced Web Storage**
   - **Web SAVE** - Save programs to browser localStorage with auto-sync
   - **Advanced file management** - Organize, rename, delete programs in web interface
   - **Program versioning** - Automatic backup and restore points
@@ -81,7 +75,7 @@
   - **INPUT #n, variable** - Read data from files with type conversion
   - **CLOSE #n** - Proper file handle cleanup
 
-### Phase 7: Advanced Error Handling & Recovery
+### Phase 6: Advanced Error Handling & Recovery
 - **Structured Error Handling**
   - ON ERROR GOTO line - Error trapping with proper stack management
   - RESUME [line] - Resume execution after error handling
@@ -95,11 +89,11 @@
 ## User Experience Enhancements 🎨
 
 ### Next-Generation CLI Experience  
-- **Enhanced Terminal Features** (Building on current real-time streaming)
+- **Enhanced Terminal Features**
   - Authentic cursor blinking and character timing effects
   - Optional retro font rendering for authentic feel
   - Screen scroll behavior matching original hardware behavior
-- **Advanced Input Features** (Extending current readline support)
+- **Advanced Input Features**
   - Enhanced syntax highlighting during program entry
   - Intelligent line number management and auto-insertion
   - Multi-line editing with proper BASIC formatting
@@ -216,7 +210,6 @@
 ### Parser Enhancement Strategy
 - **Tokenization System**
   - Implement full tokenization for complex language features
-  - Maintain backward compatibility with current simple parsing
   - Enable advanced features like multi-line IF/THEN/ELSE
 - **AST Generation**
   - Abstract syntax tree for complex expressions
@@ -280,6 +273,35 @@
   - Content Security Policy implementation
   - XSS protection for user programs
   - Safe evaluation of user expressions
+
+## Long-term Vision 🔮
+
+### Advanced Error Features (Future Priority)
+- **Enhanced Error Recovery**
+  - Smart suggestions analyzing common typos and suggesting corrections
+  - Context-aware help with different suggestions based on error location
+  - Multi-line error context showing surrounding code lines for complex errors
+- **Advanced Source Location**
+  - Column tracking for precise error position within lines
+  - Error highlighting with visual indicators pointing to exact problem location
+  - Code snippets showing problematic code section in error messages
+- **Error Analytics**
+  - Error pattern recognition to suggest common fixes
+  - Learning system that improves suggestions based on usage patterns
+
+### Quality Assurance Framework (Future Priority)
+- **Error Message Testing & Polish**
+  - Dedicated test suite for error message quality and consistency
+  - User experience testing to verify error messages actually help users
+  - A/B testing framework for error message effectiveness
+- **Documentation & Standards**
+  - Comprehensive error message style guide for BASIC programmers
+  - Error message localization framework for international users
+  - Error message API documentation for extension developers
+- **Performance & Monitoring**
+  - Error message generation performance optimization
+  - Error frequency monitoring and reporting dashboard
+  - User feedback collection system for error message improvements
 
 ## Important Development Notes
 

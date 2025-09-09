@@ -422,6 +422,105 @@ class FunctionTest(BaseTestCase):
         result = self.basic.expression_evaluator.evaluate('LEFT$("HELLO", 3) + RIGHT$("WORLD", 2)')
         self.assertEqual(result, "HELLD")  # "HEL" + "LD" = "HELLD"
 
+    def test_instr_function(self):
+        """Test INSTR function for substring position finding"""
+        # Basic substring search
+        result = self.basic.expression_evaluator.evaluate('INSTR("HELLO WORLD", "WORLD")')
+        self.assertEqual(result, 7)  # "WORLD" starts at position 7
+        
+        result = self.basic.expression_evaluator.evaluate('INSTR("HELLO WORLD", "HELLO")')
+        self.assertEqual(result, 1)  # "HELLO" starts at position 1
+        
+        # Substring not found
+        result = self.basic.expression_evaluator.evaluate('INSTR("HELLO", "XYZ")')
+        self.assertEqual(result, 0)  # Not found returns 0
+        
+        # Case-sensitive search
+        result = self.basic.expression_evaluator.evaluate('INSTR("Hello", "hello")')
+        self.assertEqual(result, 0)  # Case sensitive, not found
+        
+        # Empty search string
+        result = self.basic.expression_evaluator.evaluate('INSTR("HELLO", "")')
+        self.assertEqual(result, 1)  # Empty string found at position 1
+        
+        # Search in variable
+        result = self.basic.expression_evaluator.evaluate('INSTR(S$, "WORLD")')  # S$ = "HELLO WORLD"
+        self.assertEqual(result, 7)
+
+    def test_space_function(self):
+        """Test SPACE$ function for generating spaces"""
+        # Basic space generation
+        result = self.basic.expression_evaluator.evaluate('SPACE$(5)')
+        self.assertEqual(result, "     ")  # 5 spaces
+        
+        result = self.basic.expression_evaluator.evaluate('SPACE$(1)')
+        self.assertEqual(result, " ")  # 1 space
+        
+        # Zero spaces
+        result = self.basic.expression_evaluator.evaluate('SPACE$(0)')
+        self.assertEqual(result, "")  # Empty string
+        
+        # Large number of spaces
+        result = self.basic.expression_evaluator.evaluate('SPACE$(10)')
+        self.assertEqual(result, "          ")  # 10 spaces
+        self.assertEqual(len(result), 10)
+        
+        # Variable argument
+        self.basic.variables['N'] = 3
+        result = self.basic.expression_evaluator.evaluate('SPACE$(N)')
+        self.assertEqual(result, "   ")  # 3 spaces
+
+    def test_string_function(self):
+        """Test STRING$ function for repeating characters"""
+        # Basic character repetition
+        result = self.basic.expression_evaluator.evaluate('STRING$(3, "*")')
+        self.assertEqual(result, "***")  # 3 asterisks
+        
+        result = self.basic.expression_evaluator.evaluate('STRING$(5, "A")')
+        self.assertEqual(result, "AAAAA")  # 5 A's
+        
+        # Zero repetitions
+        result = self.basic.expression_evaluator.evaluate('STRING$(0, "X")')
+        self.assertEqual(result, "")  # Empty string
+        
+        # ASCII code as character
+        result = self.basic.expression_evaluator.evaluate('STRING$(4, 65)')  # ASCII 65 = 'A'
+        self.assertEqual(result, "AAAA")  # 4 A's
+        
+        result = self.basic.expression_evaluator.evaluate('STRING$(3, 42)')  # ASCII 42 = '*'
+        self.assertEqual(result, "***")  # 3 asterisks
+        
+        # Multi-character string (should use first character)
+        result = self.basic.expression_evaluator.evaluate('STRING$(4, "ABC")')
+        self.assertEqual(result, "AAAA")  # Uses first character 'A'
+        
+        # Variable arguments
+        self.basic.variables['N'] = 6
+        self.basic.variables['C$'] = "X"
+        result = self.basic.expression_evaluator.evaluate('STRING$(N, C$)')
+        self.assertEqual(result, "XXXXXX")  # 6 X's
+
+    def test_enhanced_nested_function_calls(self):
+        """Test complex nested function calls with new Phase 2 functions"""
+        # Target expression from roadmap
+        result = self.basic.expression_evaluator.evaluate('MID$(STR$(INT(SQR(16))), 1, 2)')
+        self.assertEqual(result, " 4")  # SQR(16)=4, INT(4)=4, STR$(4)=" 4", MID$(" 4",1,2)=" 4"
+        
+        # Nested calls with new string functions
+        result = self.basic.expression_evaluator.evaluate('INSTR(STRING$(10, "A"), "AA")')
+        self.assertEqual(result, 1)  # "AAAAAAAAAA" contains "AA" at position 1
+        
+        result = self.basic.expression_evaluator.evaluate('LEN(SPACE$(7))')
+        self.assertEqual(result, 7)  # Length of 7 spaces is 7
+        
+        # Complex mathematical and string combinations
+        result = self.basic.expression_evaluator.evaluate('LEFT$(STRING$(5, CHR$(65)), 3)')
+        self.assertEqual(result, "AAA")  # CHR$(65)="A", STRING$(5,"A")="AAAAA", LEFT$("AAAAA",3)="AAA"
+        
+        # Multi-level nesting with math and strings
+        result = self.basic.expression_evaluator.evaluate('INSTR("HELLO", LEFT$("HELP", 3))')
+        self.assertEqual(result, 1)  # LEFT$("HELP",3)="HEL", INSTR("HELLO","HEL")=1
+
     def test_function_integration_with_operators(self):
         """Test functions integrated with mathematical operators"""
         # Functions in arithmetic expressions
@@ -435,6 +534,10 @@ class FunctionTest(BaseTestCase):
         # Functions in complex expressions
         result = self.basic.expression_evaluator.evaluate("(ABS(B) + SQR(4)) * 2")  # B = -5
         self.assertEqual(result, 14.0)  # (5 + 2) * 2 = 14.0
+        
+        # New Phase 2 functions in expressions
+        result = self.basic.expression_evaluator.evaluate('LEN(SPACE$(5)) + INSTR("HELLO", "LO")')
+        self.assertEqual(result, 9)  # LEN(5 spaces) + INSTR("HELLO","LO") = 5 + 4 = 9
 
 
 if __name__ == '__main__':

@@ -13,6 +13,7 @@ from .io import IOHandler
 from .commands import CommandRegistry
 from .expressions import ExpressionEvaluator
 from .output_manager import StreamingOutputManager, LegacyOutputAdapter, OutputType
+from .error_context import ErrorContextManager
 
 class CoCoBasic:
     def __init__(self, output_callback=None, debug_mode=False):
@@ -34,6 +35,9 @@ class CoCoBasic:
         # Legacy property for backward compatibility
         self.output_callback = output_callback
         self.current_line = 0
+        
+        # Initialize error context manager for enhanced error messages
+        self.error_context = ErrorContextManager()
         self.current_sub_line = 0
         self.call_stack = []
         self.for_stack = []
@@ -160,7 +164,16 @@ class CoCoBasic:
             filename = filename[1:-1]
         
         if not filename:
-            return [{'type': 'error', 'message': 'SYNTAX ERROR: Filename required'}]
+            error = self.error_context.syntax_error(
+                "SYNTAX ERROR: Filename required",
+                self.current_line,
+                suggestions=[
+                    "Provide a filename to load",
+                    'Example: LOAD "MYGAME"', 
+                    'File extension .bas will be added automatically'
+                ]
+            )
+            return [{'type': 'error', 'message': error.format_detailed()}]
         
         # Add .bas extension if not present
         if not filename.lower().endswith('.bas'):
@@ -184,7 +197,17 @@ class CoCoBasic:
                     break
             
             if not found_file:
-                return [{'type': 'error', 'message': f'FILE NOT FOUND: {os.path.basename(original_filename)}'}]
+                error = self.error_context.file_error(
+                    f"FILE NOT FOUND: {os.path.basename(original_filename)}",
+                    original_filename,
+                    "LOAD",
+                    suggestions=[
+                        f"Check if {os.path.basename(original_filename)} exists in current directory",
+                        "Files are searched in: current dir, programs/, project root",
+                        "Use LIST command to see current program, FILES command to list files"
+                    ]
+                )
+                return [{'type': 'error', 'message': error.format_detailed()}]
             
             filename = found_file
             
@@ -213,11 +236,41 @@ class CoCoBasic:
             return [{'type': 'text', 'text': f'LOADED {lines_loaded} LINES FROM {os.path.basename(filename)}'}]
             
         except FileNotFoundError:
-            return [{'type': 'error', 'message': f'FILE NOT FOUND: {os.path.basename(filename)}'}]
+            error = self.error_context.file_error(
+                f"FILE NOT FOUND: {os.path.basename(filename)}",
+                filename,
+                "LOAD",
+                suggestions=[
+                    "Check the filename and path",
+                    "Ensure the file exists and has .bas extension",
+                    "Verify file permissions"
+                ]
+            )
+            return [{'type': 'error', 'message': error.format_detailed()}]
         except PermissionError:
-            return [{'type': 'error', 'message': f'PERMISSION DENIED: {os.path.basename(filename)}'}]
+            error = self.error_context.file_error(
+                f"PERMISSION DENIED: {os.path.basename(filename)}",
+                filename, 
+                "LOAD",
+                suggestions=[
+                    "Check file permissions",
+                    "Ensure you have read access to the file",
+                    "Try running with appropriate permissions"
+                ]
+            )
+            return [{'type': 'error', 'message': error.format_detailed()}]
         except Exception as e:
-            return [{'type': 'error', 'message': f'LOAD ERROR: {str(e)}'}]
+            error = self.error_context.file_error(
+                f"LOAD ERROR: {str(e)}",
+                filename,
+                "LOAD",
+                suggestions=[
+                    "Check if file contains valid BASIC code",
+                    "Verify file is not corrupted",
+                    "Ensure proper file format"
+                ]
+            )
+            return [{'type': 'error', 'message': error.format_detailed()}]
     
     def expand_line_to_sublines(self, line_num, code):
         """Expand line using BasicParser"""
@@ -225,7 +278,15 @@ class CoCoBasic:
         
     def run_program(self):
         if not self.program:
-            return [{'type': 'error', 'message': 'NO PROGRAM'}]
+            error = self.error_context.runtime_error(
+                "NO PROGRAM",
+                suggestions=[
+                    "Enter a program first using line numbers",
+                    'Example: 10 PRINT "HELLO"',
+                    'Use LOAD "filename" to load a program from disk'
+                ]
+            )
+            return [{'type': 'error', 'message': error.format_detailed()}]
         
         output = []
         self.running = True
@@ -353,6 +414,122 @@ class CoCoBasic:
                                     break
                         if not jumped:
                             output.append({'type': 'error', 'message': f'FOR WITHOUT NEXT'})
+                            self.running = False
+                            break
+                        break
+                    elif item.get('type') == 'skip_while_loop':
+                        # Skip to matching WEND
+                        for pos_idx in range(current_pos_index + 1, len(all_positions)):
+                            check_line, check_sub = all_positions[pos_idx]
+                            check_statement = self.expanded_program.get((check_line, check_sub), '')
+                            if check_statement.strip().upper().startswith('WEND'):
+                                current_pos_index = pos_idx + 1
+                                jumped = True
+                                break
+                        if not jumped:
+                            output.append({'type': 'error', 'message': 'WHILE WITHOUT WEND'})
+                            self.running = False
+                            break
+                        break
+                    elif item.get('type') == 'jump_after_while':
+                        # Jump back to after WHILE statement
+                        while_line = item['while_line']
+                        while_sub_line = item['while_sub_line']
+                        while_position = (while_line, while_sub_line)
+                        if while_position in all_positions:
+                            while_index = all_positions.index(while_position)
+                            current_pos_index = while_index + 1
+                            jumped = True
+                        break
+                    elif item.get('type') == 'skip_do_loop':
+                        # Skip to matching LOOP
+                        for pos_idx in range(current_pos_index + 1, len(all_positions)):
+                            check_line, check_sub = all_positions[pos_idx]
+                            check_statement = self.expanded_program.get((check_line, check_sub), '')
+                            if check_statement.strip().upper().startswith('LOOP'):
+                                current_pos_index = pos_idx + 1
+                                jumped = True
+                                break
+                        if not jumped:
+                            output.append({'type': 'error', 'message': 'DO WITHOUT LOOP'})
+                            self.running = False
+                            break
+                        break
+                    elif item.get('type') == 'jump_after_do':
+                        # Jump back to after DO statement
+                        do_line = item['do_line']
+                        do_sub_line = item['do_sub_line']
+                        do_position = (do_line, do_sub_line)
+                        if do_position in all_positions:
+                            do_index = all_positions.index(do_position)
+                            current_pos_index = do_index + 1
+                            jumped = True
+                        break
+                    elif item.get('type') == 'exit_for_loop':
+                        # Exit FOR loop - skip to after matching NEXT
+                        if self.for_stack:
+                            var_name = self.for_stack[-1]['var']
+                            # First pop the for_stack since we're exiting
+                            self.for_stack.pop()
+                            for pos_idx in range(current_pos_index + 1, len(all_positions)):
+                                check_line, check_sub = all_positions[pos_idx]
+                                check_statement = self.expanded_program.get((check_line, check_sub), '')
+                                if check_statement.strip().startswith('NEXT'):
+                                    next_parts = check_statement.strip().split()
+                                    if len(next_parts) == 1 or (len(next_parts) > 1 and next_parts[1] == var_name):
+                                        current_pos_index = pos_idx + 1
+                                        jumped = True
+                                        break
+                            if not jumped:
+                                # Continue execution after current position
+                                current_pos_index += 1
+                                jumped = True
+                        break
+                    elif item.get('type') == 'skip_if_block':
+                        # Skip to matching ELSE or ENDIF (handle nesting)
+                        nest_level = 0
+                        for pos_idx in range(current_pos_index + 1, len(all_positions)):
+                            check_line, check_sub = all_positions[pos_idx]
+                            check_statement = self.expanded_program.get((check_line, check_sub), '')
+                            statement_upper = check_statement.strip().upper()
+                            
+                            if 'IF' in statement_upper and 'THEN' in statement_upper:
+                                nest_level += 1
+                            elif statement_upper.startswith('ELSE') and nest_level == 0:
+                                current_pos_index = pos_idx
+                                jumped = True
+                                break
+                            elif statement_upper.startswith('ENDIF'):
+                                if nest_level == 0:
+                                    current_pos_index = pos_idx + 1
+                                    jumped = True
+                                    break
+                                else:
+                                    nest_level -= 1
+                        if not jumped:
+                            output.append({'type': 'error', 'message': 'IF WITHOUT ENDIF'})
+                            self.running = False
+                            break
+                        break
+                    elif item.get('type') == 'skip_else_block':
+                        # Skip to matching ENDIF (handle nesting)
+                        nest_level = 0
+                        for pos_idx in range(current_pos_index + 1, len(all_positions)):
+                            check_line, check_sub = all_positions[pos_idx]
+                            check_statement = self.expanded_program.get((check_line, check_sub), '')
+                            statement_upper = check_statement.strip().upper()
+                            
+                            if 'IF' in statement_upper and 'THEN' in statement_upper:
+                                nest_level += 1
+                            elif statement_upper.startswith('ENDIF'):
+                                if nest_level == 0:
+                                    current_pos_index = pos_idx
+                                    jumped = True
+                                    break
+                                else:
+                                    nest_level -= 1
+                        if not jumped:
+                            output.append({'type': 'error', 'message': 'ELSE WITHOUT ENDIF'})
                             self.running = False
                             break
                         break
@@ -574,27 +751,48 @@ class CoCoBasic:
     # All function evaluation now handled by ExpressionEvaluator
     # Old function methods removed - see expressions.py and functions.py
     
-    def evaluate_expression(self, expr):
+    def evaluate_expression(self, expr, line=None):
         """Delegate expression evaluation to the ExpressionEvaluator"""
         try:
-            return self.expression_evaluator.evaluate(expr)
+            return self.expression_evaluator.evaluate(expr, line or self.current_line)
+        except ValueError as e:
+            # Preserve enhanced error messages by re-raising as-is
+            raise e
         except Exception as e:
-            # For backward compatibility, handle errors the same way
+            # For other exceptions, convert to ValueError for backward compatibility
             raise ValueError(str(e))
 
     def execute_for(self, args):
         # FOR I=1 TO 10 [STEP 1] - handle colons properly
         args = args.split(':')[0].strip()  # Remove colon and everything after
         
+        # Set error context for FOR command
+        self.error_context.set_context(self.current_line, f"FOR {args}")
+        
         # Better pattern that looks for the word TO, not individual letters
         match = re.match(r'(\w+)\s*=\s*(.+?)\s+TO\s+(.+?)(?:\s+STEP\s+(.+?))?$', args, re.IGNORECASE)
         if not match:
-            return [{'type': 'error', 'message': 'SYNTAX ERROR'}]
+            error = self.error_context.syntax_error(
+                "SYNTAX ERROR: Invalid FOR statement",
+                self.current_line,
+                suggestions=[
+                    "Correct syntax: FOR variable = start TO end [STEP increment]",
+                    "Example: FOR I = 1 TO 10 or FOR X = 0 TO 100 STEP 5",
+                    "Variable name must be a single letter or word"
+                ]
+            )
+            return [{'type': 'error', 'message': error.format_detailed()}]
         
         var_name = match.group(1).strip()
-        start_val = self.evaluate_expression(match.group(2).strip())
-        end_val = self.evaluate_expression(match.group(3).strip())
-        step_val = self.evaluate_expression(match.group(4).strip()) if match.group(4) else 1
+        
+        # Evaluate expressions with enhanced error handling
+        try:
+            start_val = self.evaluate_expression(match.group(2).strip(), self.current_line)
+            end_val = self.evaluate_expression(match.group(3).strip(), self.current_line)
+            step_val = self.evaluate_expression(match.group(4).strip(), self.current_line) if match.group(4) else 1
+        except ValueError as e:
+            # Enhanced error already formatted, just pass it through
+            return [{'type': 'error', 'message': str(e)}]
         
         # Ensure numeric values for comparison
         try:
@@ -602,7 +800,17 @@ class CoCoBasic:
             end_val = float(end_val) if isinstance(end_val, str) else end_val
             step_val = float(step_val) if isinstance(step_val, str) else step_val
         except (ValueError, TypeError):
-            return [{'type': 'error', 'message': 'TYPE MISMATCH'}]
+            error = self.error_context.type_error(
+                "FOR loop values must be numeric",
+                "number",
+                "non-numeric expression",
+                suggestions=[
+                    "Use numeric expressions: FOR I = 1 TO 10",
+                    "Variables must contain numbers: LET N = 5; FOR I = 1 TO N",
+                    "Check that all expressions evaluate to numbers"
+                ]
+            )
+            return [{'type': 'error', 'message': error.format_detailed()}]
         
         # Check if loop should execute at all
         if ((step_val > 0 and start_val > end_val) or 
@@ -625,7 +833,16 @@ class CoCoBasic:
     
     def execute_next(self, args):
         if not self.for_stack:
-            return [{'type': 'error', 'message': 'NEXT WITHOUT FOR'}]
+            error = self.error_context.runtime_error(
+                "NEXT WITHOUT FOR",
+                self.current_line,
+                suggestions=[
+                    "NEXT must be preceded by a FOR statement",
+                    "Example: FOR I = 1 TO 10: ... : NEXT I",
+                    "Check that FOR and NEXT statements are properly paired"
+                ]
+            )
+            return [{'type': 'error', 'message': error.format_detailed()}]
         
         for_info = self.for_stack[-1]
         var_name = for_info['var']
@@ -650,21 +867,70 @@ class CoCoBasic:
             return []
     
     def execute_if(self, args):
-        # IF condition THEN action
-        if ' THEN ' not in args:
-            return [{'type': 'error', 'message': 'SYNTAX ERROR'}]
+        # IF condition THEN [action | multi-line]
+        if 'THEN' not in args.upper():
+            error = self.error_context.syntax_error(
+                "SYNTAX ERROR: Missing THEN in IF statement",
+                self.current_line,
+                suggestions=[
+                    "Correct syntax: IF condition THEN action",
+                    'Example: IF A > 5 THEN PRINT "BIG"',
+                    "IF statements must include THEN keyword"
+                ]
+            )
+            return [{'type': 'error', 'message': error.format_detailed()}]
         
-        condition, action = args.split(' THEN ', 1)
+        # Find THEN (case-insensitive)
+        then_pos = args.upper().find('THEN')
+        condition = args[:then_pos].strip()
+        then_part = args[then_pos + 4:].strip()  # Skip 'THEN'
         
-        if self.evaluate_condition(condition.strip()):
-            if action.strip().isdigit():
-                # GOTO line number
-                return [{'type': 'jump', 'line': int(action.strip())}]
+        # Check for empty condition
+        if not condition:
+            error = self.error_context.syntax_error(
+                "SYNTAX ERROR: Empty condition in IF statement",
+                self.current_line,
+                suggestions=[
+                    "Provide a condition to test",
+                    'Example: IF A = 5 THEN PRINT "EQUAL"',
+                    "Condition can use operators: =, <>, <, >, <=, >="
+                ]
+            )
+            return [{'type': 'error', 'message': error.format_detailed()}]
+        
+        # Initialize IF stack if needed
+        if not hasattr(self, 'if_stack'):
+            self.if_stack = []
+        
+        condition_result = self.evaluate_condition(condition.strip())
+        
+        # Check if it's a single-line IF or multi-line IF
+        if then_part == '' or then_part.upper() == 'THEN':
+            # Multi-line IF - push to stack
+            if_info = {
+                'condition_met': condition_result,
+                'line': self.current_line,
+                'sub_line': self.current_sub_line,
+                'in_else': False
+            }
+            self.if_stack.append(if_info)
+            
+            # If condition is false, skip to ELSE or ENDIF
+            if not condition_result:
+                return [{'type': 'skip_if_block'}]
             else:
-                # Execute command
-                return self.execute_line(action.strip())
-        
-        return []
+                return []  # Continue with THEN block
+        else:
+            # Single-line IF - existing behavior
+            if condition_result:
+                if then_part.isdigit():
+                    # GOTO line number
+                    return [{'type': 'jump', 'line': int(then_part)}]
+                else:
+                    # Execute command
+                    return self.execute_line(then_part)
+            
+            return []
     
     def evaluate_condition(self, condition):
         # Simple condition evaluation
@@ -691,23 +957,106 @@ class CoCoBasic:
         return False
     
     def execute_goto(self, args):
+        self.error_context.set_context(self.current_line, f"GOTO {args}")
+        
+        if not args.strip():
+            error = self.error_context.syntax_error(
+                "SYNTAX ERROR: Missing line number",
+                self.current_line,
+                suggestions=[
+                    "Correct syntax: GOTO line_number",
+                    "Example: GOTO 100",
+                    "Specify the line number to jump to"
+                ]
+            )
+            return [{'type': 'error', 'message': error.format_detailed()}]
+        
         try:
-            line_num = int(args.strip())
+            line_num = int(self.evaluate_expression(args.strip(), self.current_line))
+            if line_num <= 0:
+                error = self.error_context.runtime_error(
+                    f"Invalid line number {line_num}",
+                    self.current_line,
+                    suggestions=[
+                        "Line numbers must be positive integers",
+                        "Use line numbers that exist in your program",
+                        "Check with LIST command to see available lines"
+                    ]
+                )
+                return [{'type': 'error', 'message': error.format_detailed()}]
             return [{'type': 'jump', 'line': line_num}]
-        except:
-            return [{'type': 'error', 'message': 'SYNTAX ERROR'}]
+        except ValueError as e:
+            # Enhanced error from expression evaluation
+            return [{'type': 'error', 'message': str(e)}]
+        except Exception as e:
+            error = self.error_context.syntax_error(
+                "SYNTAX ERROR: Invalid GOTO target",
+                self.current_line,
+                suggestions=[
+                    "Correct syntax: GOTO line_number",
+                    "Example: GOTO 100 or GOTO L where L is a numeric variable",
+                    "Line number must be a positive integer"
+                ]
+            )
+            return [{'type': 'error', 'message': error.format_detailed()}]
     
     def execute_gosub(self, args):
+        self.error_context.set_context(self.current_line, f"GOSUB {args}")
+        
+        if not args.strip():
+            error = self.error_context.syntax_error(
+                "SYNTAX ERROR: Missing line number",
+                self.current_line,
+                suggestions=[
+                    "Correct syntax: GOSUB line_number",
+                    "Example: GOSUB 1000",
+                    "Specify the line number of the subroutine to call"
+                ]
+            )
+            return [{'type': 'error', 'message': error.format_detailed()}]
+        
         try:
-            line_num = int(args.strip())
+            line_num = int(self.evaluate_expression(args.strip(), self.current_line))
+            if line_num <= 0:
+                error = self.error_context.runtime_error(
+                    f"Invalid subroutine line number {line_num}",
+                    self.current_line,
+                    suggestions=[
+                        "Line numbers must be positive integers", 
+                        "Use line numbers that exist in your program",
+                        "Subroutine should end with RETURN statement"
+                    ]
+                )
+                return [{'type': 'error', 'message': error.format_detailed()}]
             self.call_stack.append((self.current_line, self.current_sub_line))
             return [{'type': 'jump', 'line': line_num}]
-        except:
-            return [{'type': 'error', 'message': 'SYNTAX ERROR'}]
+        except ValueError as e:
+            # Enhanced error from expression evaluation
+            return [{'type': 'error', 'message': str(e)}]
+        except Exception as e:
+            error = self.error_context.syntax_error(
+                "SYNTAX ERROR: Invalid GOSUB target",
+                self.current_line,
+                suggestions=[
+                    "Correct syntax: GOSUB line_number", 
+                    "Example: GOSUB 1000 or GOSUB SUB_LINE where SUB_LINE is a variable",
+                    "Make sure target line contains a subroutine that ends with RETURN"
+                ]
+            )
+            return [{'type': 'error', 'message': error.format_detailed()}]
     
     def execute_return(self, args):
         if not self.call_stack:
-            return [{'type': 'error', 'message': 'RETURN WITHOUT GOSUB'}]
+            error = self.error_context.runtime_error(
+                "RETURN WITHOUT GOSUB",
+                self.current_line,
+                suggestions=[
+                    "RETURN must be preceded by a GOSUB statement", 
+                    "Example: GOSUB 1000: ... : 1000 RETURN",
+                    "Check that subroutines are called with GOSUB before RETURN"
+                ]
+            )
+            return [{'type': 'error', 'message': error.format_detailed()}]
         
         return_line, return_sub_line = self.call_stack.pop()
         
@@ -722,22 +1071,66 @@ class CoCoBasic:
     
     def execute_sound(self, args):
         # SOUND frequency,duration
+        self.error_context.set_context(self.current_line, f"SOUND {args}")
+        
         parts = args.split(',')
         if len(parts) != 2:
-            return [{'type': 'error', 'message': 'SYNTAX ERROR'}]
+            error = self.error_context.syntax_error(
+                "SOUND requires two parameters",
+                self.current_line,
+                suggestions=[
+                    "Correct syntax: SOUND frequency, duration",
+                    "Example: SOUND 440, 100 (plays A note for 100 ticks)",
+                    "Both frequency and duration are required"
+                ]
+            )
+            return [{'type': 'error', 'message': error.format_detailed()}]
         
         try:
-            frequency = int(self.evaluate_expression(parts[0].strip()))
-            duration = int(self.evaluate_expression(parts[1].strip()))
+            frequency = int(self.evaluate_expression(parts[0].strip(), self.current_line))
+            duration = int(self.evaluate_expression(parts[1].strip(), self.current_line))
             
             if frequency < 1 or frequency > 4095:
-                return [{'type': 'error', 'message': 'ILLEGAL FUNCTION CALL'}]
+                error = self.error_context.runtime_error(
+                    f"Frequency {frequency} out of range",
+                    self.current_line,
+                    suggestions=[
+                        "Frequency must be between 1 and 4095 Hz",
+                        "Common frequencies: 440 (A note), 262 (C note), 1000 (1kHz tone)",
+                        "Lower numbers = deeper tones, higher numbers = higher pitch"
+                    ]
+                )
+                return [{'type': 'error', 'message': error.format_detailed()}]
+                
             if duration < 1 or duration > 255:
-                return [{'type': 'error', 'message': 'ILLEGAL FUNCTION CALL'}]
+                error = self.error_context.runtime_error(
+                    f"Duration {duration} out of range", 
+                    self.current_line,
+                    suggestions=[
+                        "Duration must be between 1 and 255 ticks",
+                        "Shorter duration = brief sound, longer duration = sustained sound",
+                        "Try values like 50 (short beep) or 100 (medium beep)"
+                    ]
+                )
+                return [{'type': 'error', 'message': error.format_detailed()}]
             
             return [{'type': 'sound', 'frequency': frequency, 'duration': duration}]
-        except:
-            return [{'type': 'error', 'message': 'SYNTAX ERROR'}]
+            
+        except ValueError as e:
+            # Enhanced error from expression evaluation
+            return [{'type': 'error', 'message': str(e)}]
+        except Exception as e:
+            error = self.error_context.runtime_error(
+                "Invalid SOUND parameters",
+                self.current_line,
+                details=str(e),
+                suggestions=[
+                    "Both frequency and duration must be numeric",
+                    "Example: SOUND 440, 100",
+                    "Check that expressions evaluate to integers"
+                ]
+            )
+            return [{'type': 'error', 'message': error.format_detailed()}]
     
     def execute_pause(self, args):
         """Execute PAUSE command - pause execution for specified time"""
@@ -989,14 +1382,32 @@ class CoCoBasic:
         # READ command - read data into variables
         # READ A,B$,C
         if not args:
-            return [{'type': 'error', 'message': 'SYNTAX ERROR'}]
+            error = self.error_context.syntax_error(
+                "SYNTAX ERROR: READ requires variable names",
+                self.current_line,
+                suggestions=[
+                    "Specify variables to read data into",
+                    "Example: READ A, B$, C",
+                    "Variables must match DATA statement types"
+                ]
+            )
+            return [{'type': 'error', 'message': error.format_detailed()}]
         
         # Parse variable names
         var_names = [name.strip() for name in args.split(',')]
         
         for var_name in var_names:
             if self.data_pointer >= len(self.data_statements):
-                return [{'type': 'error', 'message': 'OUT OF DATA'}]
+                error = self.error_context.runtime_error(
+                    "OUT OF DATA",
+                    self.current_line,
+                    suggestions=[
+                        "Add more DATA statements to your program",
+                        "Use RESTORE to reset data pointer to beginning",
+                        "Check that READ statements match available DATA"
+                    ]
+                )
+                return [{'type': 'error', 'message': error.format_detailed()}]
             
             # Get the next data item
             line_num, data_value = self.data_statements[self.data_pointer]
@@ -1228,6 +1639,49 @@ class CoCoBasic:
                                      syntax="NEXT [variable]",
                                      examples=["NEXT", "NEXT I", "NEXT X"])
         
+        # Phase 3: Enhanced Control Flow Commands
+        self.command_registry.register('WHILE', self.execute_while,
+                                     category='control',
+                                     description="Begin WHILE loop with condition",
+                                     syntax="WHILE condition",
+                                     examples=["WHILE X > 0", "WHILE A$ <> \"QUIT\""])
+        
+        self.command_registry.register('WEND', self.execute_wend,
+                                     category='control',
+                                     description="End WHILE loop",
+                                     syntax="WEND",
+                                     examples=["WEND"])
+        
+        self.command_registry.register('EXIT', self.execute_exit,
+                                     category='control',
+                                     description="Exit from current loop early",
+                                     syntax="EXIT FOR",
+                                     examples=["EXIT FOR"])
+        
+        self.command_registry.register('DO', self.execute_do,
+                                     category='control',
+                                     description="Begin DO loop block",
+                                     syntax="DO [WHILE condition | UNTIL condition]",
+                                     examples=["DO", "DO WHILE X > 0", "DO UNTIL Y = 10"])
+        
+        self.command_registry.register('LOOP', self.execute_loop,
+                                     category='control',
+                                     description="End DO loop block",
+                                     syntax="LOOP [WHILE condition | UNTIL condition]",
+                                     examples=["LOOP", "LOOP WHILE X > 0", "LOOP UNTIL Y = 10"])
+        
+        self.command_registry.register('ELSE', self.execute_else,
+                                     category='control',
+                                     description="Alternative branch in IF statement",
+                                     syntax="ELSE",
+                                     examples=["ELSE"])
+        
+        self.command_registry.register('ENDIF', self.execute_endif,
+                                     category='control',
+                                     description="End multi-line IF block",
+                                     syntax="ENDIF",
+                                     examples=["ENDIF"])
+        
         self.command_registry.register('STOP', self.execute_end,
                                      category='control',
                                      description="Stop program execution",
@@ -1352,6 +1806,159 @@ class CoCoBasic:
     def execute_assignment(self, args):
         """Handle variable assignment through LET or direct assignment"""
         return self.execute_line_assignment(args)
+
+    # Phase 3: Enhanced Control Flow Methods
+    def execute_while(self, args):
+        """WHILE statement - begin conditional loop"""
+        # For now, implement legacy-style WHILE tracking
+        # Later we can enhance with AST parsing for multi-line support
+        if not hasattr(self, 'while_stack'):
+            self.while_stack = []
+        
+        condition = args.strip()
+        if self.evaluate_condition(condition):
+            # Store the while condition and current position for loop jumping
+            self.while_stack.append({
+                'condition': condition,
+                'line': self.current_line,
+                'sub_line': self.current_sub_line
+            })
+            return []  # Continue with next statement
+        else:
+            # Skip to matching WEND
+            return [{'type': 'skip_while_loop'}]
+    
+    def execute_wend(self, args):
+        """WEND statement - end WHILE loop"""
+        if not hasattr(self, 'while_stack') or not self.while_stack:
+            return [{'type': 'error', 'message': 'WEND WITHOUT WHILE'}]
+        
+        # Get the current WHILE loop
+        while_info = self.while_stack[-1]
+        
+        # Re-evaluate the condition
+        if self.evaluate_condition(while_info['condition']):
+            # Continue loop - jump back to after the WHILE statement
+            return [{'type': 'jump_after_while', 
+                    'while_line': while_info['line'],
+                    'while_sub_line': while_info['sub_line']}]
+        else:
+            # Exit loop
+            self.while_stack.pop()
+            return []
+    
+    def execute_exit(self, args):
+        """EXIT statement - exit from current loop"""
+        args = args.strip().upper()
+        if args == 'FOR':
+            # Exit current FOR loop - don't pop here, do it in the jump handler
+            if self.for_stack:
+                return [{'type': 'exit_for_loop'}]
+            else:
+                return [{'type': 'error', 'message': 'EXIT FOR WITHOUT FOR'}]
+        else:
+            return [{'type': 'error', 'message': 'SYNTAX ERROR'}]
+    
+    def execute_do(self, args):
+        """DO statement - begin DO/LOOP block"""
+        if not hasattr(self, 'do_stack'):
+            self.do_stack = []
+        
+        # Parse DO [WHILE condition | UNTIL condition]
+        args = args.strip()
+        condition = None
+        condition_type = None
+        
+        if args.upper().startswith('WHILE '):
+            condition = args[6:].strip()
+            condition_type = 'WHILE'
+            # Evaluate condition at top
+            if not self.evaluate_condition(condition):
+                return [{'type': 'skip_do_loop'}]
+        elif args.upper().startswith('UNTIL '):
+            condition = args[6:].strip()
+            condition_type = 'UNTIL'
+            # Evaluate condition at top
+            if self.evaluate_condition(condition):
+                return [{'type': 'skip_do_loop'}]
+        
+        # Store DO loop info
+        self.do_stack.append({
+            'condition': condition,
+            'condition_type': condition_type,
+            'line': self.current_line,
+            'sub_line': self.current_sub_line
+        })
+        
+        return []
+    
+    def execute_loop(self, args):
+        """LOOP statement - end DO/LOOP block"""
+        if not hasattr(self, 'do_stack') or not self.do_stack:
+            return [{'type': 'error', 'message': 'LOOP WITHOUT DO'}]
+        
+        # Get current DO loop
+        do_info = self.do_stack[-1]
+        
+        # Parse LOOP [WHILE condition | UNTIL condition]
+        args = args.strip()
+        condition = do_info['condition']
+        condition_type = do_info['condition_type']
+        
+        # Check for condition at LOOP
+        if args.upper().startswith('WHILE '):
+            condition = args[6:].strip()
+            condition_type = 'WHILE'
+        elif args.upper().startswith('UNTIL '):
+            condition = args[6:].strip()
+            condition_type = 'UNTIL'
+        
+        # Evaluate loop continuation
+        should_continue = False
+        if condition:
+            if condition_type == 'WHILE':
+                should_continue = self.evaluate_condition(condition)
+            elif condition_type == 'UNTIL':
+                should_continue = not self.evaluate_condition(condition)
+        else:
+            # Infinite loop without condition
+            should_continue = True
+        
+        if should_continue:
+            # Continue loop - jump back to after DO
+            return [{'type': 'jump_after_do',
+                    'do_line': do_info['line'],
+                    'do_sub_line': do_info['sub_line']}]
+        else:
+            # Exit loop
+            self.do_stack.pop()
+            return []
+
+    def execute_else(self, args):
+        """ELSE statement - alternative branch in multi-line IF"""
+        if not hasattr(self, 'if_stack') or not self.if_stack:
+            return [{'type': 'error', 'message': 'ELSE WITHOUT IF'}]
+        
+        # Get current IF info
+        if_info = self.if_stack[-1]
+        
+        # If we were in the THEN part and condition was true, skip to ENDIF
+        if if_info['condition_met'] and not if_info['in_else']:
+            if_info['in_else'] = True
+            return [{'type': 'skip_else_block'}]
+        
+        # If we're already in ELSE or condition was false, continue with ELSE
+        if_info['in_else'] = True
+        return []
+    
+    def execute_endif(self, args):
+        """ENDIF statement - end multi-line IF block"""
+        if not hasattr(self, 'if_stack') or not self.if_stack:
+            return [{'type': 'error', 'message': 'ENDIF WITHOUT IF'}]
+        
+        # Pop the current IF from the stack
+        self.if_stack.pop()
+        return []
 
 # Global BASIC interpreter instance
 basic = CoCoBasic()

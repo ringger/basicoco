@@ -9,6 +9,7 @@ from typing import Any, List, Optional, Union, Dict
 from dataclasses import dataclass
 from enum import Enum
 import re
+from .error_context import ErrorContextManager
 
 
 class NodeType(Enum):
@@ -170,6 +171,30 @@ class ForStatementNode(ASTNode):
         self.body = body
 
 
+class WhileStatementNode(ASTNode):
+    """Node for WHILE loops"""
+    def __init__(self, condition: ASTNode, body: ASTNode, location: Optional[SourceLocation] = None):
+        super().__init__(NodeType.WHILE_STATEMENT, location)
+        self.condition = condition
+        self.body = body
+
+
+class DoLoopStatementNode(ASTNode):
+    """Node for DO/LOOP constructs"""
+    def __init__(self, body: ASTNode, condition: Optional[ASTNode] = None, condition_type: str = 'WHILE', condition_position: str = 'BOTTOM', location: Optional[SourceLocation] = None):
+        super().__init__(NodeType.WHILE_STATEMENT, location)  # Reuse WHILE_STATEMENT type for now
+        self.body = body
+        self.condition = condition
+        self.condition_type = condition_type  # 'WHILE' or 'UNTIL' 
+        self.condition_position = condition_position  # 'TOP' (DO WHILE) or 'BOTTOM' (LOOP WHILE)
+
+
+class ExitForStatementNode(ASTNode):
+    """Node for EXIT FOR statements"""
+    def __init__(self, location: Optional[SourceLocation] = None):
+        super().__init__(NodeType.GOTO_STATEMENT, location)  # Reuse GOTO type for now
+
+
 class PrintStatementNode(ASTNode):
     """Node for PRINT statements"""
     def __init__(self, expressions: List[ASTNode], separators: List[str], location: Optional[SourceLocation] = None):
@@ -196,6 +221,7 @@ class ASTParser:
     def __init__(self):
         self.tokens = []
         self.current = 0
+        self.error_context = ErrorContextManager()
         self.current_line = 1
         self.current_column = 1
     
@@ -211,11 +237,20 @@ class ASTParser:
             AST node representing the expression
         """
         self.current_line = line
+        self.error_context.set_context(line, expr_str)
         self.tokens = self._tokenize(expr_str)
         self.current = 0
         
         if not self.tokens:
-            raise ValueError("Empty expression")
+            error = self.error_context.syntax_error(
+                "Empty expression", 
+                line,
+                suggestions=[
+                    "Provide a valid expression",
+                    "Example: 2 + 3 or \"HELLO\""
+                ]
+            )
+            raise ValueError(error.format_message())
         
         return self._parse_or_expression()
     
@@ -231,11 +266,20 @@ class ASTParser:
             AST node representing the statement
         """
         self.current_line = line
+        self.error_context.set_context(line, stmt_str)
         self.tokens = self._tokenize(stmt_str)
         self.current = 0
         
         if not self.tokens:
-            raise ValueError("Empty statement")
+            error = self.error_context.syntax_error(
+                "Empty statement", 
+                line,
+                suggestions=[
+                    "Provide a valid BASIC statement",
+                    "Example: LET A = 5 or PRINT \"HELLO\""
+                ]
+            )
+            raise ValueError(error.format_message())
         
         return self._parse_statement()
     
@@ -419,9 +463,25 @@ class ASTParser:
         """Consume a token of the expected type or raise an error"""
         token = self._current_token()
         if not token:
-            raise ValueError(f"Unexpected end of input. {message}")
+            error = self.error_context.syntax_error(
+                f"Unexpected end of input" + (f": {message}" if message else ""),
+                self.current_line,
+                suggestions=[
+                    f"Expected {token_type}",
+                    "Check for missing parentheses, quotes, or operators"
+                ]
+            )
+            raise ValueError(error.format_message())
         if token['type'] != token_type:
-            raise ValueError(f"Expected {token_type}, got {token['type']}. {message}")
+            error = self.error_context.syntax_error(
+                f"Expected {token_type}, got {token['type']} ('{token['value']}')",
+                self.current_line,
+                suggestions=[
+                    f"Use a {token_type} token here",
+                    "Check syntax for this BASIC construct"
+                ]
+            )
+            raise ValueError(error.format_message())
         return self._advance()
     
     def _make_location(self, token: Dict[str, Any]) -> SourceLocation:
@@ -584,7 +644,16 @@ class ASTParser:
         token = self._current_token()
         
         if not token:
-            raise ValueError("Unexpected end of expression")
+            error = self.error_context.syntax_error(
+                "Unexpected end of expression",
+                self.current_line,
+                suggestions=[
+                    "Add a value, variable, or function call",
+                    "Check for balanced parentheses",
+                    "Example: 42 or \"HELLO\" or ABS(-5)"
+                ]
+            )
+            raise ValueError(error.format_message())
         
         # Parentheses
         if self._match('PUNCTUATION') and token['value'] == '(':
@@ -613,6 +682,20 @@ class ASTParser:
         if self._match('IDENTIFIER'):
             name_token = self._advance()
             name = name_token['value']
+            
+            # Special case for INKEY$ which can be called without parentheses
+            if name.upper() == 'INKEY$':
+                # Check if it has parentheses
+                if self._match('PUNCTUATION') and self._current_token()['value'] == '(':
+                    self._advance()  # consume '('
+                    # INKEY$ should have no arguments
+                    self._consume('PUNCTUATION', "INKEY$ takes no arguments")
+                # Either way, return as a function call with no arguments
+                return FunctionCallNode(
+                    function_name=name,
+                    arguments=[],
+                    location=self._make_location(name_token)
+                )
             
             # Function call
             if self._match('PUNCTUATION') and self._current_token()['value'] == '(':
@@ -660,14 +743,31 @@ class ASTParser:
                     location=self._make_location(name_token)
                 )
         
-        raise ValueError(f"Unexpected token: {token['value']}")
+        error = self.error_context.syntax_error(
+            f"Unexpected token: {token['value']} ({token['type']})",
+            self.current_line,
+            suggestions=[
+                "Check if this token belongs here",
+                "Valid primary expressions: numbers, strings, variables, function calls",
+                "Use parentheses for grouping: (expression)"
+            ]
+        )
+        raise ValueError(error.format_message())
     
     def _parse_statement(self) -> ASTNode:
         """Parse a BASIC statement"""
         token = self._current_token()
         
         if not token:
-            raise ValueError("Empty statement")
+            error = self.error_context.syntax_error(
+                "Empty statement",
+                self.current_line,
+                suggestions=[
+                    "Provide a valid BASIC statement",
+                    "Examples: LET A = 5, PRINT \"HELLO\", FOR I = 1 TO 10"
+                ]
+            )
+            raise ValueError(error.format_message())
         
         # Assignment (LET X = 5 or X = 5)
         if (self._match('KEYWORD') and token['value'] == 'LET') or self._is_assignment():
@@ -680,6 +780,18 @@ class ASTParser:
         # FOR statement
         if self._match('KEYWORD') and token['value'] == 'FOR':
             return self._parse_for_statement()
+        
+        # WHILE statement
+        if self._match('KEYWORD') and token['value'] == 'WHILE':
+            return self._parse_while_statement()
+        
+        # DO statement
+        if self._match('KEYWORD') and token['value'] == 'DO':
+            return self._parse_do_loop_statement()
+        
+        # EXIT statement
+        if self._match('KEYWORD') and token['value'] == 'EXIT':
+            return self._parse_exit_statement()
         
         # PRINT statement
         if self._match('KEYWORD') and token['value'] == 'PRINT':
@@ -815,6 +927,74 @@ class ASTParser:
             location=self._make_location(for_token)
         )
     
+    def _parse_while_statement(self) -> WhileStatementNode:
+        """Parse WHILE statement"""
+        while_token = self._advance()  # consume 'WHILE'
+        condition = self._parse_or_expression()
+        
+        # For now, body is empty - will be filled by statement grouping
+        # In a full implementation, we'd parse until WEND
+        body = BlockNode(statements=[], location=self._make_location(while_token))
+        
+        return WhileStatementNode(
+            condition=condition,
+            body=body,
+            location=self._make_location(while_token)
+        )
+    
+    def _parse_do_loop_statement(self) -> DoLoopStatementNode:
+        """Parse DO/LOOP statement"""
+        do_token = self._advance()  # consume 'DO'
+        
+        # Check for DO WHILE or DO UNTIL
+        condition = None
+        condition_type = 'WHILE'
+        condition_position = 'BOTTOM'
+        
+        if self._match_value('WHILE'):
+            self._advance()  # consume 'WHILE'
+            condition = self._parse_or_expression()
+            condition_position = 'TOP'
+        elif self._match_value('UNTIL'):
+            self._advance()  # consume 'UNTIL'
+            condition = self._parse_or_expression()
+            condition_type = 'UNTIL'
+            condition_position = 'TOP'
+        
+        # For now, body is empty - will be filled by statement grouping
+        # In a full implementation, we'd parse until LOOP
+        body = BlockNode(statements=[], location=self._make_location(do_token))
+        
+        return DoLoopStatementNode(
+            body=body,
+            condition=condition,
+            condition_type=condition_type,
+            condition_position=condition_position,
+            location=self._make_location(do_token)
+        )
+    
+    def _parse_exit_statement(self) -> ExitForStatementNode:
+        """Parse EXIT FOR statement"""
+        exit_token = self._advance()  # consume 'EXIT'
+        
+        # Expect 'FOR' after EXIT
+        if not (self._match('KEYWORD') and self._current_token()['value'] == 'FOR'):
+            current_token = self._current_token()
+            token_info = f"'{current_token['value']}'" if current_token else "end of input"
+            error = self.error_context.syntax_error(
+                f"Expected 'FOR' after 'EXIT', found {token_info}",
+                self.current_line,
+                suggestions=[
+                    "Use: EXIT FOR",
+                    "EXIT statement can only exit FOR loops"
+                ]
+            )
+            raise ValueError(error.format_message())
+        
+        self._advance()  # consume 'FOR'
+        
+        return ExitForStatementNode(location=self._make_location(exit_token))
+    
     def _parse_print_statement(self) -> PrintStatementNode:
         """Parse PRINT statement"""
         print_token = self._advance()  # consume 'PRINT'
@@ -925,7 +1105,14 @@ class ASTEvaluator(ASTVisitor):
         elif node.operator == Operator.OR:
             return bool(left_val) or bool(right_val)
         else:
-            raise ValueError(f"Unknown binary operator: {node.operator}")
+            error = self.emulator.expression_evaluator.error_context.runtime_error(
+                f"Unknown binary operator: {node.operator}",
+                suggestions=[
+                    "Supported operators: +, -, *, /, ^, =, <>, <, >, <=, >=, AND, OR",
+                    "Check operator spelling and spacing"
+                ]
+            )
+            raise ValueError(error.format_message())
     
     def visit_unary_op(self, node: UnaryOpNode) -> Any:
         """Visit unary operation"""
@@ -938,24 +1125,49 @@ class ASTEvaluator(ASTVisitor):
         elif node.operator == Operator.NOT:
             return not bool(operand_val)
         else:
-            raise ValueError(f"Unknown unary operator: {node.operator}")
+            error = self.emulator.expression_evaluator.error_context.runtime_error(
+                f"Unknown unary operator: {node.operator}",
+                suggestions=[
+                    "Supported unary operators: -, +, NOT",
+                    "Check operator spelling"
+                ]
+            )
+            raise ValueError(error.format_message())
     
     def visit_function_call(self, node: FunctionCallNode) -> Any:
         """Visit function call"""
         # Delegate to the expression evaluator's function registry
         func_name = node.function_name.upper()
         
-        # Evaluate arguments
+        # Evaluate arguments to their actual values
         arg_values = []
         for arg in node.arguments:
-            arg_values.append(str(self.visit(arg)))
+            arg_values.append(self.visit(arg))
         
-        # Call the function through the expression evaluator
+        # Check if it's a function first
         handler = self.emulator.expression_evaluator.function_registry.get_handler(func_name)
         if handler:
             return handler(self.emulator.expression_evaluator, arg_values)
-        else:
-            raise ValueError(f"Unknown function: {func_name}")
+        
+        # If not a function, check if it's an array access (dimensioned or not)
+        # We need to treat anything with parentheses that's not a function as potential array access
+        if len(arg_values) > 0:  # Has arguments, likely array access
+            # Convert arguments to indices and delegate to array access
+            indices = [int(val) for val in arg_values]
+            return self.emulator.expression_evaluator._evaluate_array_access(func_name, ','.join(map(str, indices)))
+        
+        # Neither function nor array access
+        available_functions = list(self.emulator.expression_evaluator.function_registry.list_functions()[:10])
+        error = self.emulator.expression_evaluator.error_context.reference_error(
+            func_name,
+            "UNDEFINED FUNCTION",
+            suggestions=[
+                f"Available functions: {', '.join(available_functions[:5])}",
+                "Check function name spelling",
+                f"Use DIM {func_name}() to create an array instead"
+            ]
+        )
+        raise ValueError(error.format_message())
     
     def visit_array_access(self, node: ArrayAccessNode) -> Any:
         """Visit array access"""
@@ -972,3 +1184,63 @@ class ASTEvaluator(ASTVisitor):
             raise ValueError(error)
         
         return value
+    
+    def visit_while_statement(self, node: WhileStatementNode) -> Any:
+        """Visit WHILE statement - execute loop while condition is true"""
+        results = []
+        max_iterations = self.emulator.max_iterations
+        iteration_count = 0
+        
+        while iteration_count < max_iterations:
+            # Evaluate condition
+            condition_result = self.visit(node.condition)
+            
+            # Convert to boolean (BASIC truth rules)
+            condition_true = bool(condition_result) if isinstance(condition_result, (int, float)) else condition_result != 0
+            
+            if not condition_true:
+                break
+                
+            # Execute body
+            body_result = self.visit(node.body)
+            if body_result:
+                results.extend(body_result if isinstance(body_result, list) else [body_result])
+            
+            iteration_count += 1
+        
+        if iteration_count >= max_iterations:
+            error = self.emulator.expression_evaluator.error_context.runtime_error(
+                f"WHILE loop exceeded maximum iterations ({max_iterations})",
+                suggestions=[
+                    "Check loop condition to ensure it will eventually become false",
+                    "Add a counter variable or break condition",
+                    "Verify loop logic to prevent infinite loops"
+                ]
+            )
+            raise ValueError(error.format_message())
+        
+        return results
+    
+    def visit_exit_for_statement(self, node: ExitForStatementNode) -> Any:
+        """Visit EXIT FOR statement - signal to exit current FOR loop"""
+        # Return a special signal that can be caught by the execution engine
+        return [{'type': 'exit_for'}]
+    
+    def visit_block(self, node: BlockNode) -> Any:
+        """Visit block statement - execute all statements in sequence"""
+        results = []
+        
+        for statement in node.statements:
+            result = self.visit(statement)
+            if result:
+                if isinstance(result, list):
+                    results.extend(result)
+                else:
+                    results.append(result)
+                    
+                # Check for control flow signals
+                for item in (result if isinstance(result, list) else [result]):
+                    if isinstance(item, dict) and item.get('type') in ['exit_for', 'jump', 'jump_return']:
+                        return results  # Exit block early on control flow
+        
+        return results

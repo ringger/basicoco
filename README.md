@@ -3,7 +3,7 @@
 A comprehensive TRS-80 Color Computer BASIC interpreter with both web interface and standalone CLI client, featuring authentic graphics emulation, real-time streaming output, and modern educational tools.
 
 ![Production Ready](https://img.shields.io/badge/Status-Production%20Ready-brightgreen)
-![Test Coverage](https://img.shields.io/badge/Tests-339%2F339%20Passing-brightgreen)
+![Test Coverage](https://img.shields.io/badge/Tests-383%2F383%20Passing-brightgreen)
 ![Success Rate](https://img.shields.io/badge/Success%20Rate-100%25-brightgreen)
 ![CLI Client](https://img.shields.io/badge/CLI-Real--time%20Streaming-blue)
 ![Python](https://img.shields.io/badge/Python-3.8%2B-blue)
@@ -17,8 +17,8 @@ A comprehensive TRS-80 Color Computer BASIC interpreter with both web interface 
 - **Variables & Math**: Numeric and string variables, all operators (+, -, *, /, ^, =, <, >, <=, >=, <>)
 - **Control Flow**: FOR/NEXT loops (with STEP), IF/THEN, GOTO, GOSUB/RETURN, ON GOTO/GOSUB
 - **Data Processing**: DATA/READ/RESTORE for structured data
-- **Math Functions**: ABS, INT, SQR, SIN, COS, TAN, ATN, EXP, LOG, RND
-- **String Functions**: LEN, LEFT$, RIGHT$, MID$, CHR$, ASC, STR$, VAL
+- **Math Functions**: ABS, INT, SQR, SIN, COS, TAN, ATN, EXP, LOG, RND (with domain/range error detection)
+- **String Functions**: LEN, LEFT$, RIGHT$, MID$, CHR$, ASC, STR$, VAL (with detailed error guidance)
 - **Arrays**: DIM with multi-dimensional support and authentic TRS-80 bounds behavior
 - **Modern Enhancements**: PAUSE command for precise timing control
 
@@ -122,6 +122,31 @@ RUN
 RUN
 ```
 
+### Enhanced Error Messages
+The emulator provides **educational, context-aware error messages** that help users learn:
+
+```basic
+# Domain error with detailed explanation:
+PRINT SQR(-4)
+> Error in PRINT: Cannot calculate square root of negative number: -4.0 at line 0
+> Details: Operation: SQR(n)
+> Source: SQR(-4)
+> Suggestions:
+>   - Square root is only defined for non-negative numbers
+>   - Use ABS() if you want the square root of the absolute value
+>   - Example: SQR(ABS(-9)) returns 3
+
+# Type error with conversion guidance:
+A$ = "hello": PRINT ABS(A$)
+> Error in PRINT: ABS argument must be a number at line 0
+> Details: Expected number, got str
+> Source: ABS(A$)
+> Suggestions:
+>   - Provide a numeric value
+>   - Example: ABS(-3.14) not ABS("text")
+>   - Use VAL() to convert string to number if needed
+```
+
 ### Multi-Variable Input
 ```basic
 10 INPUT "NAME, AGE, SCORE"; N$, A, S
@@ -172,7 +197,7 @@ RUN
 - **Advanced Parser**: Parentheses-aware parsing with complex expression evaluation and AST generation
 - **Expression Evaluator**: Sophisticated expression parsing with function registry integration
 - **Command Registry**: Plugin-like architecture for extensible command handling with metadata
-- **Error Context System**: Structured error reporting with line numbers and suggestions
+- **Enhanced Error System**: Educational error messages with detailed context, suggestions, and proper categorization
 - **Output Manager**: Streaming output management with filtering and buffering capabilities
 - **Graphics Engine**: HTML5 Canvas with authentic MC6847 VDG emulation and nested function support
 - **Variable Manager**: Comprehensive variable and array handling with type validation
@@ -223,23 +248,28 @@ trs80/
 ## 🚀 Recent Enhancements
 
 ### Phase 1.6 Complete: Enhanced Architecture & Test Coverage
-- **Expanded Test Suite**: 339 comprehensive tests (up from 229) with 100% success rate
+- **Expanded Test Suite**: 383 comprehensive tests (up from 339) with 100% success rate
 - **Advanced AST Parser**: Abstract Syntax Tree generation for complex expression evaluation
-- **Enhanced Error Reporting**: Structured error context with line numbers and helpful suggestions
+- **Enhanced Error System**: Educational error messages with proper categorization and context-aware suggestions
 - **Plugin Architecture**: Extensible command registry with metadata and help system
 - **Streaming Output Manager**: Real-time output filtering and buffering capabilities
 - **Robust Expression Engine**: Sophisticated math and string expression evaluation
-- **Comprehensive Function Library**: Complete implementation of all BASIC functions
+- **Comprehensive Function Library**: Complete implementation of all BASIC functions with detailed error handling
 - **IF/THEN Statement Enhancement**: Full support for multi-statement THEN clauses
 
-### Latest Bug Fixes (January 2025)
-- **Fixed IF/THEN Multi-Statement Parsing**: Resolved command registry detection issue for complex IF/THEN statements
-- **Enhanced Command Registry**: Improved multi-statement detection with special case handling for IF statements
+### Latest Enhancements (January 2025)
+- **🎯 Enhanced Error Messages**: Comprehensive error system with educational guidance and proper error categorization
+  - **Arithmetic Errors**: Domain/range violations (e.g., SQR(-4), LOG(-5)) with mathematical explanations
+  - **Type Errors**: Data type mismatches (e.g., ABS("text")) with conversion suggestions
+  - **Syntax Errors**: Argument count and format issues with usage examples
+  - **Context-Aware Suggestions**: Detailed guidance for fixing common programming mistakes
+- **Fixed Arithmetic Error Detection**: Mathematical functions now correctly distinguish between domain errors and type errors
+- **Enhanced Function Library**: All 20+ BASIC functions now provide detailed error messages with examples and suggestions
 - **Test Organization**: Separated development utilities into `dev_tests/` directory for better organization
 
 ## 🧪 Testing
 
-The emulator features **comprehensive test coverage** with **339 tests** achieving **100% success rate**.
+The emulator features **comprehensive test coverage** with **383 tests** achieving **100% success rate**.
 
 ### Quick Verification
 ```bash
@@ -324,12 +354,14 @@ We welcome contributions! Please:
 ## 📚 Educational Use
 
 This emulator is perfect for:
-- **Teaching BASIC programming** with authentic vintage experience
-- **Computer history education** demonstrating 1980s computing
+- **Teaching BASIC programming** with authentic vintage experience and modern error guidance
+- **Computer history education** demonstrating 1980s computing with educational enhancements
 - **Retro programming projects** with modern web accessibility and CLI convenience
-- **Learning computer graphics** through simple BASIC commands
+- **Learning computer graphics** through simple BASIC commands with detailed error feedback
 - **Real-time animations** and interactive programming demonstrations
 - **Terminal-based development** with the standalone CLI client
+- **Mathematics education** through BASIC functions with domain/range error explanations
+- **Programming error handling** with detailed explanations of common mistakes
 
 ## 🎓 Example Programs
 
