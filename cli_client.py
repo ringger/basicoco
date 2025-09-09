@@ -21,6 +21,9 @@ class TRS80CLI:
         self.waiting_for_input = False
         self.input_prompt = ""
         self.input_variable = ""
+        self.input_metadata = {}
+        self.response_received = threading.Event()
+        self.running_program = False
         self.setup_socketio_handlers()
         self.setup_readline()
         
@@ -38,16 +41,17 @@ class TRS80CLI:
         import atexit
         atexit.register(readline.write_history_file, histfile)
         
-        # Basic tab completion for BASIC keywords
+        # Basic tab completion for BASIC keywords and CLI commands
         basic_keywords = [
             'PRINT', 'LET', 'IF', 'THEN', 'ELSE', 'FOR', 'TO', 'NEXT', 'STEP',
             'GOTO', 'GOSUB', 'RETURN', 'END', 'STOP', 'RUN', 'LIST', 'NEW',
-            'SAVE', 'LOAD', 'INPUT', 'DATA', 'READ', 'RESTORE', 'DIM',
+            'SAVE', 'LOAD', 'FILES', 'KILL', 'CD', 'INPUT', 'DATA', 'READ', 'RESTORE', 'DIM',
             'PSET', 'PRESET', 'PMODE', 'PCLS', 'SCREEN', 'COLOR', 'PAINT',
             'LINE', 'CIRCLE', 'DRAW', 'GET', 'PUT', 'CLS', 'SOUND',
             'RND', 'INT', 'ABS', 'SGN', 'SQR', 'SIN', 'COS', 'TAN', 'ATN',
             'LOG', 'EXP', 'LEN', 'MID$', 'LEFT$', 'RIGHT$', 'STR$', 'VAL',
-            'CHR$', 'ASC', 'INKEY$', 'POS', 'PEEK', 'POKE'
+            'CHR$', 'ASC', 'INKEY$', 'POS', 'PEEK', 'POKE',
+            'EXIT', 'QUIT', 'BYE'  # CLI convenience commands
         ]
         
         def complete(text, state):
@@ -90,13 +94,15 @@ class TRS80CLI:
                         else:
                             print(text, end='', flush=True)
                     else:
-                        print(item['text'])
+                        print(item['text'], flush=True)
                 elif item['type'] == 'error':
                     print(f"ERROR: {item['message']}")
                 elif item['type'] == 'input_request':
                     self.waiting_for_input = True
                     self.input_prompt = item.get('prompt', '?')
                     self.input_variable = item.get('variable', '')
+                    # Store any additional metadata (like filename for KILL confirmation)
+                    self.input_metadata = {k: v for k, v in item.items() if k not in ['type', 'prompt', 'variable']}
                 elif item['type'] == 'graphics':
                     # For CLI, just show that graphics command was executed
                     print(f"[Graphics: {item.get('command', 'unknown')}]")
@@ -106,6 +112,31 @@ class TRS80CLI:
                 elif item['type'] == 'clear':
                     # Clear screen
                     os.system('clear' if os.name == 'posix' else 'cls')
+                elif item['type'] == 'pause':
+                    # Handle non-blocking pause - schedule continuation after delay
+                    duration = item.get('duration', 1.0)
+                    threading.Timer(duration, self.continue_after_pause).start()
+            
+            # Signal that we've received and processed the response
+            # Look for the universal command completion signal
+            has_error = any(item.get('type') == 'error' for item in data)
+            has_completion_signal = any(item.get('type') == 'command_complete' for item in data)
+            has_pause = any(item.get('type') == 'pause' for item in data)
+            has_input_request = any(item.get('type') == 'input_request' for item in data)
+            
+            # Signal completion for: errors, explicit completion, or input requests
+            # Don't signal completion if we just received a pause - wait for actual completion
+            if (has_error or has_completion_signal or has_input_request) and not has_pause:
+                if self.running_program:
+                    self.running_program = False
+                # Ensure all output is flushed before signaling completion
+                import sys
+                sys.stdout.flush()
+                # Small delay to ensure terminal output is complete
+                import time
+                time.sleep(0.01)
+                self.response_received.set()
+            # Don't signal for intermediate responses during program execution - let them stream through
     
     def connect_to_server(self):
         """Connect to the Flask-SocketIO server."""
@@ -119,23 +150,50 @@ class TRS80CLI:
     def send_command(self, command: str):
         """Send a command to the BASIC emulator."""
         if self.connected:
-            self.sio.emit('execute_command', {'command': command})
+            # For RUN command, enable streaming mode but still wait for program completion
+            if command.strip().upper() == 'RUN':
+                self.running_program = True
+                self.response_received.clear()
+                self.sio.emit('execute_command', {'command': command})
+                # Wait for program to finish running (with timeout)
+                if not self.response_received.wait(timeout=30):
+                    print("Program execution timed out")
+                    self.running_program = False
+            else:
+                # For other commands, wait for complete response before next prompt
+                self.response_received.clear()  # Reset the event
+                self.sio.emit('execute_command', {'command': command})
+                # Wait for the response to arrive and be processed
+                self.response_received.wait()
     
     def send_input_response(self, value: str):
         """Send input response to the BASIC emulator."""
         if self.connected and self.waiting_for_input:
-            self.sio.emit('input_response', {
+            # Include any metadata in the response
+            response = {
                 'variable': self.input_variable,
                 'value': value
-            })
+            }
+            response.update(self.input_metadata)
+            
+            self.response_received.clear()  # Reset the event
+            self.sio.emit('input_response', response)
             self.waiting_for_input = False
             self.input_prompt = ""
             self.input_variable = ""
+            self.input_metadata = {}
+            # Wait for the response to arrive and be processed
+            self.response_received.wait()
     
     def send_keypress(self, key: str):
         """Send keypress to the BASIC emulator for INKEY$ support."""
         if self.connected:
             self.sio.emit('keypress', {'key': key})
+    
+    def continue_after_pause(self):
+        """Continue program execution after a pause completes."""
+        if self.connected:
+            self.sio.emit('continue_execution')
     
     def run(self):
         """Main CLI loop."""
@@ -152,8 +210,12 @@ class TRS80CLI:
                         self.send_input_response(user_input)
                     else:
                         # Normal command input
-                        command = input("READY\n")
+                        command = input("> ")
                         if command.strip():
+                            # Handle local EXIT command
+                            if command.strip().upper() in ['EXIT', 'QUIT', 'BYE']:
+                                print("Goodbye!")
+                                break
                             self.send_command(command)
                         
                 except EOFError:

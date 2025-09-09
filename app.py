@@ -9,10 +9,20 @@ socketio = SocketIO(app, cors_allowed_origins="*")
 # Output callback for real-time streaming
 def output_callback(output):
     """Emit output to all connected clients in real-time"""
-    socketio.emit('output', output)
+    # Note: This callback isn't working properly in WebSocket context
+    # Real-time streaming is handled in handle_command instead
+    pass
 
 # Global BASIC interpreter instance with streaming callback
 basic = CoCoBasic(output_callback=output_callback)
+
+@socketio.on('connect')
+def handle_connect():
+    print("Client connected")
+
+@socketio.on('disconnect')
+def handle_disconnect():
+    print("Client disconnected")
 
 @app.route('/')
 def index():
@@ -39,11 +49,19 @@ def handle_command(data):
                 del basic.expanded_program[key]
         
         emit('output', [{'type': 'text', 'text': 'OK'}])
+        emit('output', [{'type': 'command_complete'}])
     else:
         # Execute immediate command
         try:
             output = basic.execute_command(command)
             emit('output', output)
+            
+            # Only send completion signal if command actually finished (no pause or input request)
+            has_pause = any(item.get('type') == 'pause' for item in output)
+            has_input_request = any(item.get('type') == 'input_request' for item in output)
+            if not has_pause and not has_input_request:
+                emit('output', [{'type': 'command_complete'}])
+                
         except Exception as e:
             emit('output', [{'type': 'error', 'message': f'Error: {str(e)}'}])
 
@@ -51,6 +69,21 @@ def handle_command(data):
 def handle_input_response(data):
     variable = data.get('variable', '')
     value = data.get('value', '')
+    
+    # Handle special system variables
+    if variable == '_kill_confirm':
+        filename = data.get('filename', '')
+        if filename:
+            output = basic.process_kill_confirmation(value, filename)
+            emit('output', output)
+            # Send completion signal after KILL confirmation
+            emit('output', [{'type': 'command_complete'}])
+            return
+        else:
+            emit('output', [{'type': 'error', 'message': 'KILL confirmation error: no filename'}])
+            # Send completion signal even for KILL errors
+            emit('output', [{'type': 'command_complete'}])
+            return
     
     # Process the input value and continue program execution
     try:
@@ -86,20 +119,48 @@ def handle_input_response(data):
                 basic.input_prompt = None
                 basic.current_input_index = 0
         
-        # Continue execution from where we left off
-        if basic.program_counter:
+        # Continue execution from where we left off  
+        if (hasattr(basic, 'program_counter') and basic.program_counter is not None and 
+            basic.program_counter != (0, 0)):
+            # We're in program execution - continue from where we paused for input
             basic.waiting_for_input = False
-            output = basic.continue_execution()
+            output = basic.continue_program_execution()
             emit('output', output)
+            
+            # Only send completion signal if execution actually finished (no pause)
+            has_pause = any(item.get('type') == 'pause' for item in output)
+            if not has_pause and basic.program_counter is None:
+                emit('output', [{'type': 'command_complete'}])
+        else:
+            # Direct INPUT command (not in program) - complete immediately
+            emit('output', [{'type': 'command_complete'}])
         
     except Exception as e:
         emit('output', [{'type': 'error', 'message': f'Input error: {str(e)}'}])
+        emit('output', [{'type': 'command_complete'}])
 
 @socketio.on('keypress')
 def handle_keypress(data):
     key = data.get('key', '')
     # Add the key to the keyboard buffer for INKEY$ function
     basic.keyboard_buffer.append(key)
+
+@socketio.on('continue_execution')
+def handle_continue_execution():
+    """Continue program execution after a pause."""
+    try:
+        # Continue execution from where we left off
+        if basic.program_counter:
+            output = basic.continue_program_execution()
+            emit('output', output)
+            
+            # Only send completion signal if program actually finished and no pause
+            # (program_counter becomes None when program completes)
+            has_pause = any(item.get('type') == 'pause' for item in output)
+            if not has_pause and basic.program_counter is None:
+                emit('output', [{'type': 'command_complete'}])
+    except Exception as e:
+        emit('output', [{'type': 'error', 'message': f'Continue execution error: {str(e)}'}])
 
 @socketio.on('connect')
 def on_connect():

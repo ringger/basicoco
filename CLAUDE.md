@@ -4,50 +4,29 @@
 
 ## Forward Development Priorities 🎯
 
-### Phase 1: Advanced String Processing & Expression Enhancement (NEXT PRIORITY)
-- **Enhanced Nested Function Calls** 
-  - Complete implementation for complex expressions like `MID$(STR$(INT(SQR(16))), 1, 2)`
-  - Enhanced parser support for deeply nested function compositions
-  - Proper precedence and evaluation order for nested operations
-- **Missing String Functions**
-  - **INSTR** - Find substring position: `INSTR("HELLO WORLD", "WORLD")` returns 7
-  - **SPACE$** - Generate spaces: `SPACE$(5)` returns "     "
-  - **STRING$** - Repeat characters: `STRING$(10, "*")` produces "**********"
-- **Expression Parser Improvements**
-  - Better handling of complex mathematical expressions with multiple operators
-  - Improved parentheses nesting for function calls within expressions
-  - Enhanced error reporting for malformed nested expressions
+*Note: Advanced String Processing, Expression Enhancement, Control Flow features, and critical WebSocket architecture fixes have been completed. Program Management commands (SAVE, FILES, KILL, LOAD) are now fully functional. The roadmap reflects remaining priorities for enhanced user experience.*
 
-### Phase 2: Enhanced Control Flow & Program Structure
-- **Multi-line IF/THEN/ELSE Implementation**
-  - Multi-line IF/THEN/ELSE/ENDIF structures beyond single-line constructs
-  - Nested conditional support with proper indentation and scope management
-  - Enhanced condition evaluation with complex expressions
-- **Advanced Loop Controls**
-  - **EXIT FOR** - Early loop termination statement
-  - **WHILE/WEND** - Condition-based loops for flexible iteration
-  - **DO/LOOP** - Modern loop variants with UNTIL and WHILE conditions
-- **Enhanced Program Flow**
-  - Better program counter management for complex nested structures
-  - Improved error handling within nested control blocks
+### Phase 1: Enhanced CLI Client Features (IN PROGRESS)
 
-### Phase 3: Enhanced CLI Client Features
-- **Extended Program Management**
-  - **SAVE** - Write programs back to files with automatic .bas extension
-  - **FILES** - List available programs in current and programs/ directories  
-  - **KILL** - Delete program files with confirmation prompts
-  - **Directory navigation** - CD command for changing directories
-- **CLI Client Enhancements**
-  - **Syntax highlighting** - Color-coded BASIC keywords during program entry
-  - **Line number auto-generation** - Smart line numbering and editing
-  - **Multi-line editing** - Improved copy/paste for program blocks
-  - **Session history** - Program bookmarking and recent file access
-- **Debug and Development Tools**
-  - **TRACE ON/OFF** - Step-by-step execution with variable display
-  - **Variable watch windows** - Real-time variable monitoring during execution  
-  - **Breakpoint support** - Interactive debugging with pause/continue
+**✅ Program Management (COMPLETED)**
+- ✅ **SAVE** - Write programs back to files with automatic .bas extension  
+- ✅ **FILES** - List available programs in current and programs/ directories
+- ✅ **KILL** - Delete program files with confirmation prompts
+- ✅ **LOAD** - Load programs with smart file discovery
 
-### Phase 4: Advanced System Functions & Memory Simulation
+**🎯 NEXT PRIORITY: CLI Client Enhancements**
+- **Syntax highlighting** - Color-coded BASIC keywords during program entry
+- **Line number auto-generation** - Smart line numbering and editing  
+- **Multi-line editing** - Improved copy/paste for program blocks
+- **Session history** - Program bookmarking and recent file access
+- **Directory navigation** - CD command for changing directories
+
+**🔧 Debug and Development Tools**
+- **TRACE ON/OFF** - Step-by-step execution with variable display
+- **Variable watch windows** - Real-time variable monitoring during execution
+- **Breakpoint support** - Interactive debugging with pause/continue
+
+### Phase 2: Advanced System Functions & Memory Simulation
 - **Authentic Memory Access**
   - PEEK(address) - Read simulated memory location with TRS-80 memory map
   - POKE address, value - Write to simulated memory location
@@ -59,7 +38,7 @@
   - FRE(0) - Free memory function
   - RANDOMIZE [seed] - Initialize random seed with better distribution
 
-### Phase 5: Complete File System Integration
+### Phase 3: Complete File System Integration
 - **Enhanced Web Storage**
   - **Web SAVE** - Save programs to browser localStorage with auto-sync
   - **Advanced file management** - Organize, rename, delete programs in web interface
@@ -75,7 +54,7 @@
   - **INPUT #n, variable** - Read data from files with type conversion
   - **CLOSE #n** - Proper file handle cleanup
 
-### Phase 6: Advanced Error Handling & Recovery
+### Phase 4: Advanced Error Handling & Recovery
 - **Structured Error Handling**
   - ON ERROR GOTO line - Error trapping with proper stack management
   - RESUME [line] - Resume execution after error handling
@@ -85,6 +64,20 @@
   - Integration with CLI client debugging tools
   - Error context preservation and reporting
   - Stack trace visualization for educational debugging
+
+## Architecture Stability Status ✅
+
+**🔧 Core Stability Achieved (September 2025)**
+The emulator architecture has reached a stable state with critical WebSocket and program execution bugs resolved:
+
+- **✅ Program Counter Architecture**: Tuple-based program counter system working correctly across all execution contexts
+- **✅ WebSocket Integration**: Robust completion signal architecture with 100% test coverage (32 integration tests) 
+- **✅ Real-time Animations**: PAUSE command and program continuation working reliably
+- **✅ Multi-variable INPUT**: Complex input scenarios handling program counter transitions properly
+- **✅ Error Messaging**: Clean distinction between direct command and program execution errors
+
+**🎯 Development Focus Shift**
+With core architecture stable, development priorities now shift to **user experience enhancements** and **advanced features** rather than foundational fixes.
 
 ## User Experience Enhancements 🎨
 
@@ -307,4 +300,25 @@
 
 - Always activate the virtual environment before running Python: `source venv/bin/activate`
 - When running tests, let them run to completion instead of timing out
-- Backend server (`python app.py`) can be managed manually in a separate terminal for better control during CLI experimentation
+- Backend server can be started with comprehensive logging using `./start_server_with_logging.sh` for better debugging
+- Use `./monitor_server_logs.sh` in a separate terminal to monitor server output in real-time
+
+## Debugging and Issue Tracking Guidelines
+
+### Side Issue Management
+When encountering **side issues** during debugging or development (bugs, inconsistencies, or missing features discovered while working on the main task):
+
+1. **Do NOT** just mention and forget the issue
+2. **DO** add it immediately to the TodoWrite task list at the bottom with status "pending"
+3. **Example Format**: 
+   - "Fix PAUSE command syntax error discovered during testing"
+   - "Investigate tuple/int comparison bug in INPUT processing"  
+   - "Address missing error messages in command X"
+
+This ensures side issues are captured for later resolution and don't get lost in the development process.
+
+### TodoWrite Best Practices
+- Mark current work as "in_progress" 
+- Complete tasks immediately when finished
+- Add newly discovered issues as "pending" tasks
+- Keep the todo list current and relevant to ongoing work

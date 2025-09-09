@@ -46,6 +46,8 @@ class CoCoBasic:
         self.iteration_count = 0  # Safety counter for infinite loops
         self.max_iterations = 50000  # Maximum iterations to prevent infinite loops
         self.waiting_for_input = False  # Flag to indicate we're waiting for user input
+        self.waiting_for_pause_continuation = False  # Flag for pause continuation
+        self.pause_duration = 0  # Duration of current pause
         self.program_counter = None  # For resuming execution after input
         self.stopped_position = None  # For CONT command - stores (line, sub_line) where STOP occurred
         
@@ -152,6 +154,24 @@ class CoCoBasic:
         self.variable_manager.clear_variables()
         return [{'type': 'text', 'text': 'OK'}]
     
+    def clear_variables(self, args):
+        """BASIC CLEAR command - clears variables, optionally sets string space"""
+        # Parse optional string space argument
+        args = args.strip()
+        if args:
+            try:
+                string_space = int(args)
+                # In TRS-80 BASIC, this would set string space
+                # For our implementation, we'll just acknowledge it
+                self.variable_manager.clear_variables()
+                return [{'type': 'text', 'text': f'OK'}]
+            except ValueError:
+                return [{'type': 'error', 'message': 'SYNTAX ERROR'}]
+        else:
+            # CLEAR with no arguments - just clear variables
+            self.variable_manager.clear_variables()
+            return [{'type': 'text', 'text': 'OK'}]
+    
     def load_program(self, filename):
         """Load a BASIC program from a file"""
         import os
@@ -200,12 +220,7 @@ class CoCoBasic:
                 error = self.error_context.file_error(
                     f"FILE NOT FOUND: {os.path.basename(original_filename)}",
                     original_filename,
-                    "LOAD",
-                    suggestions=[
-                        f"Check if {os.path.basename(original_filename)} exists in current directory",
-                        "Files are searched in: current dir, programs/, project root",
-                        "Use LIST command to see current program, FILES command to list files"
-                    ]
+                    "LOAD"
                 )
                 return [{'type': 'error', 'message': error.format_detailed()}]
             
@@ -239,36 +254,343 @@ class CoCoBasic:
             error = self.error_context.file_error(
                 f"FILE NOT FOUND: {os.path.basename(filename)}",
                 filename,
-                "LOAD",
-                suggestions=[
-                    "Check the filename and path",
-                    "Ensure the file exists and has .bas extension",
-                    "Verify file permissions"
-                ]
+                "LOAD"
             )
             return [{'type': 'error', 'message': error.format_detailed()}]
         except PermissionError:
             error = self.error_context.file_error(
                 f"PERMISSION DENIED: {os.path.basename(filename)}",
                 filename, 
-                "LOAD",
-                suggestions=[
-                    "Check file permissions",
-                    "Ensure you have read access to the file",
-                    "Try running with appropriate permissions"
-                ]
+                "LOAD"
             )
             return [{'type': 'error', 'message': error.format_detailed()}]
         except Exception as e:
             error = self.error_context.file_error(
                 f"LOAD ERROR: {str(e)}",
                 filename,
-                "LOAD",
+                "LOAD"
+            )
+            return [{'type': 'error', 'message': error.format_detailed()}]
+    
+    def save_program(self, filename):
+        """Save the current BASIC program to a file"""
+        import os
+        
+        # Parse filename - handle quotes
+        filename = filename.strip()
+        if filename.startswith('"') and filename.endswith('"'):
+            filename = filename[1:-1]
+        elif filename.startswith("'") and filename.endswith("'"):
+            filename = filename[1:-1]
+        
+        if not filename:
+            error = self.error_context.syntax_error(
+                "SYNTAX ERROR: Filename required",
+                self.current_line,
                 suggestions=[
-                    "Check if file contains valid BASIC code",
-                    "Verify file is not corrupted",
-                    "Ensure proper file format"
+                    "Provide a filename to save",
+                    'Example: SAVE "MYGAME"', 
+                    'File extension .bas will be added automatically'
                 ]
+            )
+            return [{'type': 'error', 'message': error.format_detailed()}]
+        
+        # Check if there's a program to save
+        if not self.program:
+            error = self.error_context.runtime_error(
+                "NO PROGRAM TO SAVE",
+                suggestions=[
+                    "Enter a program first using line numbers",
+                    'Example: 10 PRINT "HELLO"',
+                    'Use LIST command to see current program'
+                ]
+            )
+            return [{'type': 'error', 'message': error.format_detailed()}]
+        
+        # Add .bas extension if not present
+        if not filename.lower().endswith('.bas'):
+            filename += '.bas'
+        
+        try:
+            # Create programs directory if it doesn't exist
+            os.makedirs('programs', exist_ok=True)
+            
+            # Default save location is programs directory
+            if not os.path.dirname(filename):
+                filename = os.path.join('programs', filename)
+            
+            # Sort program lines by line number for proper output
+            sorted_lines = sorted(self.program.items())
+            
+            # Write program to file
+            with open(filename, 'w') as f:
+                for line_num, code in sorted_lines:
+                    f.write(f"{line_num} {code}\n")
+            
+            lines_saved = len(sorted_lines)
+            return [{'type': 'text', 'text': f'SAVED {lines_saved} LINES TO {os.path.basename(filename)}'}]
+            
+        except PermissionError:
+            error = self.error_context.file_error(
+                f"PERMISSION DENIED: {os.path.basename(filename)}",
+                filename,
+                "SAVE"
+            )
+            return [{'type': 'error', 'message': error.format_detailed()}]
+        except OSError as e:
+            error = self.error_context.file_error(
+                f"SAVE ERROR: {str(e)}",
+                filename,
+                "SAVE"
+            )
+            return [{'type': 'error', 'message': error.format_detailed()}]
+        except Exception as e:
+            error = self.error_context.file_error(
+                f"SAVE ERROR: {str(e)}",
+                filename,
+                "SAVE"
+            )
+            return [{'type': 'error', 'message': error.format_detailed()}]
+    
+    def list_files(self, args=None):
+        """List available BASIC program files"""
+        import os
+        import glob
+        
+        # Get project root
+        project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        
+        # Search directories - use absolute paths to avoid duplicates
+        search_dirs = [
+            os.getcwd(),                           # Current directory
+            os.path.join(os.getcwd(), 'programs')  # Programs subdirectory from current dir
+        ]
+        
+        # Add project programs directory if different from above
+        project_programs = os.path.join(project_root, 'programs')
+        
+        # Convert to absolute paths and remove duplicates
+        search_dirs = list(dict.fromkeys([os.path.abspath(d) for d in search_dirs + [project_programs] if os.path.exists(d)]))
+        
+        output = []
+        output.append({'type': 'text', 'text': 'BASIC PROGRAM FILES:'})
+        output.append({'type': 'text', 'text': '=' * 40})
+        
+        total_files = 0
+        
+        for directory in search_dirs:
+            if not os.path.exists(directory):
+                continue
+                
+            # Find .bas files in this directory
+            pattern = os.path.join(directory, "*.bas")
+            files = glob.glob(pattern)
+            
+            if files:
+                # Display directory header based on absolute path
+                cwd = os.getcwd()
+                if directory == cwd:
+                    dir_name = "CURRENT DIRECTORY"
+                elif directory == os.path.join(cwd, 'programs'):
+                    dir_name = "PROGRAMS/"
+                elif directory.endswith('programs'):
+                    # This is a programs directory from elsewhere (like project root)
+                    if directory != os.path.join(cwd, 'programs'):
+                        dir_name = "PROJECT PROGRAMS/"
+                    else:
+                        dir_name = "PROGRAMS/"
+                else:
+                    dir_name = f"{os.path.basename(directory)}/"
+                    
+                output.append({'type': 'text', 'text': f"\n{dir_name}:"})
+                
+                # Sort files and display
+                files.sort()
+                for file_path in files:
+                    filename = os.path.basename(file_path)
+                    try:
+                        # Get file size
+                        size = os.path.getsize(file_path)
+                        size_str = f"{size:>6} bytes"
+                        
+                        # Get modification time
+                        import time
+                        mtime = os.path.getmtime(file_path)
+                        time_str = time.strftime("%m/%d/%y %H:%M", time.localtime(mtime))
+                        
+                        output.append({'type': 'text', 'text': f"  {filename:<20} {size_str} {time_str}"})
+                        total_files += 1
+                    except OSError:
+                        # If we can't get file info, just show the name
+                        output.append({'type': 'text', 'text': f"  {filename}"})
+                        total_files += 1
+        
+        if total_files == 0:
+            output.append({'type': 'text', 'text': '\nNO .BAS FILES FOUND'})
+            output.append({'type': 'text', 'text': 'Use SAVE "filename" to create programs'})
+        else:
+            output.append({'type': 'text', 'text': f'\nTOTAL: {total_files} FILE(S)'})
+            output.append({'type': 'text', 'text': 'Use LOAD "filename" to load a program'})
+        
+        # Add empty line so prompt appears on new line
+        output.append({'type': 'text', 'text': ''})
+        
+        return output
+    
+    def kill_file(self, filename):
+        """Delete a BASIC program file with confirmation"""
+        import os
+        
+        # Parse filename - handle quotes
+        filename = filename.strip()
+        if filename.startswith('"') and filename.endswith('"'):
+            filename = filename[1:-1]
+        elif filename.startswith("'") and filename.endswith("'"):
+            filename = filename[1:-1]
+        
+        if not filename:
+            error = self.error_context.syntax_error(
+                "SYNTAX ERROR: Filename required",
+                self.current_line,
+                suggestions=[
+                    "Provide a filename to delete",
+                    'Example: KILL "OLDGAME"', 
+                    'File extension .bas will be added automatically'
+                ]
+            )
+            return [{'type': 'error', 'message': error.format_detailed()}]
+        
+        # Add .bas extension if not present
+        if not filename.lower().endswith('.bas'):
+            filename += '.bas'
+        
+        try:
+            # Search for the file in the same locations as LOAD
+            search_paths = [
+                filename,  # Current directory
+                os.path.join('programs', filename),  # programs subdirectory
+                os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), filename),  # project root
+                os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'programs', filename)  # project root/programs
+            ]
+            
+            found_file = None
+            for path in search_paths:
+                if os.path.exists(path):
+                    found_file = path
+                    break
+            
+            if not found_file:
+                error = self.error_context.file_error(
+                    f"FILE NOT FOUND: {os.path.basename(filename)}",
+                    filename,
+                    "KILL"
+                )
+                return [{'type': 'error', 'message': error.format_detailed()}]
+            
+            # For safety, we'll implement a simple confirmation through the CLI
+            # The CLI client will handle the confirmation prompt
+            output = []
+            output.append({'type': 'text', 'text': f'DELETE {os.path.basename(found_file)}? (Y/N)'})
+            output.append({'type': 'input_request', 'prompt': '? ', 'variable': '_kill_confirm', 'filename': found_file})
+            
+            return output
+            
+        except Exception as e:
+            error = self.error_context.file_error(
+                f"KILL ERROR: {str(e)}",
+                filename,
+                "KILL"
+            )
+            return [{'type': 'error', 'message': error.format_detailed()}]
+    
+    def process_kill_confirmation(self, response, filename):
+        """Process the confirmation response for KILL command"""
+        import os
+        
+        response = response.strip().upper()
+        
+        if response in ['Y', 'YES']:
+            try:
+                os.remove(filename)
+                return [{'type': 'text', 'text': f'DELETED {os.path.basename(filename)}'}]
+            except PermissionError:
+                error = self.error_context.file_error(
+                    f"PERMISSION DENIED: {os.path.basename(filename)}",
+                    filename,
+                    "KILL"
+                )
+                return [{'type': 'error', 'message': error.format_detailed()}]
+            except Exception as e:
+                error = self.error_context.file_error(
+                    f"DELETE ERROR: {str(e)}",
+                    filename,
+                    "KILL"
+                )
+                return [{'type': 'error', 'message': error.format_detailed()}]
+        else:
+            return [{'type': 'text', 'text': 'DELETE CANCELLED'}]
+    
+    def change_directory(self, path):
+        """Change current working directory"""
+        import os
+        
+        # Parse path - handle quotes
+        path = path.strip()
+        if path.startswith('"') and path.endswith('"'):
+            path = path[1:-1]
+        elif path.startswith("'") and path.endswith("'"):
+            path = path[1:-1]
+        
+        # If no path provided, show current directory
+        if not path:
+            current_dir = os.getcwd()
+            return [{'type': 'text', 'text': f'CURRENT DIRECTORY: {current_dir}'}]
+        
+        try:
+            # Special handling for common shortcuts
+            if path == "..":
+                path = os.path.dirname(os.getcwd())
+            elif path == "~":
+                path = os.path.expanduser("~")
+            elif path == "/":
+                path = "/"
+            elif path.startswith("~/"):
+                path = os.path.expanduser(path)
+            
+            # Change to the directory
+            old_dir = os.getcwd()
+            os.chdir(path)
+            new_dir = os.getcwd()
+            
+            return [{'type': 'text', 'text': f'CHANGED FROM {old_dir}'}] + \
+                   [{'type': 'text', 'text': f'TO {new_dir}'}]
+            
+        except FileNotFoundError:
+            error = self.error_context.file_error(
+                f"DIRECTORY NOT FOUND: {path}",
+                path,
+                "CD"
+            )
+            return [{'type': 'error', 'message': error.format_detailed()}]
+        except PermissionError:
+            error = self.error_context.file_error(
+                f"PERMISSION DENIED: {path}",
+                path,
+                "CD"
+            )
+            return [{'type': 'error', 'message': error.format_detailed()}]
+        except OSError as e:
+            error = self.error_context.file_error(
+                f"CD ERROR: {str(e)}",
+                path,
+                "CD"
+            )
+            return [{'type': 'error', 'message': error.format_detailed()}]
+        except Exception as e:
+            error = self.error_context.file_error(
+                f"CD ERROR: {str(e)}",
+                path,
+                "CD"
             )
             return [{'type': 'error', 'message': error.format_detailed()}]
     
@@ -329,15 +651,28 @@ class CoCoBasic:
             result = self.execute_single_statement(statement)
             
             if result:
-                # Check for INPUT requests first
+                # Check for INPUT and PAUSE requests first
                 for item in result:
                     if item.get('type') == 'input_request':
                         # Save our position so we can resume
-                        self.program_counter = current_pos_index + 1
+                        if current_pos_index + 1 < len(all_positions):
+                            self.program_counter = all_positions[current_pos_index + 1]
+                        else:
+                            self.program_counter = None
                         self.waiting_for_input = True
                         self.running = False  # Pause execution
                         output.append(item)
                         return output  # Return immediately with input request
+                    elif item.get('type') == 'pause':
+                        # Save our position so we can resume after pause
+                        if current_pos_index + 1 < len(all_positions):
+                            self.program_counter = all_positions[current_pos_index + 1]
+                        else:
+                            self.program_counter = None
+                        self.waiting_for_pause_continuation = True
+                        self.running = False  # Pause execution
+                        output.append(item)
+                        return output  # Return immediately with pause request
                 
                 # Handle jump commands
                 jumped = False
@@ -555,16 +890,28 @@ class CoCoBasic:
         return output
     
     def continue_program_execution(self):
-        # Resume program execution after INPUT
+        # Resume program execution after INPUT or PAUSE
         if not hasattr(self, 'program_counter') or self.program_counter is None:
             return [{'type': 'error', 'message': 'NO PROGRAM TO CONTINUE'}]
+        
+        # Clear pause continuation state if that's why we're continuing
+        if hasattr(self, 'waiting_for_pause_continuation') and self.waiting_for_pause_continuation:
+            self.waiting_for_pause_continuation = False
         
         output = []
         self.running = True
         
         # Get all sub-line positions sorted by (line_num, sub_index)
         all_positions = sorted(self.expanded_program.keys())
-        current_pos_index = self.program_counter
+        
+        # Find the index of the current program counter position
+        try:
+            current_pos_index = all_positions.index(self.program_counter)
+        except ValueError:
+            # Current position not found, end program
+            self.running = False
+            self.program_counter = None
+            return []
         
         while current_pos_index < len(all_positions) and self.running:
             # Safety check for infinite loops
@@ -584,15 +931,28 @@ class CoCoBasic:
             result = self.execute_single_statement(statement)
             
             if result:
-                # Check for INPUT requests first
+                # Check for INPUT and PAUSE requests first
                 for item in result:
                     if item.get('type') == 'input_request':
                         # Save our position so we can resume
-                        self.program_counter = current_pos_index + 1
+                        if current_pos_index + 1 < len(all_positions):
+                            self.program_counter = all_positions[current_pos_index + 1]
+                        else:
+                            self.program_counter = None
                         self.waiting_for_input = True
                         self.running = False  # Pause execution
                         output.append(item)
                         return output  # Return immediately with input request
+                    elif item.get('type') == 'pause':
+                        # Save our position so we can resume after pause
+                        if current_pos_index + 1 < len(all_positions):
+                            self.program_counter = all_positions[current_pos_index + 1]
+                        else:
+                            self.program_counter = None
+                        self.waiting_for_pause_continuation = True
+                        self.running = False  # Pause execution
+                        output.append(item)
+                        return output  # Return immediately with pause request
                 
                 # Handle jump commands (same logic as run_program)
                 jumped = False
@@ -738,7 +1098,12 @@ class CoCoBasic:
             return self.variable_manager.execute_let(code)
         
         # If nothing matches, it's a syntax error
-        return [{'type': 'error', 'message': f'SYNTAX ERROR IN {self.current_line}'}]
+        if self.current_line == 0 or not self.running:
+            # Direct command or not in program execution
+            return [{'type': 'error', 'message': 'SYNTAX ERROR'}]
+        else:
+            # Program execution context
+            return [{'type': 'error', 'message': f'SYNTAX ERROR IN {self.current_line}'}]
     
     
     
@@ -1134,8 +1499,6 @@ class CoCoBasic:
     
     def execute_pause(self, args):
         """Execute PAUSE command - pause execution for specified time"""
-        import time
-        
         try:
             if not args.strip():
                 # Default pause of 1 second
@@ -1150,12 +1513,32 @@ class CoCoBasic:
             elif pause_time > 10:
                 pause_time = 10
                 
-            # Perform the pause
-            time.sleep(pause_time)
-            return []  # No output
+            # For program execution, pause and wait for continuation
+            if hasattr(self, 'program_counter') and self.program_counter is not None:
+                # We're in program execution - save state and pause
+                self.waiting_for_pause_continuation = True
+                self.pause_duration = pause_time
+                # Find the next position to continue from
+                all_positions = sorted(self.expanded_program.keys())
+                try:
+                    current_pos_index = all_positions.index(self.program_counter)
+                    if current_pos_index < len(all_positions) - 1:
+                        self.program_counter = all_positions[current_pos_index + 1]
+                    else:
+                        # End of program
+                        self.program_counter = None
+                except ValueError:
+                    # Current position not found, end program
+                    self.program_counter = None
+                
+                return [{'type': 'pause', 'duration': pause_time}]
+            else:
+                # Direct command execution - just return pause instruction
+                return [{'type': 'pause', 'duration': pause_time}]
             
-        except:
-            return [{'type': 'error', 'message': 'SYNTAX ERROR IN PAUSE'}]
+        except Exception as e:
+            # Return proper error without masking the exception
+            return [{'type': 'error', 'message': f'PAUSE command error: {type(e).__name__}: {e}'}]
     
     def execute_new(self):
         # NEW command - clear program and variables
@@ -1169,6 +1552,8 @@ class CoCoBasic:
         self.data_pointer = 0
         self.running = False
         self.waiting_for_input = False
+        self.waiting_for_pause_continuation = False
+        self.pause_duration = 0
         self.program_counter = None
         self.stopped_position = None  # Clear stopped position
         
@@ -1184,7 +1569,14 @@ class CoCoBasic:
         return [{'type': 'text', 'text': 'READY'}]
     
     def execute_end(self, args):
-        # END/STOP command - stop program execution
+        # END command - end program execution silently
+        self.running = False
+        # Clear stopped position since END terminates completely
+        self.stopped_position = None
+        return []  # No output for END
+    
+    def execute_stop(self, args):
+        # STOP command - stop program execution with message (allows CONT)
         self.running = False
         # Store position for CONT command
         self.stopped_position = (self.current_line, self.current_sub_line)
@@ -1244,7 +1636,10 @@ class CoCoBasic:
                 # Handle input requests
                 for item in result:
                     if item.get('type') == 'input_request':
-                        self.program_counter = current_pos_index + 1
+                        if current_pos_index + 1 < len(all_positions):
+                            self.program_counter = all_positions[current_pos_index + 1]
+                        else:
+                            self.program_counter = None
                         self.waiting_for_input = True
                         self.running = False
                         output.append(item)
@@ -1682,7 +2077,7 @@ class CoCoBasic:
                                      syntax="ENDIF",
                                      examples=["ENDIF"])
         
-        self.command_registry.register('STOP', self.execute_end,
+        self.command_registry.register('STOP', self.execute_stop,
                                      category='control',
                                      description="Stop program execution",
                                      syntax="STOP",
@@ -1757,17 +2152,41 @@ class CoCoBasic:
                                      syntax="RUN",
                                      examples=["RUN"])
         
-        self.command_registry.register('CLEAR', lambda args: self.clear_program(),
+        self.command_registry.register('CLEAR', self.clear_variables,
                                      category='system',
-                                     description="Clear program and variables",
-                                     syntax="CLEAR",
-                                     examples=["CLEAR"])
+                                     description="Clear variables and optionally set string space",
+                                     syntax="CLEAR [string_space]",
+                                     examples=["CLEAR", "CLEAR 1000"])
         
         self.command_registry.register('LOAD', self.load_program,
                                      category='system',
                                      description="Load program from file",
                                      syntax="LOAD \"filename\"",
                                      examples=["LOAD \"DEMO.BAS\"", "LOAD \"programs/game.bas\""])
+        
+        self.command_registry.register('SAVE', self.save_program,
+                                     category='system',
+                                     description="Save program to file",
+                                     syntax="SAVE \"filename\"",
+                                     examples=["SAVE \"MYGAME\"", "SAVE \"programs/utility.bas\""])
+        
+        self.command_registry.register('FILES', self.list_files,
+                                     category='system',
+                                     description="List available BASIC program files",
+                                     syntax="FILES",
+                                     examples=["FILES"])
+        
+        self.command_registry.register('KILL', self.kill_file,
+                                     category='system',
+                                     description="Delete a BASIC program file",
+                                     syntax="KILL \"filename\"",
+                                     examples=["KILL \"OLDGAME\"", "KILL \"programs/test.bas\""])
+        
+        self.command_registry.register('CD', self.change_directory,
+                                     category='system',
+                                     description="Change current working directory",
+                                     syntax="CD [\"path\"]",
+                                     examples=["CD", "CD \"programs\"", "CD \"..\"", "CD \"~\""])
         
         # Comments
         self.command_registry.register('REM', lambda args: [],

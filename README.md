@@ -3,7 +3,7 @@
 A comprehensive TRS-80 Color Computer BASIC interpreter with both web interface and standalone CLI client, featuring authentic graphics emulation, real-time streaming output, and modern educational tools.
 
 ![Production Ready](https://img.shields.io/badge/Status-Production%20Ready-brightgreen)
-![Test Coverage](https://img.shields.io/badge/Tests-383%2F383%20Passing-brightgreen)
+![Test Coverage](https://img.shields.io/badge/Tests-32%20Integration%20Tests-brightgreen)
 ![Success Rate](https://img.shields.io/badge/Success%20Rate-100%25-brightgreen)
 ![CLI Client](https://img.shields.io/badge/CLI-Real--time%20Streaming-blue)
 ![Python](https://img.shields.io/badge/Python-3.8%2B-blue)
@@ -257,7 +257,23 @@ trs80/
 - **Comprehensive Function Library**: Complete implementation of all BASIC functions with detailed error handling
 - **IF/THEN Statement Enhancement**: Full support for multi-statement THEN clauses
 
-### Latest Enhancements (January 2025)
+### Latest Critical Fixes (September 2025)
+- **🔧 Program Counter Bug Fixes**: Resolved critical tuple/int handling bugs that caused runtime errors
+  - **PAUSE Command**: Fixed TypeError in program continuation after PAUSE operations
+  - **INPUT Command**: Resolved program counter handling in multi-variable INPUT scenarios
+  - **Program Execution**: Fixed execution loop comparison errors in `continue_program_execution()`
+  - **Position Management**: Corrected 5 locations with incorrect integer assignments to program counter tuples
+- **✨ Enhanced WebSocket Integration Tests**: Comprehensive test suite with 32 integration tests (100% success)
+  - **Graphics Commands**: Full testing of PMODE, SCREEN, PSET, LINE, CIRCLE, PCLS, COLOR
+  - **Sound Commands**: SOUND command testing with completion signal verification  
+  - **Content Verification**: Tests now validate actual output content, not just completion signals
+  - **Connection Management**: Robust auto-reconnection handling for test reliability
+- **🎯 Improved Error Messages**: Cleaner syntax error messages for direct commands
+  - **Direct Commands**: Now show "SYNTAX ERROR" instead of confusing "SYNTAX ERROR IN 0" 
+  - **Program Context**: Still shows line numbers when errors occur during program execution
+- **🧹 Code Cleanup**: Removed debug statements from production server code
+
+### Previous Enhancements (January 2025)
 - **🎯 Enhanced Error Messages**: Comprehensive error system with educational guidance and proper error categorization
   - **Arithmetic Errors**: Domain/range violations (e.g., SQR(-4), LOG(-5)) with mathematical explanations
   - **Type Errors**: Data type mismatches (e.g., ABS("text")) with conversion suggestions
@@ -269,20 +285,32 @@ trs80/
 
 ## 🧪 Testing
 
-The emulator features **comprehensive test coverage** with **383 tests** achieving **100% success rate**.
+The emulator features **comprehensive WebSocket integration testing** with **32 integration tests** achieving **100% success rate**.
 
-### Quick Verification
+### WebSocket Integration Testing
 ```bash
-# Fast smoke test for essential functionality
+# Run comprehensive WebSocket integration tests (requires server running)
+python tests/integration/test_websocket_completion_signals.py
+
+# These tests cover:
+# - All graphics commands (PMODE, SCREEN, PSET, LINE, CIRCLE, PCLS, COLOR)
+# - Sound commands (SOUND) 
+# - Program execution (FOR loops, variable operations)
+# - File operations (LOAD, SAVE, FILES, KILL confirmation)
+# - Input/output (PRINT, INPUT, multi-variable INPUT)
+# - Error handling (syntax errors, runtime errors, file errors)
+# - WebSocket completion signals for CLI synchronization
+```
+
+### Development Testing
+```bash
+# Fast smoke test for essential functionality  
 python dev_tests/smoke_test.py
 
 # Quick mode for rapid verification
 python dev_tests/smoke_test.py --quick
-```
 
-### Comprehensive Testing
-```bash
-# Run all test suites with detailed reporting
+# Run all available test suites with detailed reporting
 python run_tests.py
 
 # Run with verbose output

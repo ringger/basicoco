@@ -321,13 +321,24 @@ class ASTParser:
                 if i < len(text):
                     i += 1  # Skip closing quote
                     column += 1
-                tokens.append({
-                    'type': 'STRING',
-                    'value': value,
-                    'line': line,
-                    'column': start_col,
-                    'length': column - start_col
-                })
+                    tokens.append({
+                        'type': 'STRING',
+                        'value': value,
+                        'line': line,
+                        'column': start_col,
+                        'length': column - start_col
+                    })
+                else:
+                    # Unclosed string error
+                    error = self.error_context.syntax_error(
+                        f"Unclosed string literal starting at column {start_col}",
+                        line,
+                        suggestions=[
+                            "Add closing double quote to complete the string",
+                            "Example: PRINT \"HELLO WORLD\""
+                        ]
+                    )
+                    raise ValueError(error.format_message())
                 continue
             
             # Numbers
@@ -1084,7 +1095,7 @@ class ASTEvaluator(ASTVisitor):
             return left_val * right_val
         elif node.operator == Operator.DIVIDE:
             if right_val == 0:
-                return float('inf')
+                raise ZeroDivisionError("Division by zero")
             return left_val / right_val
         elif node.operator == Operator.POWER:
             return left_val ** right_val
