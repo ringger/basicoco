@@ -14,7 +14,7 @@ from abc import ABC, abstractmethod
 # Add current directory to path for imports
 sys.path.append(os.path.dirname(__file__))
 
-from app import CoCoBasic
+from emulator.core import CoCoBasic
 
 
 class TestResult:

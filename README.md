@@ -3,7 +3,7 @@
 A comprehensive TRS-80 Color Computer BASIC interpreter with both web interface and standalone CLI client, featuring authentic graphics emulation, real-time streaming output, and modern educational tools.
 
 ![Production Ready](https://img.shields.io/badge/Status-Production%20Ready-brightgreen)
-![Test Coverage](https://img.shields.io/badge/Tests-229%2F229%20Passing-brightgreen)
+![Test Coverage](https://img.shields.io/badge/Tests-339%2F339%20Passing-brightgreen)
 ![Success Rate](https://img.shields.io/badge/Success%20Rate-100%25-brightgreen)
 ![CLI Client](https://img.shields.io/badge/CLI-Real--time%20Streaming-blue)
 ![Python](https://img.shields.io/badge/Python-3.8%2B-blue)
@@ -169,7 +169,11 @@ RUN
 ### Core Components
 - **Modular Architecture**: Clean separation of concerns across specialized modules
 - **CoCoBasic Class**: Main interpreter orchestrating program storage and execution with real-time streaming
-- **Advanced Parser**: Parentheses-aware parsing with complex expression evaluation
+- **Advanced Parser**: Parentheses-aware parsing with complex expression evaluation and AST generation
+- **Expression Evaluator**: Sophisticated expression parsing with function registry integration
+- **Command Registry**: Plugin-like architecture for extensible command handling with metadata
+- **Error Context System**: Structured error reporting with line numbers and suggestions
+- **Output Manager**: Streaming output management with filtering and buffering capabilities
 - **Graphics Engine**: HTML5 Canvas with authentic MC6847 VDG emulation and nested function support
 - **Variable Manager**: Comprehensive variable and array handling with type validation
 - **I/O System**: Multi-variable INPUT support and interactive keyboard integration
@@ -183,7 +187,12 @@ trs80/
 ├── cli_client.py          # Standalone CLI client with terminal interface
 ├── emulator/             # Core emulator modules
 │   ├── core.py           # Main CoCoBasic interpreter class with streaming support
-│   ├── parser.py         # Command parsing and tokenization
+│   ├── parser.py         # Command parsing, tokenization, and AST generation
+│   ├── expressions.py    # Expression evaluation with function registry
+│   ├── functions.py      # BASIC function implementations (math, string, system)
+│   ├── commands.py       # Command registry and plugin architecture
+│   ├── error_context.py  # Structured error reporting system
+│   ├── output_manager.py # Output streaming and management
 │   ├── graphics.py       # Graphics commands and canvas operations
 │   ├── variables.py      # Variable and array management
 │   └── io.py            # Input/output command handling with inline PRINT support
@@ -197,29 +206,48 @@ trs80/
 │   ├── style.css         # Styling with authentic CRT effects
 │   └── script.js         # Client-side JavaScript
 ├── tests/
-│   ├── unit/            # Unit tests for individual commands
+│   ├── unit/            # Unit tests for individual commands and components
 │   ├── integration/     # Integration tests for complex programs
-│   ├── test_base.py     # Test framework base class
-│   └── README.md        # Testing documentation
+│   └── test_base.py     # Test framework base class with comprehensive assertions
+├── dev_tests/           # Development and debugging utilities
+│   ├── README.md        # Development test documentation
+│   ├── smoke_test.py    # Quick functionality verification
+│   └── debug_test_failures.py # Test debugging utilities
 ├── docs/
 │   └── claude-code-architecture-reference.md  # Development tools reference
 ├── run_tests.py         # Comprehensive test runner
-├── smoke_test.py        # Quick functionality verification
 ├── CLAUDE.md            # Development guide and roadmap
 └── README.md           # This file
 ```
 
+## 🚀 Recent Enhancements
+
+### Phase 1.6 Complete: Enhanced Architecture & Test Coverage
+- **Expanded Test Suite**: 339 comprehensive tests (up from 229) with 100% success rate
+- **Advanced AST Parser**: Abstract Syntax Tree generation for complex expression evaluation
+- **Enhanced Error Reporting**: Structured error context with line numbers and helpful suggestions
+- **Plugin Architecture**: Extensible command registry with metadata and help system
+- **Streaming Output Manager**: Real-time output filtering and buffering capabilities
+- **Robust Expression Engine**: Sophisticated math and string expression evaluation
+- **Comprehensive Function Library**: Complete implementation of all BASIC functions
+- **IF/THEN Statement Enhancement**: Full support for multi-statement THEN clauses
+
+### Latest Bug Fixes (January 2025)
+- **Fixed IF/THEN Multi-Statement Parsing**: Resolved command registry detection issue for complex IF/THEN statements
+- **Enhanced Command Registry**: Improved multi-statement detection with special case handling for IF statements
+- **Test Organization**: Separated development utilities into `dev_tests/` directory for better organization
+
 ## 🧪 Testing
 
-The emulator features **comprehensive test coverage** with **229 tests** achieving **100% success rate**.
+The emulator features **comprehensive test coverage** with **339 tests** achieving **100% success rate**.
 
 ### Quick Verification
 ```bash
 # Fast smoke test for essential functionality
-python smoke_test.py
+python dev_tests/smoke_test.py
 
 # Quick mode for rapid verification
-python smoke_test.py --quick
+python dev_tests/smoke_test.py --quick
 ```
 
 ### Comprehensive Testing
@@ -239,11 +267,13 @@ python tests/integration/test_complex_programs.py
 ```
 
 ### Test Categories
-- **Unit Tests**: Individual command functionality (graphics, variables, I/O)
+- **Unit Tests**: Individual command functionality (graphics, variables, I/O, parsing)
 - **Integration Tests**: Complex program execution and multi-feature interaction
-- **Smoke Tests**: Essential functionality verification for deployment
+- **Architecture Tests**: Core component functionality (AST parser, command registry, error context)
+- **Expression Tests**: Mathematical and string expression evaluation
+- **Function Tests**: BASIC function implementations (math, string, system)
 - **Error Recovery**: State consistency and error handling
-- **Parser Tests**: Expression evaluation and syntax handling
+- **Development Tests**: Debugging utilities and smoke tests
 
 ### Test Infrastructure
 - **Base Framework**: Comprehensive assertion methods and utilities (`tests/test_base.py`)

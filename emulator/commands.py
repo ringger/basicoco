@@ -10,19 +10,61 @@ from typing import List, Dict, Callable, Any, Optional
 
 
 class CommandRegistry:
-    """Registry for BASIC commands with proper tokenization and routing"""
+    """
+    Enhanced registry for BASIC commands with plugin-like architecture.
+    
+    Supports command metadata, categories, help text, and modular command registration.
+    """
     
     def __init__(self):
         self.commands: Dict[str, Dict[str, Any]] = {}
         self.aliases: Dict[str, str] = {}
+        self.categories: Dict[str, List[str]] = {
+            'control': [],      # IF, FOR, GOTO, etc.
+            'data': [],         # DATA, READ, RESTORE
+            'graphics': [],     # PMODE, PSET, LINE, etc.
+            'io': [],          # PRINT, INPUT
+            'variables': [],    # LET, DIM
+            'system': [],      # NEW, LIST, RUN, etc.
+            'math': [],        # Functions like SQR, SIN, etc.
+            'string': []       # String functions
+        }
     
-    def register(self, command_name: str, handler: Callable, min_args: int = 0, aliases: Optional[List[str]] = None):
-        """Register a command with its handler"""
+    def register(self, command_name: str, handler: Callable, 
+                min_args: int = 0, max_args: Optional[int] = None,
+                aliases: Optional[List[str]] = None, 
+                category: str = 'system',
+                description: str = "",
+                syntax: str = "",
+                examples: Optional[List[str]] = None):
+        """
+        Register a command with its handler and metadata.
+        
+        Args:
+            command_name: The primary command name
+            handler: Function to handle the command
+            min_args: Minimum number of arguments required
+            max_args: Maximum number of arguments allowed (None = unlimited)
+            aliases: Alternative names for the command
+            category: Command category for organization
+            description: Brief description of what the command does
+            syntax: Syntax description (e.g., "PRINT expression [; expression]...")
+            examples: List of usage examples
+        """
         command_name = command_name.upper()
         self.commands[command_name] = {
             'handler': handler,
-            'min_args': min_args
+            'min_args': min_args,
+            'max_args': max_args,
+            'category': category,
+            'description': description,
+            'syntax': syntax,
+            'examples': examples or []
         }
+        
+        # Add to category
+        if category in self.categories:
+            self.categories[category].append(command_name)
         
         # Register aliases
         if aliases:
@@ -49,6 +91,11 @@ class CommandRegistry:
         if not line.strip():
             return []
         
+        # Check if this is a multi-statement line (contains colons outside strings)
+        # If so, let it fall through to the core's multi-statement handling
+        if self._has_multi_statements(line):
+            return None
+        
         tokens = self.tokenize_command(line)
         if not tokens:
             return None
@@ -62,6 +109,25 @@ class CommandRegistry:
             return handler(args)
         
         return None
+    
+    def _has_multi_statements(self, line: str) -> bool:
+        """Check if line contains multiple statements (colons outside strings)
+        
+        Special case: IF/THEN statements are handled by the IF command even if
+        they contain colons in the THEN clause.
+        """
+        # Check if this line starts with IF - if so, let the IF handler deal with it
+        stripped = line.strip().upper()
+        if stripped.startswith('IF '):
+            return False
+            
+        in_quotes = False
+        for char in line:
+            if char == '"':
+                in_quotes = not in_quotes
+            elif char == ':' and not in_quotes:
+                return True
+        return False
     
     @staticmethod
     def tokenize_command(line: str) -> List[str]:
@@ -180,3 +246,117 @@ class CommandRegistry:
     def list_commands(self) -> List[str]:
         """List all registered commands"""
         return sorted(list(self.commands.keys()) + list(self.aliases.keys()))
+    
+    def get_command_info(self, command_name: str) -> Optional[Dict[str, Any]]:
+        """Get detailed information about a command"""
+        command_name = command_name.upper()
+        
+        # Check direct command
+        if command_name in self.commands:
+            return self.commands[command_name].copy()
+        
+        # Check aliases
+        if command_name in self.aliases:
+            real_command = self.aliases[command_name]
+            info = self.commands[real_command].copy()
+            info['is_alias'] = True
+            info['primary_name'] = real_command
+            return info
+        
+        return None
+    
+    def get_commands_by_category(self, category: str) -> List[str]:
+        """Get all commands in a specific category"""
+        return self.categories.get(category, [])
+    
+    def get_all_categories(self) -> List[str]:
+        """Get list of all command categories"""
+        return list(self.categories.keys())
+    
+    def generate_help(self, command_name: Optional[str] = None) -> List[str]:
+        """
+        Generate help text for a command or all commands.
+        
+        Args:
+            command_name: Specific command to get help for, or None for all commands
+            
+        Returns:
+            List of help text lines
+        """
+        if command_name:
+            return self._generate_command_help(command_name)
+        else:
+            return self._generate_general_help()
+    
+    def _generate_command_help(self, command_name: str) -> List[str]:
+        """Generate help for a specific command"""
+        info = self.get_command_info(command_name)
+        if not info:
+            return [f"Unknown command: {command_name}"]
+        
+        help_lines = []
+        primary_name = info.get('primary_name', command_name.upper())
+        
+        help_lines.append(f"Command: {primary_name}")
+        
+        if info.get('description'):
+            help_lines.append(f"Description: {info['description']}")
+        
+        if info.get('syntax'):
+            help_lines.append(f"Syntax: {info['syntax']}")
+        
+        help_lines.append(f"Category: {info.get('category', 'unknown')}")
+        
+        if info.get('examples'):
+            help_lines.append("Examples:")
+            for example in info['examples']:
+                help_lines.append(f"  {example}")
+        
+        if info.get('is_alias'):
+            help_lines.append(f"Note: This is an alias for {primary_name}")
+        
+        return help_lines
+    
+    def _generate_general_help(self) -> List[str]:
+        """Generate general help showing all commands by category"""
+        help_lines = ["Available BASIC Commands:"]
+        help_lines.append("=" * 40)
+        
+        for category in sorted(self.categories.keys()):
+            commands = self.get_commands_by_category(category)
+            if commands:
+                help_lines.append(f"\n{category.title()} Commands:")
+                for cmd in sorted(commands):
+                    info = self.commands[cmd]
+                    description = info.get('description', 'No description')
+                    help_lines.append(f"  {cmd:<12} - {description}")
+        
+        help_lines.append("\nUse HELP <command> for detailed help on a specific command.")
+        return help_lines
+    
+    def validate_plugin_interface(self, plugin) -> bool:
+        """
+        Validate that a plugin follows the expected interface.
+        
+        A valid plugin should have a register_commands(registry) method.
+        """
+        return hasattr(plugin, 'register_commands') and callable(getattr(plugin, 'register_commands'))
+    
+    def load_plugin(self, plugin) -> bool:
+        """
+        Load a plugin by calling its register_commands method.
+        
+        Args:
+            plugin: Object with register_commands(registry) method
+            
+        Returns:
+            True if plugin loaded successfully, False otherwise
+        """
+        if not self.validate_plugin_interface(plugin):
+            return False
+        
+        try:
+            plugin.register_commands(self)
+            return True
+        except Exception:
+            return False

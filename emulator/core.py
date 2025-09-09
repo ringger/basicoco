@@ -11,16 +11,28 @@ from .graphics import BasicGraphics
 from .variables import VariableManager
 from .io import IOHandler
 from .commands import CommandRegistry
+from .expressions import ExpressionEvaluator
+from .output_manager import StreamingOutputManager, LegacyOutputAdapter, OutputType
 
 class CoCoBasic:
-    def __init__(self, output_callback=None):
+    def __init__(self, output_callback=None, debug_mode=False):
         self.program = {}  # Line number -> code (original for LIST display)
         self.expanded_program = {}  # (line_num, sub_index) -> statement (for execution)
         self.variables = {}
         self.data_statements = []
         self.data_pointer = 0
         self.running = False
-        self.output_callback = output_callback  # Callback for real-time output
+        
+        # Initialize enhanced output management system
+        self.output_manager = StreamingOutputManager(debug_mode=debug_mode)
+        self.legacy_adapter = LegacyOutputAdapter(self.output_manager)
+        
+        # Set up legacy compatibility
+        if output_callback:
+            self.legacy_adapter.set_output_callback(output_callback)
+        
+        # Legacy property for backward compatibility
+        self.output_callback = output_callback
         self.current_line = 0
         self.current_sub_line = 0
         self.call_stack = []
@@ -48,15 +60,32 @@ class CoCoBasic:
         self.variable_manager = VariableManager(self)
         self.io_handler = IOHandler(self)
         
+        # Initialize expression evaluator
+        self.expression_evaluator = ExpressionEvaluator(self)
+        
         # Initialize command registry
         self.command_registry = CommandRegistry()
         self._register_all_commands()
     
     def emit_output(self, output):
-        """Emit output immediately if callback is available, otherwise return it"""
-        if self.output_callback:
-            self.output_callback(output)
-        return output
+        """
+        Emit output using the StreamingOutputManager.
+        
+        Maintains backward compatibility while using the enhanced output system.
+        """
+        return self.legacy_adapter.emit_output(output)
+    
+    def emit_text(self, text: str, source: str = None):
+        """Emit text output using the new system"""
+        self.output_manager.text(text, source=source, line_number=self.current_line)
+    
+    def emit_error(self, message: str, source: str = None):
+        """Emit error output using the new system"""
+        self.output_manager.error(message, source=source, line_number=self.current_line)
+    
+    def emit_debug(self, message: str, source: str = None):
+        """Emit debug output using the new system"""
+        self.output_manager.debug(message, source=source, line_number=self.current_line)
     
     @property 
     def key_buffer(self):
@@ -99,20 +128,13 @@ class CoCoBasic:
                     del self.expanded_program[key]
             return [{'type': 'text', 'text': 'OK'}]
         
-        # Handle immediate commands
-        if command.upper() == 'LIST':
-            return self.list_program()
-        elif command.upper() == 'RUN':
-            return self.run_program()
-        elif command.upper() == 'CLEAR':
-            return self.clear_program()
-        elif command.upper() == 'CLS':
-            return [{'type': 'clear_screen'}]
-        elif command.upper().startswith('LOAD'):
-            return self.load_program(command[4:].strip())
-        else:
-            # Try to execute as a line of code
-            return self.execute_line(command)
+        # Try command registry first (plugin-like architecture)
+        result = self.command_registry.execute(command)
+        if result is not None:
+            return result
+        
+        # If no command was found, try to execute as a line of code
+        return self.execute_line(command)
     
     def list_program(self):
         output = []
@@ -548,603 +570,24 @@ class CoCoBasic:
     
     
     
-    def evaluate_single_function(self, expr):
-        """Handle single function calls (when entire expression is one function)"""
-        expr = expr.strip()
-        
-        # Check if this is truly a single function call by verifying that it starts with
-        # a function name, has matching parentheses, and doesn't have extra content after
-        function_names = ['LEFT$', 'RIGHT$', 'MID$', 'LEN', 'ABS', 'INT', 'RND', 'SQR',
-                         'SIN', 'COS', 'TAN', 'ATN', 'EXP', 'LOG', 'CHR$', 'ASC', 'STR$', 'VAL']
-        
-        for func_name in function_names:
-            if expr.startswith(func_name + '('):
-                # Extract the full function call to see if it matches the entire expression
-                args_str = self.extract_function_args(expr, func_name)
-                if args_str is not None:
-                    # Reconstruct the expected function call
-                    expected = f"{func_name}({args_str})"
-                    if expr == expected:
-                        # This is indeed a single function call
-                        if func_name == 'LEFT$':
-                            return self.evaluate_left_function(expr)
-                        elif func_name == 'RIGHT$':
-                            return self.evaluate_right_function(expr)
-                        elif func_name == 'MID$':
-                            return self.evaluate_mid_function(expr)
-                        elif func_name == 'LEN':
-                            return self.evaluate_len_function(expr)
-                        elif func_name == 'ABS':
-                            return self.evaluate_abs_function(expr)
-                        elif func_name == 'INT':
-                            return self.evaluate_int_function(expr)
-                        elif func_name == 'RND':
-                            return self.evaluate_rnd_function(expr)
-                        elif func_name == 'SQR':
-                            return self.evaluate_sqr_function(expr)
-                        elif func_name == 'SIN':
-                            return self.evaluate_sin_function(expr)
-                        elif func_name == 'COS':
-                            return self.evaluate_cos_function(expr)
-                        elif func_name == 'TAN':
-                            return self.evaluate_tan_function(expr)
-                        elif func_name == 'ATN':
-                            return self.evaluate_atn_function(expr)
-                        elif func_name == 'EXP':
-                            return self.evaluate_exp_function(expr)
-                        elif func_name == 'LOG':
-                            return self.evaluate_log_function(expr)
-                        elif func_name == 'CHR$':
-                            return self.evaluate_chr_function(expr)
-                        elif func_name == 'ASC':
-                            return self.evaluate_asc_function(expr)
-                        elif func_name == 'STR$':
-                            return self.evaluate_str_function(expr)
-                        elif func_name == 'VAL':
-                            return self.evaluate_val_function(expr)
-        
-        # Special case for INKEY$ (with or without parentheses)
-        if expr == 'INKEY$' or re.match(r'INKEY\$\(\s*\)', expr):
-            return self.evaluate_inkey_function(expr)
-        
-        return None  # No single function match
     
-    def substitute_basic_functions(self, expr):
-        """Substitute BASIC function calls with their evaluated results"""
-        original_expr = expr
-        
-        # List of functions to substitute
-        functions = ['LEFT$', 'RIGHT$', 'MID$', 'LEN', 'ABS', 'INT', 'RND', 'SQR', 
-                    'SIN', 'COS', 'TAN', 'ATN', 'EXP', 'LOG', 'CHR$', 'ASC', 'STR$', 'VAL']
-        
-        # Keep substituting until no more functions found
-        changed = True
-        while changed:
-            changed = False
-            for func_name in functions:
-                # Find function calls and replace them
-                search_pattern = f'{func_name}('
-                pos = 0
-                while pos < len(expr):
-                    pos = expr.find(search_pattern, pos)
-                    if pos == -1:
-                        break
-                    
-                    # Find the matching closing parenthesis
-                    paren_count = 0
-                    start_pos = pos + len(search_pattern) - 1  # Position of opening parenthesis
-                    end_pos = -1
-                    
-                    for i in range(start_pos, len(expr)):
-                        if expr[i] == '(':
-                            paren_count += 1
-                        elif expr[i] == ')':
-                            paren_count -= 1
-                            if paren_count == 0:
-                                end_pos = i
-                                break
-                    
-                    if end_pos != -1:
-                        # Extract the complete function call
-                        func_call = expr[pos:end_pos + 1]
-                        try:
-                            # Evaluate the function call
-                            result = self.evaluate_single_function(func_call)
-                            if result is not None:
-                                # Replace the function call with its result
-                                if isinstance(result, str):
-                                    # For string results, wrap in quotes for eval
-                                    replacement = '"' + result.replace('"', '\\"') + '"'
-                                else:
-                                    replacement = str(result)
-                                expr = expr[:pos] + replacement + expr[end_pos + 1:]
-                                changed = True
-                                # Don't increment pos, re-scan from current position
-                                continue
-                        except:
-                            pass  # If function evaluation fails, leave it as-is
-                    
-                    pos += len(search_pattern)
-        
-        return expr
+    # All function evaluation now handled by ExpressionEvaluator
+    # Old function methods removed - see expressions.py and functions.py
     
     def evaluate_expression(self, expr):
-        expr = expr.strip()
-        original_expr = expr
-        
-        # First, check if the entire expression is a single function call
-        single_func_result = self.evaluate_single_function(expr)
-        if single_func_result is not None:
-            return single_func_result
-        
-        # For complex expressions, substitute BASIC functions first
-        expr = self.substitute_basic_functions(expr)
-        
-        # Check for simple array access only (entire expression is just array access)
-        array_match = re.match(r'^(\w+\$?)\(([^)]+)\)$', expr)
-        if array_match:
-            array_name = array_match.group(1)
-            indices_str = array_match.group(2)
-            
-            # Check if array exists
-            if array_name not in self.arrays:
-                raise ValueError(f"UNDIM'D ARRAY: {array_name}")
-            
-            # Parse indices
-            try:
-                indices = [int(self.evaluate_expression(idx.strip())) for idx in indices_str.split(',')]
-                
-                # Use VariableManager to get array element
-                value, error = self.variable_manager.get_array_element(array_name, indices)
-                if error:
-                    raise ValueError(error)
-                return value
-                
-            except ValueError as ve:
-                if "BAD SUBSCRIPT" in str(ve) or "UNDIM'D ARRAY" in str(ve):
-                    raise ve
-                raise ValueError("SYNTAX ERROR")
-        
-        # Handle string literals (only if it's a simple quoted string with no operators)
-        if expr.startswith('"') and expr.endswith('"') and expr.count('"') == 2:
-            # Check if there are any operators outside the quotes (indicating complex expression)
-            inner_content = expr[1:-1]
-            # If the inner content doesn't contain unescaped quotes, it's a simple string literal
-            if '"' not in inner_content.replace('\\"', ''):
-                return inner_content  # Return string without quotes
-        
-        # Check if this is a simple variable reference (case insensitive)
-        if re.match(r'^\w+\$?$', expr):
-            expr_upper = expr.upper()
-            if expr_upper in self.variables:
-                return self.variables[expr_upper]
-        
-        # Replace array accesses with their values for complex expressions
-        array_pattern = r'(\w+\$?)\(([^)]+)\)'
-        def replace_array_access(match):
-            array_name = match.group(1)
-            indices_str = match.group(2)
-            
-            # Check if array exists
-            if array_name not in self.arrays:
-                raise ValueError(f"UNDIM'D ARRAY: {array_name}")
-            
-            # Parse indices
-            try:
-                indices = [int(self.evaluate_expression(idx.strip())) for idx in indices_str.split(',')]
-                
-                # Use VariableManager to get array element
-                value, error = self.variable_manager.get_array_element(array_name, indices)
-                if error:
-                    raise ValueError(error)
-                
-                # Return the value, wrapped in quotes if it's a string
-                if isinstance(value, str):
-                    return '"' + value.replace('"', '\\"') + '"'
-                else:
-                    return str(value)
-                
-            except ValueError as ve:
-                if "BAD SUBSCRIPT" in str(ve) or "UNDIM'D ARRAY" in str(ve):
-                    raise ve
-                raise ValueError("SYNTAX ERROR")
-        
-        # Apply array access replacement
-        original_expr = expr
-        expr = re.sub(array_pattern, replace_array_access, expr)
-        
-        # Replace variables with their values for complex expressions (case insensitive)
-        for var, val in self.variables.items():
-            # Use word boundary for variables, but handle $ specially
-            if var.endswith('$'):
-                # For string variables ending in $, match word boundary before and non-alphanumeric after
-                pattern = r'\b' + re.escape(var) + r'(?![A-Za-z0-9_$])'
-            else:
-                # For numeric variables, use standard word boundaries
-                pattern = r'\b' + re.escape(var) + r'\b'
-            if re.search(pattern, expr, re.IGNORECASE):
-                if isinstance(val, str):
-                    # For string values, wrap in quotes for eval
-                    replacement = '"' + val.replace('"', '\\"') + '"'
-                else:
-                    replacement = str(val)
-                expr = re.sub(pattern, replacement, expr, flags=re.IGNORECASE)
-        
-        # Replace BASIC operators with Python equivalents
-        expr = expr.replace('<>', '!=')  # BASIC not-equal to Python not-equal
-        
-        # Simple evaluation (dangerous in real code, but OK for demo)
+        """Delegate expression evaluation to the ExpressionEvaluator"""
         try:
-            result = eval(expr)
-            return result
-        except ZeroDivisionError:
-            # Handle division by zero - in BASIC, this produces infinity and continues execution
-            return float('inf')  # Return positive infinity and continue execution
+            return self.expression_evaluator.evaluate(expr)
         except Exception as e:
-            raise ValueError(f"Invalid expression '{original_expr}': {e}")
-    
-    def evaluate_left_function(self, expr):
-        # LEFT$(string, n) - get leftmost n characters
-        args_str = self.extract_function_args(expr, 'LEFT$')
-        if args_str is None:
-            raise ValueError(f"Invalid LEFT$ function: {expr}")
-        
-        # Parse the comma-separated arguments with proper parentheses handling
-        args = self.parse_function_arguments(args_str, 2)
-        if len(args) != 2:
-            raise ValueError(f"LEFT$ requires exactly 2 arguments: {expr}")
-        
-        string_expr, n_expr = args
-        
-        # Evaluate the string and number parts
-        string_val = self.evaluate_expression(string_expr)
-        n_val = int(self.evaluate_expression(n_expr))
-        
-        result = str(string_val)[:n_val]
-        return result
-    
-    def evaluate_right_function(self, expr):
-        # RIGHT$(string, n) - get rightmost n characters
-        args_str = self.extract_function_args(expr, 'RIGHT$')
-        if args_str is None:
-            raise ValueError(f"Invalid RIGHT$ function: {expr}")
-        
-        # Parse the comma-separated arguments with proper parentheses handling
-        args = self.parse_function_arguments(args_str, 2)
-        if len(args) != 2:
-            raise ValueError(f"RIGHT$ requires exactly 2 arguments: {expr}")
-        
-        string_expr, n_expr = args
-        
-        # Evaluate the string and number parts
-        string_val = self.evaluate_expression(string_expr)
-        n_val = int(self.evaluate_expression(n_expr))
-        
-        result = str(string_val)[-n_val:] if n_val > 0 else ""
-        return result
-    
-    def evaluate_mid_function(self, expr):
-        # MID$(string, start, length) - get substring
-        args_str = self.extract_function_args(expr, 'MID$')
-        if args_str is None:
-            raise ValueError(f"Invalid MID$ function: {expr}")
-        
-        # Parse the comma-separated arguments with proper parentheses handling
-        args = self.parse_function_arguments(args_str, 3)
-        if len(args) < 2 or len(args) > 3:
-            raise ValueError(f"MID$ requires 2 or 3 arguments: {expr}")
-        
-        string_expr = args[0]
-        start_expr = args[1]
-        length_expr = args[2] if len(args) == 3 else None
-        
-        # Evaluate the parts
-        string_val = str(self.evaluate_expression(string_expr))
-        start_val = int(self.evaluate_expression(start_expr)) - 1  # BASIC is 1-based, Python is 0-based
-        
-        if length_expr:
-            length_val = int(self.evaluate_expression(length_expr))
-            result = string_val[start_val:start_val + length_val]
-        else:
-            result = string_val[start_val:]
-        
-        return result
-    
-    def extract_function_args(self, expr, func_name):
-        """Extract function arguments handling nested parentheses properly"""
-        prefix = f"{func_name}("
-        if not expr.startswith(prefix):
-            return None
-        
-        # Find the matching closing parenthesis
-        paren_count = 0
-        start_pos = len(prefix) - 1  # Start at the opening parenthesis
-        
-        for i, char in enumerate(expr[start_pos:], start_pos):
-            if char == '(':
-                paren_count += 1
-            elif char == ')':
-                paren_count -= 1
-                if paren_count == 0:
-                    # Found the matching closing parenthesis
-                    args_str = expr[len(prefix):i]
-                    return args_str.strip()
-        
-        return None  # No matching parenthesis found
-    
-    def parse_function_arguments(self, args_str, expected_count):
-        """Parse comma-separated function arguments handling nested parentheses"""
-        if not args_str.strip():
-            return []
-        
-        args = []
-        current_arg = ""
-        paren_count = 0
-        
-        for char in args_str:
-            if char == ',' and paren_count == 0:
-                # Found argument separator at top level
-                args.append(current_arg.strip())
-                current_arg = ""
-            else:
-                if char == '(':
-                    paren_count += 1
-                elif char == ')':
-                    paren_count -= 1
-                current_arg += char
-        
-        # Add the last argument
-        if current_arg.strip():
-            args.append(current_arg.strip())
-        
-        return args
-    
-    def evaluate_len_function(self, expr):
-        # LEN(string) - get length of string
-        args_str = self.extract_function_args(expr, 'LEN')
-        if args_str is None:
-            raise ValueError(f"Invalid LEN function: {expr}")
-        
-        string_val = str(self.evaluate_expression(args_str))
-        return len(string_val)
-    
-    def evaluate_abs_function(self, expr):
-        # ABS(number) - absolute value
-        args_str = self.extract_function_args(expr, 'ABS')
-        if args_str is None:
-            raise ValueError(f"Invalid ABS function: {expr}")
-        
-        num_val = float(self.evaluate_expression(args_str))
-        return abs(num_val)
-    
-    def evaluate_int_function(self, expr):
-        # INT(number) - integer part (floor)
-        args_str = self.extract_function_args(expr, 'INT')
-        if args_str is None:
-            raise ValueError(f"Invalid INT function: {expr}")
-        
-        num_val = float(self.evaluate_expression(args_str))
-        return int(num_val)
-    
-    def evaluate_rnd_function(self, expr):
-        # RND(n) - random number
-        import random
-        args_str = self.extract_function_args(expr, 'RND')
-        if args_str is None:
-            raise ValueError(f"Invalid RND function: {expr}")
-        
-        num_val = float(self.evaluate_expression(args_str))
-        
-        if num_val > 0:
-            return random.random()  # 0 to 1
-        elif num_val == 0:
-            return random.random()  # same as positive
-        else:
-            # Negative repeats last random number (simplified)
-            return random.random()
-    
-    def evaluate_sqr_function(self, expr):
-        # SQR(number) - square root
-        import math
-        args_str = self.extract_function_args(expr, 'SQR')
-        if args_str is None:
-            raise ValueError(f"Invalid SQR function: {expr}")
-        
-        num_val = float(self.evaluate_expression(args_str))
-        
-        if num_val < 0:
-            raise ValueError("SQR of negative number")
-        
-        return math.sqrt(num_val)
-    
-    def evaluate_sin_function(self, expr):
-        # SIN(radians) - sine
-        import math
-        args_str = self.extract_function_args(expr, 'SIN')
-        if args_str is None:
-            raise ValueError(f"Invalid SIN function: {expr}")
-        
-        num_val = float(self.evaluate_expression(args_str))
-        return math.sin(num_val)
-    
-    def evaluate_cos_function(self, expr):
-        # COS(radians) - cosine
-        import math
-        args_str = self.extract_function_args(expr, 'COS')
-        if args_str is None:
-            raise ValueError(f"Invalid COS function: {expr}")
-        
-        num_val = float(self.evaluate_expression(args_str))
-        return math.cos(num_val)
-    
-    def evaluate_tan_function(self, expr):
-        # TAN(radians) - tangent
-        import math
-        args_str = self.extract_function_args(expr, 'TAN')
-        if args_str is None:
-            raise ValueError(f"Invalid TAN function: {expr}")
-        
-        num_val = float(self.evaluate_expression(args_str))
-        return math.tan(num_val)
-    
-    def evaluate_atn_function(self, expr):
-        # ATN(number) - arctangent
-        import math
-        args_str = self.extract_function_args(expr, 'ATN')
-        if args_str is None:
-            raise ValueError(f"Invalid ATN function: {expr}")
-        
-        num_val = float(self.evaluate_expression(args_str))
-        return math.atan(num_val)
-    
-    def evaluate_exp_function(self, expr):
-        # EXP(number) - e raised to the power
-        import math
-        args_str = self.extract_function_args(expr, 'EXP')
-        if args_str is None:
-            raise ValueError(f"Invalid EXP function: {expr}")
-        
-        num_val = float(self.evaluate_expression(args_str))
-        return math.exp(num_val)
-    
-    def evaluate_log_function(self, expr):
-        # LOG(number) - natural logarithm
-        import math
-        args_str = self.extract_function_args(expr, 'LOG')
-        if args_str is None:
-            raise ValueError(f"Invalid LOG function: {expr}")
-        
-        num_val = float(self.evaluate_expression(args_str))
-        
-        if num_val <= 0:
-            raise ValueError("LOG of zero or negative number")
-        
-        return math.log(num_val)
-    
-    def evaluate_chr_function(self, expr):
-        # CHR$(n) - character from ASCII code
-        args_str = self.extract_function_args(expr, 'CHR$')
-        if args_str is None:
-            raise ValueError(f"Invalid CHR$ function: {expr}")
-        
-        num_val = int(self.evaluate_expression(args_str))
-        
-        if num_val < 0 or num_val > 255:
-            raise ValueError("CHR$ argument out of range")
-        
-        return chr(num_val)
-    
-    def evaluate_asc_function(self, expr):
-        # ASC(string) - ASCII code of first character
-        args_str = self.extract_function_args(expr, 'ASC')
-        if args_str is None:
-            raise ValueError(f"Invalid ASC function: {expr}")
-        
-        string_val = str(self.evaluate_expression(args_str))
-        
-        if len(string_val) == 0:
-            raise ValueError("ASC of empty string")
-        
-        return ord(string_val[0])
-    
-    def evaluate_str_function(self, expr):
-        # STR$(number) - convert number to string
-        args_str = self.extract_function_args(expr, 'STR$')
-        if args_str is None:
-            raise ValueError(f"Invalid STR$ function: {expr}")
-        
-        num_val = self.evaluate_expression(args_str)
-        
-        # Format like BASIC does - with leading space for positive numbers
-        if isinstance(num_val, int):
-            return f" {num_val}" if num_val >= 0 else str(num_val)
-        else:
-            return f" {num_val}" if num_val >= 0 else str(num_val)
-    
-    def evaluate_val_function(self, expr):
-        # VAL(string) - convert string to number
-        args_str = self.extract_function_args(expr, 'VAL')
-        if args_str is None:
-            raise ValueError(f"Invalid VAL function: {expr}")
-        
-        string_val = str(self.evaluate_expression(args_str)).strip()
-        
-        try:
-            # Try to parse as integer first, then float
-            if '.' in string_val or 'E' in string_val.upper():
-                return float(string_val)
-            else:
-                return int(string_val)
-        except ValueError:
-            # Return 0 if cannot parse (BASIC behavior)
-            return 0
-    
-    def evaluate_simple_expression(self, expr):
-        # Simple expression evaluation without recursion into string functions
-        expr = expr.strip()
-        
-        # Handle string literals
-        if expr.startswith('"') and expr.endswith('"'):
-            return expr[1:-1]  # Return string without quotes
-        
-        # Check for array access (A(5) or B$(2,3))
-        array_match = re.match(r'(\w+\$?)\(([^)]+)\)', expr)
-        if array_match:
-            array_name = array_match.group(1).upper()
-            indices_str = array_match.group(2)
-            
-            # Parse indices
-            try:
-                indices = [int(self.evaluate_expression(idx.strip())) for idx in indices_str.split(',')]
-                
-                # Use VariableManager to get array element
-                value, error = self.variable_manager.get_array_element(array_name, indices)
-                if error:
-                    raise ValueError(error)
-                
-                return value
-                
-            except ValueError as ve:
-                if "BAD SUBSCRIPT" in str(ve) or "UNDIM'D ARRAY" in str(ve):
-                    raise ve
-                raise ValueError("SYNTAX ERROR")
-        
-        # Handle variables
-        if expr in self.variables:
-            return self.variables[expr]
-        
-        # Handle numbers
-        try:
-            if '.' in expr:
-                return float(expr)
-            else:
-                return int(expr)
-        except ValueError:
-            pass
-        
-        # Replace variables with their values for mathematical expressions
-        original_expr = expr
-        for var, val in self.variables.items():
-            if var in expr:
-                expr = re.sub(r'\b' + re.escape(var) + r'\b', str(val), expr)
-        
-        # Evaluate mathematical expressions
-        try:
-            result = eval(expr)
-            return result
-        except ZeroDivisionError:
-            # Handle division by zero - in BASIC, this produces infinity and continues execution
-            # We need to signal this error while allowing execution to continue
-            # For now, return infinity - the calling context should handle the error display
-            return float('inf')  # Return positive infinity and continue execution
-        except Exception as e:
-            raise ValueError(f"Invalid simple expression '{original_expr}': {e}")
-    
+            # For backward compatibility, handle errors the same way
+            raise ValueError(str(e))
+
     def execute_for(self, args):
         # FOR I=1 TO 10 [STEP 1] - handle colons properly
         args = args.split(':')[0].strip()  # Remove colon and everything after
         
-        match = re.match(r'(\w+)\s*=\s*([^TO\s]+)\s+TO\s+([^STEP\s:]+)(?:\s+STEP\s+([^:\s]+))?', args)
+        # Better pattern that looks for the word TO, not individual letters
+        match = re.match(r'(\w+)\s*=\s*(.+?)\s+TO\s+(.+?)(?:\s+STEP\s+(.+?))?$', args, re.IGNORECASE)
         if not match:
             return [{'type': 'error', 'message': 'SYNTAX ERROR'}]
         
@@ -1748,31 +1191,163 @@ class CoCoBasic:
         self.variable_manager.register_commands(self.command_registry)
         self.io_handler.register_commands(self.command_registry)
         
-        # Core commands - control flow and system commands
-        self.command_registry.register('IF', self.execute_if)
-        self.command_registry.register('GOTO', self.execute_goto)
-        self.command_registry.register('GOSUB', self.execute_gosub) 
-        self.command_registry.register('RETURN', self.execute_return)
-        self.command_registry.register('FOR', self.execute_for)
-        self.command_registry.register('NEXT', self.execute_next)
-        self.command_registry.register('STOP', self.execute_end)
-        self.command_registry.register('END', self.execute_end)
-        self.command_registry.register('CONT', self.execute_cont)
+        # Core commands - control flow
+        self.command_registry.register('IF', self.execute_if, 
+                                     category='control',
+                                     description="Conditional execution of statements",
+                                     syntax="IF condition THEN statement [ELSE statement]",
+                                     examples=["IF A > 5 THEN PRINT \"BIG\"", "IF X = 0 THEN GOTO 100 ELSE PRINT X"])
+        
+        self.command_registry.register('GOTO', self.execute_goto,
+                                     category='control', 
+                                     description="Jump to specified line number",
+                                     syntax="GOTO line_number",
+                                     examples=["GOTO 100", "GOTO START_LINE"])
+        
+        self.command_registry.register('GOSUB', self.execute_gosub,
+                                     category='control',
+                                     description="Call subroutine at specified line",
+                                     syntax="GOSUB line_number", 
+                                     examples=["GOSUB 1000", "GOSUB SUBROUTINE_LINE"])
+        
+        self.command_registry.register('RETURN', self.execute_return,
+                                     category='control',
+                                     description="Return from subroutine",
+                                     syntax="RETURN",
+                                     examples=["RETURN"])
+        
+        self.command_registry.register('FOR', self.execute_for,
+                                     category='control',
+                                     description="Begin FOR loop with counter variable",
+                                     syntax="FOR variable = start TO end [STEP increment]",
+                                     examples=["FOR I = 1 TO 10", "FOR X = 0 TO 100 STEP 5"])
+        
+        self.command_registry.register('NEXT', self.execute_next,
+                                     category='control', 
+                                     description="End FOR loop and increment counter",
+                                     syntax="NEXT [variable]",
+                                     examples=["NEXT", "NEXT I", "NEXT X"])
+        
+        self.command_registry.register('STOP', self.execute_end,
+                                     category='control',
+                                     description="Stop program execution",
+                                     syntax="STOP",
+                                     examples=["STOP"])
+        
+        self.command_registry.register('END', self.execute_end,
+                                     category='control',
+                                     description="End program execution", 
+                                     syntax="END",
+                                     examples=["END"])
+        
+        self.command_registry.register('CONT', self.execute_cont,
+                                     category='system',
+                                     description="Continue program after STOP",
+                                     syntax="CONT",
+                                     examples=["CONT"])
         
         # Data commands
-        self.command_registry.register('DATA', self.execute_data)
-        self.command_registry.register('READ', self.execute_read)
-        self.command_registry.register('RESTORE', self.execute_restore)
+        self.command_registry.register('DATA', self.execute_data,
+                                     category='data',
+                                     description="Define data values for READ statements",
+                                     syntax="DATA value1, value2, ...",
+                                     examples=["DATA 10, 20, 30", "DATA \"HELLO\", \"WORLD\""])
+        
+        self.command_registry.register('READ', self.execute_read,
+                                     category='data', 
+                                     description="Read data values into variables",
+                                     syntax="READ variable1, variable2, ...",
+                                     examples=["READ A, B, C", "read NAME$, AGE"])
+        
+        self.command_registry.register('RESTORE', self.execute_restore,
+                                     category='data',
+                                     description="Reset DATA pointer to beginning",
+                                     syntax="RESTORE",
+                                     examples=["RESTORE"])
         
         # System commands
-        self.command_registry.register('CLS', lambda args: [{'type': 'clear_screen'}])
-        self.command_registry.register('NEW', lambda args: self.execute_new())
-        self.command_registry.register('SOUND', self.execute_sound)
-        self.command_registry.register('PAUSE', self.execute_pause)
+        self.command_registry.register('CLS', lambda args: [{'type': 'clear_screen'}],
+                                     category='system',
+                                     description="Clear the screen",
+                                     syntax="CLS",
+                                     examples=["CLS"])
+        
+        self.command_registry.register('NEW', lambda args: self.execute_new(),
+                                     category='system',
+                                     description="Clear program and variables",
+                                     syntax="NEW",
+                                     examples=["NEW"])
+        
+        self.command_registry.register('SOUND', self.execute_sound,
+                                     category='system',
+                                     description="Generate sound tones",
+                                     syntax="SOUND tone, duration",
+                                     examples=["SOUND 440, 100", "SOUND 220, 50"])
+        
+        self.command_registry.register('PAUSE', self.execute_pause,
+                                     category='system',
+                                     description="Pause execution for specified time",
+                                     syntax="PAUSE duration",
+                                     examples=["PAUSE 1000", "PAUSE 500"])
+        
+        # Program management commands
+        self.command_registry.register('LIST', lambda args: self.list_program(),
+                                     category='system',
+                                     description="List program lines",
+                                     syntax="LIST",
+                                     examples=["LIST"])
+        
+        self.command_registry.register('RUN', lambda args: self.run_program(),
+                                     category='system',
+                                     description="Execute the program",
+                                     syntax="RUN",
+                                     examples=["RUN"])
+        
+        self.command_registry.register('CLEAR', lambda args: self.clear_program(),
+                                     category='system',
+                                     description="Clear program and variables",
+                                     syntax="CLEAR",
+                                     examples=["CLEAR"])
+        
+        self.command_registry.register('LOAD', self.load_program,
+                                     category='system',
+                                     description="Load program from file",
+                                     syntax="LOAD \"filename\"",
+                                     examples=["LOAD \"DEMO.BAS\"", "LOAD \"programs/game.bas\""])
         
         # Comments
-        self.command_registry.register('REM', lambda args: [])
-        self.command_registry.register("'", lambda args: [])
+        self.command_registry.register('REM', lambda args: [],
+                                     category='system',
+                                     description="Add remark/comment (ignored)",
+                                     syntax="REM comment text",
+                                     examples=["REM This is a comment", "REM TODO: Fix this later"])
+        
+        self.command_registry.register("'", lambda args: [],
+                                     category='system',
+                                     description="Add remark/comment (short form)",
+                                     syntax="' comment text", 
+                                     examples=["' This is a comment", "' Variables: A=5, B=10"])
+        
+        # Help system
+        self.command_registry.register('HELP', self.execute_help,
+                                     category='system',
+                                     description="Show help for commands",
+                                     syntax="HELP [command]",
+                                     examples=["HELP", "HELP PRINT", "HELP FOR"])
+    
+    def execute_help(self, args):
+        """Execute HELP command to show command information"""
+        args = args.strip()
+        
+        # Generate help using the command registry
+        help_lines = self.command_registry.generate_help(args if args else None)
+        
+        # Convert to output format
+        output = []
+        for line in help_lines:
+            output.append({'type': 'text', 'text': line})
+        
+        return output
     
     def execute_assignment(self, args):
         """Handle variable assignment through LET or direct assignment"""

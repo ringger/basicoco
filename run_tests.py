@@ -73,6 +73,10 @@ class TestDiscovery:
             if file_path.name in ['test_base.py', 'run_tests.py']:
                 continue  # Skip framework files
                 
+            # Skip development test scripts (they're for manual use)
+            if 'dev_tests' in str(file_path):
+                continue
+                
             module = self.load_test_module(file_path)
             if not module:
                 continue

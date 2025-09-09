@@ -1,72 +1,57 @@
-# TRS-80 Color Computer BASIC Emulator - Development Guide
+# TRS-80 Color Computer BASIC Emulator - Forward Development Roadmap
 
-## Current Status ✅ (January 2025)
+## Current Status: Production Ready ✅
+**Phase 1.6 Complete**: 339 tests, 100% success rate - Advanced modular architecture with comprehensive test coverage
 
-**Production Ready**: 229/229 tests passing (100% success rate)  
-**Advanced CLI Client**: Full-featured terminal interface with real-time streaming  
-**Real-time Architecture**: Streaming output during program execution  
-**Enhanced I/O**: LOAD command, PAUSE timing, and inline animations  
-**Modular Architecture**: Clean separation of concerns across specialized modules  
+**Recent Achievements**: Complete BASIC language implementation, real-time streaming CLI client, advanced graphics engine, comprehensive I/O system, and robust architectural foundation. See README.md and recent commits for details.
 
-## Recent Major Achievements 🚀
+## Forward Development Priorities 🎯
 
-### ✅ **Phase 1 Complete: Advanced CLI Client**
-- **Standalone Terminal Interface** - `cli_client.py` with Socket.IO connection
-- **Real-time Streaming Output** - Programs display output as they execute  
-- **Command History & Editing** - Full readline support with tab completion
-- **Program Management** - LOAD command with smart file discovery
-- **Animation Support** - Carriage return (CHR$(13)) and inline PRINT
-- **Modern Timing Control** - PAUSE command for precise animation timing
+*This roadmap focuses on future enhancements. Current capabilities and recent achievements are documented in README.md.*
 
-### ✅ **Enhanced Architecture Features**
-- **Streaming Callback System** - Real-time output emission during program execution
-- **Clean Output Filtering** - Proper "OK" message handling (direct vs program mode)
-- **Programs Directory** - Organized file management with `programs/` subdirectory
-- **Inline Text Support** - Same-line updates for smooth animations
-
-## Forward-Looking Development Priorities 🎯
-
-### Phase 2: Next Priority - Advanced String Processing & Expression Enhancement
-- **Nested Function Calls** 
+### Phase 2: Advanced String Processing & Expression Enhancement (NEXT PRIORITY)
+- **Enhanced Nested Function Calls** 
   - Complete implementation for complex expressions like `MID$(STR$(INT(SQR(16))), 1, 2)`
   - Enhanced parser support for deeply nested function compositions
   - Proper precedence and evaluation order for nested operations
-  - Addresses TODO in `emulator/parser.py`
-- **INSTR** - Find substring position within string
-  - Implementation: `INSTR(string$, search$)` returns position (1-based) or 0 if not found
-  - Usage: `POS = INSTR("HELLO WORLD", "WORLD")` returns 7
-- **SPACE$** - Generate string of spaces
-  - Implementation: `SPACE$(n)` returns string with n spaces
-  - Usage: `PRINT "A" + SPACE$(5) + "B"` produces "A     B"
-- **STRING$** - Generate string of repeated characters
-  - Implementation: `STRING$(n, char$)` or `STRING$(n, ascii_code)`
-  - Usage: `PRINT STRING$(10, "*")` produces "**********"
+  - Addresses remaining TODOs in parser for complex expression handling
+- **Missing String Functions**
+  - **INSTR** - Find substring position: `INSTR("HELLO WORLD", "WORLD")` returns 7
+  - **SPACE$** - Generate spaces: `SPACE$(5)` returns "     "
+  - **STRING$** - Repeat characters: `STRING$(10, "*")` produces "**********"
+- **Expression Parser Improvements**
+  - Better handling of complex mathematical expressions with multiple operators
+  - Improved parentheses nesting for function calls within expressions
+  - Enhanced error reporting for malformed nested expressions
 
 ### Phase 3: Enhanced Control Flow & Program Structure
 - **Multi-line IF/THEN/ELSE Implementation**
-  - Multi-line IF/THEN/ELSE/ENDIF structures
-  - Nested conditional support with proper indentation
+  - Multi-line IF/THEN/ELSE/ENDIF structures (single-line IF/THEN with colons is complete)
+  - Nested conditional support with proper indentation and scope management
   - Enhanced condition evaluation with complex expressions
 - **Advanced Loop Controls**
-  - EXIT FOR statement for early loop termination
-  - WHILE/WEND loops for condition-based iteration
-  - DO/LOOP with UNTIL and WHILE variants
+  - **EXIT FOR** - Early loop termination statement
+  - **WHILE/WEND** - Condition-based loops for flexible iteration
+  - **DO/LOOP** - Modern loop variants with UNTIL and WHILE conditions
+- **Enhanced Program Flow**
+  - Better program counter management for complex nested structures
+  - Improved error handling within nested control blocks
 
 ### Phase 4: Enhanced CLI Client Features
-- **Extended Program Management**
-  - SAVE command to write programs back to files
-  - FILES command to list available programs in directories
-  - KILL command to delete program files
-  - Directory navigation and management
-- **CLI Client Enhancements**
-  - Syntax highlighting for program entry
-  - Line number auto-generation and editing
-  - Copy/paste improvements for multi-line programs
-  - Session history and program bookmarking
+- **Extended Program Management** (LOAD is complete)
+  - **SAVE** - Write programs back to files with automatic .bas extension
+  - **FILES** - List available programs in current and programs/ directories  
+  - **KILL** - Delete program files with confirmation prompts
+  - **Directory navigation** - CD command for changing directories
+- **CLI Client Enhancements** (real-time streaming and readline support complete)
+  - **Syntax highlighting** - Color-coded BASIC keywords during program entry
+  - **Line number auto-generation** - Smart line numbering and editing
+  - **Multi-line editing** - Improved copy/paste for program blocks
+  - **Session history** - Program bookmarking and recent file access
 - **Debug and Development Tools**
-  - TRACE ON/OFF for step-by-step execution in CLI
-  - Variable watch windows during program execution  
-  - Breakpoint support for interactive debugging
+  - **TRACE ON/OFF** - Step-by-step execution with variable display
+  - **Variable watch windows** - Real-time variable monitoring during execution  
+  - **Breakpoint support** - Interactive debugging with pause/continue
 
 ### Phase 5: Advanced System Functions & Memory Simulation
 - **Authentic Memory Access**
@@ -81,21 +66,20 @@
   - RANDOMIZE [seed] - Initialize random seed with better distribution
 
 ### Phase 6: Complete File System Integration
-- **Enhanced Web Storage**
-  - SAVE "filename" - Save program to browser localStorage (complement to existing LOAD)
-  - Advanced file management in web interface
-  - Program versioning and backup systems
-- **Filesystem Integration**
-  - Server-side program caching: Mirror web storage to UNIX filesystem
-  - Repository integration: Save programs to `programs/` directory for version control
-  - Backup and restore: Automatic filesystem backup of user programs
-  - Cross-session persistence: Programs survive server restarts and browser clearing
-  - Export functionality: Download programs as `.BAS` files directly to user's filesystem
-- **Data File Operations**
-  - OPEN "filename" FOR INPUT/OUTPUT AS #n
-  - PRINT #n, data - Write to file
-  - INPUT #n, variable - Read from file
-  - CLOSE #n - Close file
+- **Enhanced Web Storage** (basic LOAD is complete)
+  - **Web SAVE** - Save programs to browser localStorage with auto-sync
+  - **Advanced file management** - Organize, rename, delete programs in web interface
+  - **Program versioning** - Automatic backup and restore points
+- **Cross-Platform Persistence**
+  - **Server-side mirroring** - Sync web storage to filesystem for persistence
+  - **Repository integration** - Auto-commit programs to version control
+  - **Export/Import** - Download/upload .BAS files between web and desktop
+  - **Cross-session survival** - Programs persist through server restarts
+- **Data File Operations** (sequential file I/O)
+  - **OPEN "filename" FOR INPUT/OUTPUT AS #n** - File handle management
+  - **PRINT #n, data** - Write structured data to files
+  - **INPUT #n, variable** - Read data from files with type conversion
+  - **CLOSE #n** - Proper file handle cleanup
 
 ### Phase 7: Advanced Error Handling & Recovery
 - **Structured Error Handling**
@@ -297,43 +281,8 @@
   - XSS protection for user programs
   - Safe evaluation of user expressions
 
-## Current Architecture Status 🏗️
+## Important Development Notes
 
-**Completed Architecture** (January 2025):
-- ✅ **Advanced Modular Design**: Clean separation with streaming architecture
-- ✅ **Enhanced Core Interpreter** (`emulator/core.py`): Real-time streaming with callback system
-- ✅ **Advanced Parser** (`emulator/parser.py`): Parentheses-aware expression evaluation
-- ✅ **Graphics Engine** (`emulator/graphics.py`): Complete MC6847 VDG emulation
-- ✅ **Enhanced Variable Manager** (`emulator/variables.py`): Context-aware output filtering
-- ✅ **Advanced I/O System** (`emulator/io.py`): Inline PRINT, carriage return, and timing control
-- ✅ **Dual Interface Architecture**: Web and CLI clients with real-time streaming
-- ✅ **Production CLI Client** (`cli_client.py`): Full-featured terminal interface
-- ✅ **Program Management System**: LOAD command with intelligent file discovery
-- ✅ **Real-time Streaming Infrastructure**: Live output during program execution
-- ✅ **Comprehensive Testing**: 229/229 tests with 100% success rate
-
-## Key Architectural Innovations Achieved 🌟
-
-### **Real-time Streaming Architecture**
-The emulator now features a sophisticated callback-based streaming system that emits output immediately during program execution, enabling:
-- Live animations with precise timing control (PAUSE command)
-- Interactive programs with immediate feedback
-- Smooth terminal experience matching modern expectations
-- Educational debugging with real-time program flow visualization
-
-### **Dual-Interface Design**  
-Both web and CLI interfaces share the same core engine while providing interface-specific optimizations:
-- Web interface: Rich graphics, mouse interaction, HTML5 canvas
-- CLI interface: Terminal-native experience, keyboard shortcuts, real-time streaming
-- Unified command processing with context-aware output filtering
-
-### **Intelligent Program Management**
-The LOAD command system demonstrates smart file discovery and educational workflow support:
-- Automatic .bas extension handling
-- Multi-directory search (current, programs/, project root)
-- Clean error handling with educational feedback
-- Foundation for expanded file operations (SAVE, FILES, KILL)
-
----
-
-**Next Development Focus**: With the foundational streaming architecture and CLI client complete, development can focus on enhanced language features (Phase 2: String processing) and advanced educational tools (Phase 4: CLI debugging features). The robust architecture now supports rapid feature development while maintaining the 100% test success rate.
+- Always activate the virtual environment before running Python: `source venv/bin/activate`
+- When running tests, let them run to completion instead of timing out
+- Backend server (`python app.py`) can be managed manually in a separate terminal for better control during CLI experimentation
