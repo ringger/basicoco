@@ -27,7 +27,8 @@ A comprehensive TRS-80 Color Computer BASIC interpreter with revolutionary dual 
 - **Drawing Commands**: PSET, PRESET, LINE, CIRCLE with dual syntax support
 - **Advanced Graphics**: PAINT (flood fill), GET/PUT (sprite operations), DRAW (turtle graphics)
 - **Color Support**: Authentic 9-color Color Computer palette
-- **Sound**: SOUND command with Web Audio API
+- **Dynamic Sound**: SOUND command with Web Audio API and position-based frequency modulation
+- **Audio Effects**: Real-time tone generation with reflection-triggered sound inflection
 
 ### Interactive Features
 - **Dual Monitor Mode**: Revolutionary split-screen interface with persistent REPL and dedicated graphics display
@@ -239,6 +240,7 @@ trs80/
 ├── programs/             # BASIC program files directory
 │   ├── README.md         # Program directory documentation
 │   ├── bounce_realtime.bas # Real-time bouncing star animation
+│   ├── qix_beam.bas      # Qix-style bouncing beam with dynamic sound
 │   └── test_streaming.bas  # Streaming output test program
 ├── templates/
 │   └── dual_monitor.html # Primary web interface
@@ -262,6 +264,28 @@ trs80/
 ```
 
 ## 🚀 Recent Enhancements
+
+### Latest Update: Dynamic Sound and Interactive Graphics (September 2025) 🎵
+**🎯 Enhanced Audio-Visual Experience: Qix-style bouncing beam with real-time positional audio**
+
+- **🎮 Qix-Style Graphics Demo**: Complete implementation of classic Qix-style bouncing color beam
+  - **Dynamic Trail Effects**: Elegant line fading showing only the last 25 beam segments
+  - **Color Cycling**: Gradual color transitions creating rainbow effects over time
+  - **Authentic Physics**: Proper angle of incidence = angle of reflection bouncing mechanics
+  - **Dual-Point Animation**: Two independently bouncing endpoints creating complex geometric patterns
+
+- **🎵 Revolutionary Sound Integration**: Position-based dynamic audio generation
+  - **Positional Sound**: Frequencies modulated by X,Y coordinates creating spatial audio effects
+  - **Phase Sweeping**: Continuous RF phase modulation creating authentic 8-bit sound aesthetics
+  - **Reflection Audio**: Distinct high-frequency "pings" triggered at wall collisions
+  - **Multi-Point Audio**: Different frequencies for each bouncing point creating rich soundscapes
+  - **INKEY$ Integration**: Seamless program termination with proper audio cleanup
+
+- **🎨 8-Bit Aesthetic**: Authentic retro computing experience with modern enhancements
+  - **Classic Sound Design**: Position-based frequency modulation mimicking vintage arcade games  
+  - **Visual Effects**: Smooth color transitions and trail effects creating mesmerizing displays
+  - **Interactive Control**: Real-time keyboard input for program control during execution
+  - **Educational Value**: Demonstrates physics, mathematics, and audio programming concepts
 
 ### Phase 2.0 Complete: Revolutionary Dual Monitor Interface ✨
 **🎯 Major Milestone: World's first web-based dual monitor TRS-80 Color Computer BASIC environment**
@@ -451,6 +475,16 @@ This emulator is perfect for:
 
 ## 🎓 Example Programs
 
+### Qix-Style Bouncing Beam with Dynamic Sound
+```basic
+# Load and run the included Qix demo with positional audio:
+LOAD "qix_beam"
+SAFETY OFF      # Allow unlimited iterations for smooth animation
+RUN
+# Features: Dynamic color cycling, trail effects, position-based sound
+# Press any key to stop the animation
+```
+
 ### Graphics Demo
 ```basic
 10 PMODE 1, 1: PCLS
@@ -459,6 +493,21 @@ This emulator is perfect for:
 40 C = RND(4) + 1
 50 CIRCLE X, Y, RND(20) + 5, C
 60 NEXT I
+RUN
+```
+
+### Sound and Graphics Animation
+```basic
+10 PMODE 4,1: SCREEN 1,1: PCLS
+20 FOR A = 0 TO 360 STEP 10
+30 X = 160 + 100 * COS(A * 3.14159 / 180)
+40 Y = 96 + 60 * SIN(A * 3.14159 / 180)  
+50 C = INT(A / 45) MOD 8 + 1
+60 PSET(X,Y),C
+70 F = 200 + A * 2  # Position-based frequency
+80 SOUND F, 5       # Dynamic sound effect
+90 PAUSE 0.1
+100 NEXT A
 RUN
 ```
 

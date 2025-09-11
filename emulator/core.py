@@ -45,6 +45,7 @@ class CoCoBasic:
         self.screen_mode = 1    # Screen/color mode
         self.iteration_count = 0  # Safety counter for infinite loops
         self.max_iterations = 50000  # Maximum iterations to prevent infinite loops
+        self.safety_enabled = True  # Enable/disable iteration safety
         self.waiting_for_input = False  # Flag to indicate we're waiting for user input
         self.waiting_for_pause_continuation = False  # Flag for pause continuation
         self.pause_duration = 0  # Duration of current pause
@@ -226,9 +227,8 @@ class CoCoBasic:
             
             filename = found_file
             
-            # Clear current program
-            self.program.clear()
-            self.expanded_program.clear()
+            # Clear current program and interpreter state
+            self.clear_interpreter_state(clear_program=True)
             
             # Load and parse the file
             with open(filename, 'r') as f:
@@ -610,6 +610,9 @@ class CoCoBasic:
             )
             return [{'type': 'error', 'message': error.format_detailed()}]
         
+        # Clear variables and arrays but keep program (like authentic BASIC)
+        self.clear_interpreter_state(clear_program=False)
+        
         output = []
         self.running = True
         self.iteration_count = 0
@@ -635,11 +638,12 @@ class CoCoBasic:
         
         while current_pos_index < len(all_positions) and self.running:
             # Safety check for infinite loops
-            self.iteration_count += 1
-            if self.iteration_count > self.max_iterations:
-                output.append({'type': 'error', 'message': 'PROGRAM STOPPED - TOO MANY ITERATIONS'})
-                self.running = False
-                break
+            if self.safety_enabled:
+                self.iteration_count += 1
+                if self.iteration_count > self.max_iterations:
+                    output.append({'type': 'error', 'message': 'PROGRAM STOPPED - TOO MANY ITERATIONS'})
+                    self.running = False
+                    break
             
             # Get current position and statement
             line_num, sub_index = all_positions[current_pos_index]
@@ -915,11 +919,12 @@ class CoCoBasic:
         
         while current_pos_index < len(all_positions) and self.running:
             # Safety check for infinite loops
-            self.iteration_count += 1
-            if self.iteration_count > self.max_iterations:
-                output.append({'type': 'error', 'message': 'PROGRAM STOPPED - TOO MANY ITERATIONS'})
-                self.running = False
-                break
+            if self.safety_enabled:
+                self.iteration_count += 1
+                if self.iteration_count > self.max_iterations:
+                    output.append({'type': 'error', 'message': 'PROGRAM STOPPED - TOO MANY ITERATIONS'})
+                    self.running = False
+                    break
             
             # Get current position and statement
             line_num, sub_index = all_positions[current_pos_index]
@@ -1540,10 +1545,12 @@ class CoCoBasic:
             # Return proper error without masking the exception
             return [{'type': 'error', 'message': f'PAUSE command error: {type(e).__name__}: {e}'}]
     
-    def execute_new(self):
-        # NEW command - clear program and variables
-        self.program.clear()
-        self.expanded_program.clear()
+    def clear_interpreter_state(self, clear_program=True):
+        """Clear interpreter state - shared function for NEW, LOAD, and other commands"""
+        if clear_program:
+            self.program.clear()
+            self.expanded_program.clear()
+        
         self.variables.clear()
         self.arrays.clear()  # Clear all dimensioned arrays
         self.for_stack.clear()
@@ -1559,6 +1566,17 @@ class CoCoBasic:
         
         # Clear multi-variable INPUT state
         self.input_variables = None
+        self.input_prompt = None
+        self.current_input_index = 0
+        self.current_line = 0
+        self.current_sub_line = 0
+        self.iteration_count = 0
+        self.keyboard_buffer.clear()  # Clear keyboard buffer
+        self.graphics_mode = 0  # Reset to text mode
+
+    def execute_new(self):
+        # NEW command - clear program and variables
+        self.clear_interpreter_state(clear_program=True)
         self.input_prompt = None
         self.current_input_index = 0
         self.current_line = 0
@@ -1617,11 +1635,12 @@ class CoCoBasic:
         
         while current_pos_index < len(all_positions) and self.running:
             # Safety check for infinite loops
-            self.iteration_count += 1
-            if self.iteration_count > self.max_iterations:
-                output.append({'type': 'error', 'message': 'PROGRAM STOPPED - TOO MANY ITERATIONS'})
-                self.running = False
-                break
+            if self.safety_enabled:
+                self.iteration_count += 1
+                if self.iteration_count > self.max_iterations:
+                    output.append({'type': 'error', 'message': 'PROGRAM STOPPED - TOO MANY ITERATIONS'})
+                    self.running = False
+                    break
             
             # Get current position and statement
             line_num, sub_index = all_positions[current_pos_index]
@@ -2164,6 +2183,12 @@ class CoCoBasic:
                                      syntax="DELETE line_number | DELETE start-end",
                                      examples=["DELETE 100", "DELETE 10-50", "DELETE 200-300"])
         
+        self.command_registry.register('SAFETY', self.execute_safety,
+                                     category='system',
+                                     description="Enable or disable iteration safety limits",
+                                     syntax="SAFETY ON | SAFETY OFF",
+                                     examples=["SAFETY ON", "SAFETY OFF"])
+        
         self.command_registry.register('LOAD', self.load_program,
                                      category='system',
                                      description="Load program from file",
@@ -2445,6 +2470,24 @@ class CoCoBasic:
             return [{'type': 'error', 'message': 'SYNTAX ERROR - INVALID LINE NUMBER'}]
         except Exception as e:
             return [{'type': 'error', 'message': f'DELETE ERROR: {str(e)}'}]
+    
+    def execute_safety(self, args):
+        """SAFETY statement - enable or disable iteration safety limits"""
+        args = args.strip().upper()
+        
+        if not args:
+            # Show current status
+            status = "ON" if self.safety_enabled else "OFF"
+            return [{'type': 'text', 'text': f'SAFETY IS {status}'}]
+        
+        if args == 'ON':
+            self.safety_enabled = True
+            return [{'type': 'text', 'text': 'SAFETY ON - ITERATION LIMITS ENABLED'}]
+        elif args == 'OFF':
+            self.safety_enabled = False
+            return [{'type': 'text', 'text': 'SAFETY OFF - ITERATION LIMITS DISABLED'}]
+        else:
+            return [{'type': 'error', 'message': 'SYNTAX ERROR - USE SAFETY ON OR SAFETY OFF'}]
 
 # Global BASIC interpreter instance
 basic = CoCoBasic()

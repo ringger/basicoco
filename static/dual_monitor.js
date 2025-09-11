@@ -350,17 +350,19 @@ class TextDisplay {
         if (this.commandHistory.length === 0) return;
         
         // Save current command if we're starting to navigate
-        if (this.historyIndex === -1 && direction === -1) {
+        if (this.historyIndex === -1) {
             this.tempCommand = this.currentCommand;
         }
         
         this.historyIndex += direction;
         
-        // Bounds checking
+        // Circular bounds checking
         if (this.historyIndex < -1) {
-            this.historyIndex = -1;
-        } else if (this.historyIndex >= this.commandHistory.length) {
+            // Wrap to newest command when going past current command
             this.historyIndex = this.commandHistory.length - 1;
+        } else if (this.historyIndex >= this.commandHistory.length) {
+            // Wrap to current command when going past oldest command  
+            this.historyIndex = -1;
         }
         
         // Update command line
@@ -1353,6 +1355,30 @@ class DualMonitorEmulator {
     }
     
     setupUIHandlers() {
+        // Track if a program is running
+        this.programRunning = false;
+        
+        // Global keypress forwarding for INKEY$ (when program is running)
+        // Use keydown instead of keypress (keypress is deprecated)
+        document.addEventListener('keydown', (e) => {
+            // Only forward printable characters when a program is running
+            // and we're not waiting for input
+            if (this.programRunning && 
+                !this.displayManager.textDisplay.waitingForInput &&
+                e.key.length === 1 && 
+                !e.ctrlKey && !e.altKey && !e.metaKey) {
+                console.log('Key detected for INKEY$:', e.key);
+                
+                // Send keypress to server for INKEY$ buffer
+                this.socket.emit('keypress', {
+                    key: e.key,
+                    session_id: this.sessionId,
+                    tabId: this.activeTabId  // Fixed: use tabId not tab
+                });
+                console.log('Sent key to server:', e.key);
+            }
+        }, true);  // Use capture phase to get event before other handlers
+
         // REPL keyboard input
         this.replContainer.addEventListener('keydown', (e) => {
             // Handle Ctrl+C interrupt
@@ -1472,6 +1498,12 @@ class DualMonitorEmulator {
         
         console.log('Executing command:', command, 'with session:', this.sessionId);
         
+        // Track if RUN command is starting
+        if (command.trim().toUpperCase() === 'RUN') {
+            this.programRunning = true;
+            console.log('Program started running');
+        }
+        
         // Send to server
         this.socket.emit('execute_command', { 
             command: command,
@@ -1535,6 +1567,9 @@ class DualMonitorEmulator {
                     break;
                 case 'command_complete':
                     document.getElementById('program-status').textContent = 'Ready';
+                    // Program has stopped
+                    this.programRunning = false;
+                    console.log('Program stopped');
                     // Show next prompt
                     this.displayManager.textDisplay.showPrompt();
                     break;
