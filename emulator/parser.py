@@ -18,11 +18,11 @@ class BasicParser:
         if not line:
             return None, None
             
-        # Check if line starts with a number
-        match = re.match(r'^(\d+)\s+(.*)', line)
+        # Check if line starts with a number (with optional code after it)
+        match = re.match(r'^(\d+)(?:\s+(.*))?$', line)
         if match:
             line_num = int(match.group(1))
-            code = match.group(2)
+            code = match.group(2) or ""  # Empty string if no code after line number
             return line_num, code
         else:
             # Direct command (no line number)

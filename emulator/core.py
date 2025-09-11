@@ -2158,6 +2158,12 @@ class CoCoBasic:
                                      syntax="CLEAR [string_space]",
                                      examples=["CLEAR", "CLEAR 1000"])
         
+        self.command_registry.register('DELETE', self.execute_delete,
+                                     category='system',
+                                     description="Delete program lines or line ranges",
+                                     syntax="DELETE line_number | DELETE start-end",
+                                     examples=["DELETE 100", "DELETE 10-50", "DELETE 200-300"])
+        
         self.command_registry.register('LOAD', self.load_program,
                                      category='system',
                                      description="Load program from file",
@@ -2378,6 +2384,67 @@ class CoCoBasic:
         # Pop the current IF from the stack
         self.if_stack.pop()
         return []
+    
+    def execute_delete(self, args):
+        """DELETE statement - delete program lines or line ranges"""
+        args = args.strip()
+        if not args:
+            return [{'type': 'error', 'message': 'SYNTAX ERROR - DELETE REQUIRES LINE NUMBER(S)'}]
+        
+        try:
+            # Parse the argument - can be single line or range
+            if '-' in args:
+                # Range format: DELETE start-end
+                parts = args.split('-', 1)
+                if len(parts) != 2:
+                    return [{'type': 'error', 'message': 'SYNTAX ERROR - INVALID RANGE FORMAT'}]
+                
+                start_str = parts[0].strip()
+                end_str = parts[1].strip()
+                
+                if not start_str or not end_str:
+                    return [{'type': 'error', 'message': 'SYNTAX ERROR - INVALID RANGE FORMAT'}]
+                
+                start_line = int(start_str)
+                end_line = int(end_str)
+                
+                if start_line > end_line:
+                    return [{'type': 'error', 'message': 'SYNTAX ERROR - START LINE MUST BE <= END LINE'}]
+                
+                # Delete all lines in the range
+                lines_deleted = 0
+                for line_num in list(self.program.keys()):
+                    if start_line <= line_num <= end_line:
+                        del self.program[line_num]
+                        # Remove from expanded program
+                        keys_to_remove = [key for key in self.expanded_program.keys() if key[0] == line_num]
+                        for key in keys_to_remove:
+                            del self.expanded_program[key]
+                        lines_deleted += 1
+                
+                if lines_deleted == 0:
+                    return [{'type': 'text', 'text': 'NO LINES DELETED'}]
+                else:
+                    return [{'type': 'text', 'text': f'DELETED {lines_deleted} LINE(S)'}]
+                    
+            else:
+                # Single line format: DELETE line_number
+                line_num = int(args)
+                
+                if line_num in self.program:
+                    del self.program[line_num]
+                    # Remove from expanded program
+                    keys_to_remove = [key for key in self.expanded_program.keys() if key[0] == line_num]
+                    for key in keys_to_remove:
+                        del self.expanded_program[key]
+                    return [{'type': 'text', 'text': f'DELETED LINE {line_num}'}]
+                else:
+                    return [{'type': 'text', 'text': f'LINE {line_num} NOT FOUND'}]
+                    
+        except ValueError:
+            return [{'type': 'error', 'message': 'SYNTAX ERROR - INVALID LINE NUMBER'}]
+        except Exception as e:
+            return [{'type': 'error', 'message': f'DELETE ERROR: {str(e)}'}]
 
 # Global BASIC interpreter instance
 basic = CoCoBasic()

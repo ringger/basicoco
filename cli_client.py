@@ -45,7 +45,7 @@ class TRS80CLI:
         basic_keywords = [
             'PRINT', 'LET', 'IF', 'THEN', 'ELSE', 'FOR', 'TO', 'NEXT', 'STEP',
             'GOTO', 'GOSUB', 'RETURN', 'END', 'STOP', 'RUN', 'LIST', 'NEW',
-            'SAVE', 'LOAD', 'FILES', 'KILL', 'CD', 'INPUT', 'DATA', 'READ', 'RESTORE', 'DIM',
+            'SAVE', 'LOAD', 'FILES', 'KILL', 'DELETE', 'CD', 'INPUT', 'DATA', 'READ', 'RESTORE', 'DIM',
             'PSET', 'PRESET', 'PMODE', 'PCLS', 'SCREEN', 'COLOR', 'PAINT',
             'LINE', 'CIRCLE', 'DRAW', 'GET', 'PUT', 'CLS', 'SOUND',
             'RND', 'INT', 'ABS', 'SGN', 'SQR', 'SIN', 'COS', 'TAN', 'ATN',
@@ -190,6 +190,13 @@ class TRS80CLI:
         if self.connected:
             self.sio.emit('keypress', {'key': key})
     
+    def send_break_signal(self):
+        """Send break signal to interrupt running BASIC program."""
+        if self.connected:
+            print("BREAK")
+            self.sio.emit('break_execution')
+            self.response_received.set()  # Unblock any waiting operations
+    
     def continue_after_pause(self):
         """Continue program execution after a pause completes."""
         if self.connected:
@@ -223,8 +230,20 @@ class TRS80CLI:
                     break
                 except KeyboardInterrupt:
                     # Ctrl+C pressed
-                    print("\nInterrupted")
-                    break
+                    if self.running_program or self.waiting_for_input:
+                        # Send break signal to interrupt running BASIC program
+                        print("\n^C")
+                        self.send_break_signal()
+                        # Reset states
+                        self.running_program = False
+                        self.waiting_for_input = False
+                        self.input_prompt = ""
+                        self.input_variable = ""
+                        # Continue CLI (don't break)
+                    else:
+                        # No program running, exit CLI
+                        print("\nInterrupted")
+                        break
                     
         except Exception as e:
             print(f"Error in main loop: {e}")

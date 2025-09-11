@@ -595,13 +595,21 @@ class ASTParser:
         return left
     
     def _parse_multiplicative_expression(self) -> ASTNode:
-        """Parse multiplication and division"""
+        """Parse multiplication, division, and modulo"""
         left = self._parse_power_expression()
         
-        while self._match('OPERATOR') and self._current_token()['value'] in ['*', '/']:
+        while (self._match('OPERATOR') and self._current_token()['value'] in ['*', '/']) or \
+              (self._match('KEYWORD') and self._current_token()['value'].upper() == 'MOD'):
             op_token = self._advance()
             right = self._parse_power_expression()
-            op = Operator.MULTIPLY if op_token['value'] == '*' else Operator.DIVIDE
+            
+            if op_token['value'] == '*':
+                op = Operator.MULTIPLY
+            elif op_token['value'] == '/':
+                op = Operator.DIVIDE
+            else:  # MOD
+                op = Operator.MOD
+                
             left = BinaryOpNode(
                 operator=op,
                 left=left,
@@ -1115,11 +1123,16 @@ class ASTEvaluator(ASTVisitor):
             return bool(left_val) and bool(right_val)
         elif node.operator == Operator.OR:
             return bool(left_val) or bool(right_val)
+        elif node.operator == Operator.MOD:
+            # Modulo operation
+            if right_val == 0:
+                raise ZeroDivisionError("Modulo by zero")
+            return left_val % right_val
         else:
             error = self.emulator.expression_evaluator.error_context.runtime_error(
                 f"Unknown binary operator: {node.operator}",
                 suggestions=[
-                    "Supported operators: +, -, *, /, ^, =, <>, <, >, <=, >=, AND, OR",
+                    "Supported operators: +, -, *, /, ^, MOD, =, <>, <, >, <=, >=, AND, OR",
                     "Check operator spelling and spacing"
                 ]
             )

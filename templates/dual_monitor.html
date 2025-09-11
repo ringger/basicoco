@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TRS-80 Color Computer BASIC Emulator</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='dual_monitor.css') }}">
+</head>
+<body>
+    <div class="app-container">
+        <!-- Header with title and controls -->
+        <header class="app-header">
+            <h1>TRS-80 Color Computer BASIC Emulator</h1>
+            <div class="header-controls">
+                <button id="btn-export-graphics" class="header-btn" title="Export Graphics">
+                    <span>Export Graphics</span>
+                </button>
+                <button id="btn-save-session" class="header-btn" title="Save Session">
+                    <span>Save Session</span>
+                </button>
+                <button id="btn-preferences" class="header-btn" title="Preferences">
+                    <span>⚙️</span>
+                </button>
+            </div>
+        </header>
+
+        <!-- Main content area with dual panels -->
+        <div class="main-content">
+            <!-- Left Panel: REPL/Text Display -->
+            <div class="panel panel-left" id="text-panel">
+                <div class="panel-header">
+                    <h2>REPL / Command Interface</h2>
+                    <div class="panel-controls">
+                        <button id="btn-clear-text" class="panel-btn" title="Clear Text">CLS</button>
+                        <button id="btn-copy-text" class="panel-btn" title="Copy Text">Copy</button>
+                    </div>
+                </div>
+                <div class="panel-content">
+                    <div class="screen-bezel">
+                        <div class="screen-container text-screen" id="repl-container" tabindex="0">
+                            <canvas id="text-display" width="720" height="720"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Splitter for resizing panels -->
+            <div class="panel-splitter" id="panel-splitter"></div>
+
+            <!-- Right Panel: Graphics Display -->
+            <div class="panel panel-right" id="graphics-panel">
+                <div class="panel-header">
+                    <h2>Graphics Display</h2>
+                    <div class="panel-controls">
+                        <button id="btn-clear-graphics" class="panel-btn" title="Clear Graphics">PCLS</button>
+                        <button id="btn-export-png" class="panel-btn" title="Export as PNG">PNG</button>
+                        <button id="btn-export-svg" class="panel-btn" title="Export as SVG">SVG</button>
+                    </div>
+                </div>
+                <div class="panel-content">
+                    <div class="screen-bezel">
+                        <div class="screen-container graphics-screen">
+                            <canvas id="graphics-display" width="512" height="384"></canvas>
+                        </div>
+                    </div>
+                    <div class="graphics-info">
+                        <div id="graphics-mode">Mode: Text</div>
+                        <div id="graphics-color">Color: Green on Black</div>
+                        <div id="graphics-coords">X: 0, Y: 0</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Program Tabs -->
+        <div class="program-tabs">
+            <div class="tabs-container" id="tabs-container">
+                <div class="tab active" data-tab-id="main">
+                    <span class="tab-title">Main</span>
+                    <button class="tab-close" style="display: none;">×</button>
+                </div>
+                <button class="tab-add" id="btn-add-tab" tabindex="-1">+</button>
+            </div>
+            <div class="tabs-info">
+                <span id="program-status">Ready</span>
+            </div>
+        </div>
+
+        <!-- Help Panel (collapsible) -->
+        <div class="help-panel collapsed" id="help-panel">
+            <div class="help-toggle" id="help-toggle">
+                <span>Quick Help ▲ Click to expand</span>
+            </div>
+            <div class="help-content">
+                <div class="help-column">
+                    <h3>Basic Commands</h3>
+                    <ul>
+                        <li><code>PRINT "text"</code> - Display text</li>
+                        <li><code>LIST</code> - Show program</li>
+                        <li><code>RUN</code> - Run program</li>
+                        <li><code>NEW</code> - Clear program</li>
+                        <li><code>SAVE "name"</code> - Save program</li>
+                        <li><code>LOAD "name"</code> - Load program</li>
+                    </ul>
+                </div>
+                <div class="help-column">
+                    <h3>Graphics Commands</h3>
+                    <ul>
+                        <li><code>PMODE 4,1</code> - Set graphics mode</li>
+                        <li><code>SCREEN 1,1</code> - Activate graphics</li>
+                        <li><code>PSET(x,y)</code> - Set pixel</li>
+                        <li><code>LINE(x1,y1)-(x2,y2)</code> - Draw line</li>
+                        <li><code>CIRCLE(x,y),r</code> - Draw circle</li>
+                        <li><code>PAINT(x,y),c,b</code> - Fill area</li>
+                    </ul>
+                </div>
+                <div class="help-column">
+                    <h3>Dual Monitor Features</h3>
+                    <ul>
+                        <li>Drag splitter to resize panels</li>
+                        <li>Graphics persist during REPL use</li>
+                        <li>Export graphics as PNG/SVG</li>
+                        <li>Multiple program tabs</li>
+                        <li>Session auto-save</li>
+                        <li>Share programs via URL</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Preferences Modal -->
+    <div class="modal" id="preferences-modal" style="display: none;">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Preferences</h2>
+                <button class="modal-close" id="btn-close-preferences">×</button>
+            </div>
+            <div class="modal-body">
+                <div class="preference-group">
+                    <label>Panel Layout:</label>
+                    <select id="pref-layout">
+                        <option value="horizontal">Horizontal (Side by Side)</option>
+                        <option value="vertical">Vertical (Top/Bottom)</option>
+                    </select>
+                </div>
+                <div class="preference-group">
+                    <label>Text Color:</label>
+                    <select id="pref-text-color">
+                        <option value="green">Classic Green</option>
+                        <option value="amber">Amber</option>
+                        <option value="white">White</option>
+                    </select>
+                </div>
+                <div class="preference-group">
+                    <label>CRT Effect:</label>
+                    <input type="checkbox" id="pref-crt-effect" checked>
+                </div>
+                <div class="preference-group">
+                    <label>Auto-save Session:</label>
+                    <input type="checkbox" id="pref-auto-save" checked>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button id="btn-save-preferences">Save</button>
+                <button id="btn-reset-preferences">Reset to Defaults</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.0/socket.io.js"></script>
+    <script src="{{ url_for('static', filename='audio.js') }}"></script>
+    <script src="{{ url_for('static', filename='dual_monitor.js') }}"></script>
+</body>
+</html>
