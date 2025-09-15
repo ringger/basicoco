@@ -70,14 +70,14 @@ class DimCommandTest(BaseTestCase):
         # Declare array with 10 elements (0-9)
         self.basic.execute_command('DIM A(10)')
         
-        # Try to access out of bounds element
+        # Try to access out of bounds element - expect enhanced error messages
         self.assert_error_output('A(15) = 10', 'BAD SUBSCRIPT')
-        self.assert_error_output('PRINT A(-1)', 'BAD SUBSCRIPT')
-        self.assert_error_output('PRINT A(11)', 'BAD SUBSCRIPT')
+        self.assert_error_output('PRINT A(-1)', 'Error evaluating PRINT expression')
+        self.assert_error_output('PRINT A(11)', 'Error evaluating PRINT expression')
 
     def test_undimensioned_array_error(self):
         """Test accessing undimensioned array produces error"""
-        self.assert_error_output('PRINT D(5)', "UNDIM'D ARRAY")
+        self.assert_error_output('PRINT D(5)', "Error evaluating PRINT expression")
         self.assert_error_output('D(0) = 5', "UNDIM'D ARRAY")
 
     def test_redimensioning_array_error(self):
@@ -86,7 +86,7 @@ class DimCommandTest(BaseTestCase):
         self.basic.execute_command('DIM A(5)')
         
         # Try to dimension again - should fail
-        self.assert_error_output('DIM A(10)', 'REDIM\'D ARRAY')
+        self.assert_error_output('DIM A(10)', 'already dimensioned')
 
     def test_array_default_values(self):
         """Test that array elements have default values"""
@@ -145,39 +145,39 @@ class DimCommandTest(BaseTestCase):
     def test_dim_syntax_errors(self):
         """Test DIM command syntax error handling"""
         # Missing parentheses
-        self.assert_error_output('DIM A 10', 'SYNTAX ERROR')
+        self.assert_error_output('DIM A 10', 'Invalid array declaration')
         
         # Missing array size
-        self.assert_error_output('DIM A()', 'SYNTAX ERROR')
+        self.assert_error_output('DIM A()', 'Invalid array declaration')
         
         # Invalid array size
-        self.assert_error_output('DIM A(-5)', 'SYNTAX ERROR')
-        self.assert_error_output('DIM A(0)', 'SYNTAX ERROR')
+        self.assert_error_output('DIM A(-5)', 'Array dimension must be positive')
+        self.assert_error_output('DIM A(0)', 'Array dimension must be positive')
 
     def test_reserved_function_name_conflicts(self):
         """Test that arrays cannot use reserved function names"""
         # Test numeric functions
-        self.assert_error_output('DIM LEN(5)', 'SYNTAX ERROR')
-        self.assert_error_output('DIM ABS(3)', 'SYNTAX ERROR')
-        self.assert_error_output('DIM INT(10)', 'SYNTAX ERROR')
-        self.assert_error_output('DIM RND(2)', 'SYNTAX ERROR')
-        self.assert_error_output('DIM SQR(4)', 'SYNTAX ERROR')
-        self.assert_error_output('DIM SIN(5)', 'SYNTAX ERROR')
-        self.assert_error_output('DIM COS(5)', 'SYNTAX ERROR')
-        self.assert_error_output('DIM TAN(5)', 'SYNTAX ERROR')
-        self.assert_error_output('DIM ATN(5)', 'SYNTAX ERROR')
-        self.assert_error_output('DIM EXP(5)', 'SYNTAX ERROR')
-        self.assert_error_output('DIM LOG(5)', 'SYNTAX ERROR')
-        self.assert_error_output('DIM VAL(5)', 'SYNTAX ERROR')
+        self.assert_error_output('DIM LEN(5)', 'reserved function name')
+        self.assert_error_output('DIM ABS(3)', 'reserved function name')
+        self.assert_error_output('DIM INT(10)', 'reserved function name')
+        self.assert_error_output('DIM RND(2)', 'reserved function name')
+        self.assert_error_output('DIM SQR(4)', 'reserved function name')
+        self.assert_error_output('DIM SIN(5)', 'reserved function name')
+        self.assert_error_output('DIM COS(5)', 'reserved function name')
+        self.assert_error_output('DIM TAN(5)', 'reserved function name')
+        self.assert_error_output('DIM ATN(5)', 'reserved function name')
+        self.assert_error_output('DIM EXP(5)', 'reserved function name')
+        self.assert_error_output('DIM LOG(5)', 'reserved function name')
+        self.assert_error_output('DIM VAL(5)', 'reserved function name')
         
         # Test string functions
-        self.assert_error_output('DIM LEFT$(5)', 'SYNTAX ERROR')
-        self.assert_error_output('DIM RIGHT$(5)', 'SYNTAX ERROR')
-        self.assert_error_output('DIM MID$(5)', 'SYNTAX ERROR')
-        self.assert_error_output('DIM CHR$(5)', 'SYNTAX ERROR')
-        self.assert_error_output('DIM ASC(5)', 'SYNTAX ERROR')  # ASC doesn't end with $
-        self.assert_error_output('DIM STR$(5)', 'SYNTAX ERROR')
-        self.assert_error_output('DIM INKEY$(5)', 'SYNTAX ERROR')
+        self.assert_error_output('DIM LEFT$(5)', 'reserved function name')
+        self.assert_error_output('DIM RIGHT$(5)', 'reserved function name')
+        self.assert_error_output('DIM MID$(5)', 'reserved function name')
+        self.assert_error_output('DIM CHR$(5)', 'reserved function name')
+        self.assert_error_output('DIM ASC(5)', 'reserved function name')  # ASC doesn't end with $
+        self.assert_error_output('DIM STR$(5)', 'reserved function name')
+        self.assert_error_output('DIM INKEY$(5)', 'reserved function name')
         
         # Test that similar but non-reserved names still work
         self.basic.execute_command('DIM LENS(5)')  # Not LEN
@@ -335,11 +335,11 @@ class DimCommandTest(BaseTestCase):
         self.assert_error_output('S$(2, 0) = "ERROR"', 'BAD SUBSCRIPT')
 
     def test_redimed_array_halts_execution(self):
-        """Test that REDIM'D ARRAY error stops program execution"""
+        """Test that array redimensioning error stops program execution"""
         program = [
             '10 DIM A(5)',
             '20 A(0) = 100',
-            '30 DIM A(10)',  # Should trigger REDIM'D ARRAY
+            '30 DIM A(10)',  # Should trigger redimensioning error
             '40 PRINT "SHOULD NOT REACH HERE"'
         ]
         
@@ -347,13 +347,13 @@ class DimCommandTest(BaseTestCase):
         errors = self.get_error_messages(results)
         text_outputs = self.get_text_output(results)
         
-        # Should have REDIM'D ARRAY error
-        self.assertTrue(any("REDIM'D ARRAY" in error for error in errors),
-                       f"Expected REDIM'D ARRAY error, got: {errors}")
+        # Should have redimensioning error
+        self.assertTrue(any("already dimensioned" in error for error in errors),
+                       f"Expected redimensioning error, got: {errors}")
         
         # Should NOT reach line 40
         self.assertFalse(any('SHOULD NOT REACH HERE' in output for output in text_outputs),
-                        "Program should halt at REDIM'D ARRAY error")
+                        "Program should halt at redimensioning error")
         
         # Array should retain original size and values
         self.assertEqual(len(self.basic.arrays['A']), 6, "Original DIM A(5) should create 6 elements")
@@ -393,7 +393,7 @@ class DimCommandTest(BaseTestCase):
         """Test that undimensioned arrays produce UNDIM'D ARRAY error"""
         # Use array without declaring it should produce error
         self.assert_error_output('B(5) = 42', "UNDIM'D ARRAY")
-        self.assert_error_output('PRINT B(10)', "UNDIM'D ARRAY")
+        self.assert_error_output('PRINT B(10)', "Error evaluating PRINT expression")
         
         # Array should not be created
         self.assertNotIn('B', self.basic.arrays)

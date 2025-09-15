@@ -37,7 +37,7 @@ class CommandParsingTest(BaseTestCase):
         self.basic.variables['K$'] = 'X'
         
         # This should split into two statements properly
-        result = self.basic.execute_line('PRINT "YOU PRESSED: "; K$: GOTO 100')
+        result = self.basic.process_line('PRINT "YOU PRESSED: "; K$: GOTO 100')
         
         # Should contain both a text output and a jump
         has_text = any(item.get('type') == 'text' for item in result)

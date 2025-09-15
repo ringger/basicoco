@@ -249,7 +249,7 @@ class EnhancedControlFlowTest(BaseTestCase):
         errors = [r for r in results if r.get('type') == 'error']
         
         self.assertTrue(len(errors) > 0)
-        self.assertIn('WEND WITHOUT WHILE', str(errors[0]))
+        self.assertIn('WEND without matching WHILE', str(errors[0]))
 
     def test_error_handling_loop_without_do(self):
         """Test error handling for LOOP without DO"""
@@ -263,7 +263,7 @@ class EnhancedControlFlowTest(BaseTestCase):
         errors = [r for r in results if r.get('type') == 'error']
         
         self.assertTrue(len(errors) > 0)
-        self.assertIn('LOOP WITHOUT DO', str(errors[0]))
+        self.assertIn('LOOP without matching DO', str(errors[0]))
 
     def test_error_handling_exit_for_without_for(self):
         """Test error handling for EXIT FOR without FOR"""
@@ -277,7 +277,7 @@ class EnhancedControlFlowTest(BaseTestCase):
         errors = [r for r in results if r.get('type') == 'error']
         
         self.assertTrue(len(errors) > 0)
-        self.assertIn('EXIT FOR WITHOUT FOR', str(errors[0]))
+        self.assertIn('EXIT FOR without matching FOR', str(errors[0]))
 
     def test_complex_integration_scenario(self):
         """Test complex integration of all new control structures"""
@@ -397,7 +397,7 @@ class EnhancedControlFlowTest(BaseTestCase):
         results1 = self.execute_program(program1)
         errors1 = [r for r in results1 if r.get('type') == 'error']
         self.assertTrue(len(errors1) > 0)
-        self.assertIn('ELSE WITHOUT IF', str(errors1[0]))
+        self.assertIn('ELSE without matching IF', str(errors1[0]))
 
         # ENDIF without IF
         program2 = [
@@ -409,7 +409,7 @@ class EnhancedControlFlowTest(BaseTestCase):
         results2 = self.execute_program(program2)
         errors2 = [r for r in results2 if r.get('type') == 'error']
         self.assertTrue(len(errors2) > 0)
-        self.assertIn('ENDIF WITHOUT IF', str(errors2[0]))
+        self.assertIn('ENDIF without matching IF', str(errors2[0]))
 
 
 if __name__ == '__main__':

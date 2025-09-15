@@ -1250,6 +1250,44 @@ class ASTEvaluator(ASTVisitor):
         # Return a special signal that can be caught by the execution engine
         return [{'type': 'exit_for'}]
     
+    def visit_if_statement(self, node: IfStatementNode) -> Any:
+        """Visit IF statement - evaluate condition and execute appropriate branch"""
+        # Evaluate condition
+        condition_result = self.visit(node.condition)
+        
+        # Convert to boolean (BASIC truth rules)
+        if isinstance(condition_result, (int, float)):
+            condition_true = condition_result != 0
+        elif isinstance(condition_result, str):
+            condition_true = len(condition_result) > 0
+        else:
+            condition_true = bool(condition_result)
+        
+        # Execute appropriate branch
+        if condition_true:
+            # Execute THEN branch
+            result = self.visit(node.then_branch)
+            
+            # Handle special case: if THEN branch evaluates to a number, it's a line jump
+            if isinstance(result, (int, float)) and not isinstance(result, bool):
+                line_num = int(result)
+                return [{'type': 'jump', 'line': line_num}]
+            
+            return result
+        elif node.else_branch:
+            # Execute ELSE branch if condition is false and ELSE exists
+            result = self.visit(node.else_branch)
+            
+            # Handle special case: if ELSE branch evaluates to a number, it's a line jump
+            if isinstance(result, (int, float)) and not isinstance(result, bool):
+                line_num = int(result)
+                return [{'type': 'jump', 'line': line_num}]
+            
+            return result
+        else:
+            # No ELSE branch and condition is false - do nothing
+            return []
+    
     def visit_block(self, node: BlockNode) -> Any:
         """Visit block statement - execute all statements in sequence"""
         results = []

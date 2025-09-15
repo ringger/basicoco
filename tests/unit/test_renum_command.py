@@ -225,12 +225,12 @@ class RenumCommandTest(BaseTestCase):
         # Test line number too high
         result = self.basic.execute_command('RENUM 65530,10')
         error_messages = [str(r.get('message', '')) for r in result if r.get('type') == 'error']
-        self.assertTrue(any('EXCEED 65535' in msg for msg in error_messages))
+        self.assertTrue(any('exceed maximum value' in msg.lower() for msg in error_messages))
         
         # Test invalid increment
         result = self.basic.execute_command('RENUM 10,0')
         error_messages = [str(r.get('message', '')) for r in result if r.get('type') == 'error']
-        self.assertTrue(any('MUST BE POSITIVE' in msg for msg in error_messages))
+        self.assertTrue(any('must be positive' in msg.lower() for msg in error_messages))
 
     def test_renum_syntax_errors(self):
         """Test RENUM command syntax error handling"""
@@ -240,12 +240,12 @@ class RenumCommandTest(BaseTestCase):
         # Test invalid line number format
         result = self.basic.execute_command('RENUM ABC')
         error_messages = [str(r.get('message', '')) for r in result if r.get('type') == 'error']
-        self.assertTrue(any('INVALID LINE NUMBER' in msg for msg in error_messages))
+        self.assertTrue(any('invalid' in msg.lower() and 'number' in msg.lower() for msg in error_messages))
         
         # Test line number out of range
         result = self.basic.execute_command('RENUM 0')
         error_messages = [str(r.get('message', '')) for r in result if r.get('type') == 'error']
-        self.assertTrue(any('OUT OF RANGE' in msg for msg in error_messages))
+        self.assertTrue(any('out of range' in msg.lower() for msg in error_messages))
 
     def test_renum_preserves_line_order(self):
         """Test RENUM preserves program line execution order"""

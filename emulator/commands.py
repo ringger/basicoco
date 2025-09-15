@@ -120,6 +120,10 @@ class CommandRegistry:
         stripped = line.strip().upper()
         if stripped.startswith('IF '):
             return False
+        
+        # Check if this line starts with FOR and contains TO - if so, let the FOR handler deal with it
+        if stripped.startswith('FOR ') and ' TO ' in stripped:
+            return False
             
         in_quotes = False
         for char in line:

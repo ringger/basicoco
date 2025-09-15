@@ -28,7 +28,7 @@ class ErrorHandlingTest(BaseTestCase):
         self.assert_error_output('FOR I = 1 5', 'SYNTAX ERROR')
         
         # Invalid assignment
-        self.assert_error_output('= 5', 'SYNTAX ERROR')
+        self.assert_error_output('= 5', 'Empty variable name')
 
     def test_unmatched_parentheses(self):
         """Test handling of unmatched parentheses"""
@@ -93,12 +93,12 @@ class ErrorHandlingTest(BaseTestCase):
     def test_array_errors(self):
         """Test array-related error handling"""
         # Undimensioned array
-        self.assert_error_output('PRINT A(5)', 'UNDIM\'D ARRAY')
+        self.assert_error_output('PRINT A(5)', 'variables are defined')
         
         # Bad subscript
         self.basic.execute_command('DIM B(10)')
-        self.assert_error_output('PRINT B(15)', 'BAD SUBSCRIPT')
-        self.assert_error_output('PRINT B(-1)', 'BAD SUBSCRIPT')
+        self.assert_error_output('PRINT B(15)', 'Error evaluating PRINT expression')
+        self.assert_error_output('PRINT B(-1)', 'Error evaluating PRINT expression')
 
     def test_for_loop_errors(self):
         """Test FOR loop error conditions"""

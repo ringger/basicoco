@@ -158,36 +158,36 @@ class VariableTest(BaseTestCase):
     def test_let_reserved_function_name_conflicts(self):
         """Test that LET cannot use reserved function names as variables"""
         # Test numeric functions
-        self.assert_error_output('LET LEN = 5', 'SYNTAX ERROR')
-        self.assert_error_output('LET ABS = 3', 'SYNTAX ERROR')
-        self.assert_error_output('LET INT = 10', 'SYNTAX ERROR')
-        self.assert_error_output('LET RND = 2', 'SYNTAX ERROR')
-        self.assert_error_output('LET SQR = 4', 'SYNTAX ERROR')
-        self.assert_error_output('LET SIN = 5', 'SYNTAX ERROR')
-        self.assert_error_output('LET COS = 5', 'SYNTAX ERROR')
-        self.assert_error_output('LET TAN = 5', 'SYNTAX ERROR')
-        self.assert_error_output('LET ATN = 5', 'SYNTAX ERROR')
-        self.assert_error_output('LET EXP = 5', 'SYNTAX ERROR')
-        self.assert_error_output('LET LOG = 5', 'SYNTAX ERROR')
-        self.assert_error_output('LET VAL = 5', 'SYNTAX ERROR')
+        self.assert_error_output('LET LEN = 5', 'reserved function name')
+        self.assert_error_output('LET ABS = 3', 'reserved function name')
+        self.assert_error_output('LET INT = 10', 'reserved function name')
+        self.assert_error_output('LET RND = 2', 'reserved function name')
+        self.assert_error_output('LET SQR = 4', 'reserved function name')
+        self.assert_error_output('LET SIN = 5', 'reserved function name')
+        self.assert_error_output('LET COS = 5', 'reserved function name')
+        self.assert_error_output('LET TAN = 5', 'reserved function name')
+        self.assert_error_output('LET ATN = 5', 'reserved function name')
+        self.assert_error_output('LET EXP = 5', 'reserved function name')
+        self.assert_error_output('LET LOG = 5', 'reserved function name')
+        self.assert_error_output('LET VAL = 5', 'reserved function name')
         
         # Test string functions
-        self.assert_error_output('LET LEFT$ = "TEST"', 'SYNTAX ERROR')
-        self.assert_error_output('LET RIGHT$ = "TEST"', 'SYNTAX ERROR')
-        self.assert_error_output('LET MID$ = "TEST"', 'SYNTAX ERROR')
-        self.assert_error_output('LET CHR$ = "TEST"', 'SYNTAX ERROR')
-        self.assert_error_output('LET ASC = 5', 'SYNTAX ERROR')  # ASC doesn't end with $
-        self.assert_error_output('LET STR$ = "TEST"', 'SYNTAX ERROR')
-        self.assert_error_output('LET INKEY$ = "TEST"', 'SYNTAX ERROR')
+        self.assert_error_output('LET LEFT$ = "TEST"', 'reserved function name')
+        self.assert_error_output('LET RIGHT$ = "TEST"', 'reserved function name')
+        self.assert_error_output('LET MID$ = "TEST"', 'reserved function name')
+        self.assert_error_output('LET CHR$ = "TEST"', 'reserved function name')
+        self.assert_error_output('LET ASC = 5', 'reserved function name')  # ASC doesn't end with $
+        self.assert_error_output('LET STR$ = "TEST"', 'reserved function name')
+        self.assert_error_output('LET INKEY$ = "TEST"', 'reserved function name')
         
         # Test implicit assignment (without LET keyword)
-        self.assert_error_output('LEN = 5', 'SYNTAX ERROR')
-        self.assert_error_output('STR$ = "TEST"', 'SYNTAX ERROR')
+        self.assert_error_output('LEN = 5', 'reserved function name')
+        self.assert_error_output('STR$ = "TEST"', 'reserved function name')
         
         # Test array element assignments with reserved names (should also fail)
         self.basic.execute_command('DIM VALID(5)')  # Create a valid array first
-        self.assert_error_output('STR$(0) = "TEST"', 'SYNTAX ERROR')
-        self.assert_error_output('LEN(0) = 5', 'SYNTAX ERROR')
+        self.assert_error_output('STR$(0) = "TEST"', 'reserved function name')
+        self.assert_error_output('LEN(0) = 5', 'reserved function name')
         
         # Test that similar but non-reserved names still work
         self.basic.execute_command('LET LENS = 42')  # Not LEN

@@ -27,7 +27,7 @@ class ErrorRecoveryTest(BaseTestCase):
         # Test each error type leaves clean state
         error_tests = [
             ('READ X', 'OUT OF DATA'),  # No DATA statements
-            ('DIM A(5): DIM A(10)', "REDIM'D ARRAY"),
+            ('DIM A(5): DIM A(10)', "already dimensioned"),
             ('UNDIM(999) = 5', "UNDIM'D ARRAY")  # Undimensioned array error
         ]
         
@@ -162,10 +162,10 @@ class ErrorRecoveryTest(BaseTestCase):
         """Test recovery from syntax errors"""
         # Test various syntax errors and runtime errors
         error_tests = [
-            ('FOR I = 1 TO', 'SYNTAX ERROR'),  # Incomplete FOR
-            ('IF THEN 10', 'SYNTAX ERROR'),  # Missing condition
-            ('DIM A()', 'SYNTAX ERROR'),  # Empty dimensions
-            ('GOSUB', 'SYNTAX ERROR'),  # Missing line number
+            ('FOR I = 1 TO', 'Invalid FOR statement'),  # Incomplete FOR
+            ('IF THEN 10', 'Empty condition'),  # Missing condition
+            ('DIM A()', 'Invalid array declaration'),  # Empty dimensions
+            ('GOSUB', 'Missing line number'),  # Missing line number
             ('NEXT I', 'NEXT WITHOUT FOR'),  # NEXT without matching FOR (runtime error)
         ]
         

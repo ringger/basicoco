@@ -21,7 +21,79 @@ The emulator now has a **clean, well-established architecture** that provides th
 
 ## Forward Development Priorities 🎯
 
-### Phase 1: State Management Architecture Enhancement 🏗️
+### Phase 1: AST-Based Control Structure Normalization (CURRENT TOP PRIORITY) 🚀
+
+**Transform ALL complex single-line BASIC control structures into multi-line equivalents using existing AST parser infrastructure:**
+
+#### Phase 1A: Complete AST-to-Multi-line Converter (3-4 hours)
+- **Create ASTStatementConverter class**
+  - Walk AST nodes for ALL control structures already implemented
+  - Convert each node type to equivalent multi-line statement sequences
+  - Handle deeply nested structures properly
+
+- **Implement conversion methods for all control structures:**
+  - `convert_if_statement(node: IfStatementNode) -> List[str]` - IF/THEN/ELSE/ENDIF
+  - `convert_for_statement(node: ForStatementNode) -> List[str]` - FOR/TO/STEP/NEXT
+  - `convert_while_statement(node: WhileStatementNode) -> List[str]` - WHILE/WEND
+  - `convert_do_loop_statement(node: DoLoopStatementNode) -> List[str]` - DO/LOOP variants
+  - `convert_exit_statement(node: ExitForStatementNode) -> List[str]` - EXIT FOR
+  - `convert_print_statement(node: PrintStatementNode) -> List[str]` - PRINT expressions
+  - `convert_assignment(node: AssignmentNode) -> List[str]` - Variable assignments
+  - `convert_block(node: BlockNode) -> List[str]` - Nested statement sequences
+
+- **Handle complex nested scenarios:**
+  - `IF A=1 THEN FOR I=1 TO 3: WHILE J<5: PRINT I,J: J=J+1: WEND: NEXT I`
+  - `DO WHILE A>0: IF B=1 THEN FOR X=1 TO A: PRINT X: NEXT X: A=A-1: LOOP`
+  - Proper terminator matching (ENDIF, NEXT, WEND, LOOP)
+
+#### Phase 1B: Enhanced Integration with AST Parser (1-2 hours)
+- **Modify process_line() method**
+  - Detect ALL complex single-line statements (any control keyword + colons)
+  - Detection keywords: IF, FOR, WHILE, DO, plus nested combinations
+  - Use existing `ast_parser.parse_statement()` to get complete AST tree
+  - Use ASTStatementConverter to transform AST to multi-line statements
+  - Execute converted statements using existing multi-line logic
+
+- **Leverage complete AST infrastructure**
+  - Use existing AST node types: IfStatementNode, ForStatementNode, WhileStatementNode, DoLoopStatementNode
+  - Use existing visitors: visit_if_statement, visit_while_statement, etc.
+  - Preserve error context and line number information for ALL structures
+  - Support expression evaluation within control structures
+
+#### Phase 1C: Comprehensive Cleanup (1-2 hours)
+- **Remove ALL single-line special case implementations**
+  - Delete `_execute_single_line_for()` method
+  - Remove hybrid approach from `execute_if()`
+  - Remove ALL special cases from `split_statements()`
+  - Remove ALL special cases from `CommandRegistry._has_multi_statements()`
+  - Simplify statement splitting to basic colon-based logic
+
+- **Update existing multi-line command implementations**
+  - Ensure execute_while, execute_wend, execute_do, execute_loop work with converted statements
+  - Verify stack-based implementations (FOR/NEXT, WHILE/WEND, DO/LOOP) handle converted statements
+  - Test error handling and nested structure validation
+
+#### Phase 1D: Comprehensive Testing (1 hour)
+- **Test all control structure combinations**
+  - Single-line IF/THEN variations
+  - Single-line FOR/NEXT loops
+  - Single-line WHILE/WEND loops
+  - Single-line DO/LOOP variants (DO WHILE, DO UNTIL, LOOP WHILE, LOOP UNTIL)
+  - Deeply nested combinations
+  - Error cases and malformed statements
+
+**Complete Control Structure Coverage Examples:**
+```basic
+# All these should work after normalization:
+IF A=1 THEN FOR I=1 TO 3: PRINT I: NEXT I
+WHILE X<10: IF X=5 THEN PRINT "FIVE": X=X+1: WEND  
+DO WHILE Y>0: FOR Z=1 TO Y: PRINT Z: NEXT Z: Y=Y-1: LOOP
+FOR I=1 TO 5: DO: INPUT A: IF A=0 THEN EXIT FOR: LOOP WHILE A<10: NEXT I
+```
+
+**Expected Outcome**: 100% unified execution model supporting all TRS-80 Color Computer BASIC control structures in both single-line and multi-line forms, with 100% test success rate.
+
+### Phase 2: State Management Architecture Enhancement 🏗️
 
 **Create specialized state managers for improved maintainability and clear separation of concerns:**
 

@@ -1095,6 +1095,17 @@ class CoCoBasic:
             statements.append(code.strip())
             return statements
         
+        # Check if this line contains a single-line FOR loop that starts the line
+        for_pos = code_upper.find('FOR ')
+        to_pos = code_upper.find(' TO ')
+        colon_pos = code_upper.find(':')
+        
+        # If this line STARTS with a FOR loop and contains TO and colons, treat as single statement
+        if for_pos == 0 and to_pos > for_pos and colon_pos > to_pos:
+            # This line starts with single-line FOR loop - treat the whole thing as one statement
+            statements.append(code.strip())
+            return statements
+        
         # Normal colon splitting for other statements (including FOR loops)
         for char in code:
             if char == '"':
@@ -1194,14 +1205,23 @@ class CoCoBasic:
             raise ValueError(str(e))
 
     def execute_for(self, args):
-        # FOR I=1 TO 10 [STEP 1] - handle colons properly
-        args = args.split(':')[0].strip()  # Remove colon and everything after
+        # FOR I=1 TO 10 [STEP 1] - handle single-line and multi-line FOR loops
+        # Check if this is a single-line FOR loop (contains colon)
+        if ':' in args:
+            # Single-line FOR loop: FOR I=1 TO 3: PRINT I: NEXT I
+            colon_pos = args.find(':')
+            for_part = args[:colon_pos].strip()
+            body_part = args[colon_pos+1:].strip()
+            return self._execute_single_line_for(for_part, body_part)
+        else:
+            # Multi-line FOR loop: FOR I=1 TO 10 (body on subsequent lines)
+            for_part = args.strip()
         
         # Set error context for FOR command
-        self.error_context.set_context(self.current_line, f"FOR {args}")
+        self.error_context.set_context(self.current_line, f"FOR {for_part}")
         
         # Better pattern that looks for the word TO, not individual letters
-        match = re.match(r'(\w+)\s*=\s*(.+?)\s+TO\s+(.+?)(?:\s+STEP\s+(.+?))?$', args, re.IGNORECASE)
+        match = re.match(r'(\w+)\s*=\s*(.+?)\s+TO\s+(.+?)(?:\s+STEP\s+(.+?))?$', for_part, re.IGNORECASE)
         if not match:
             error = self.error_context.syntax_error(
                 "SYNTAX ERROR: Invalid FOR statement",
@@ -1262,6 +1282,101 @@ class CoCoBasic:
         
         return []
     
+    def _execute_single_line_for(self, for_part, body_part):
+        """Execute a single-line FOR loop: FOR I=1 TO 3: PRINT I: NEXT I"""
+        # Set error context
+        self.error_context.set_context(self.current_line, f"FOR {for_part}")
+        
+        # Parse the FOR statement part
+        match = re.match(r'(\w+)\s*=\s*(.+?)\s+TO\s+(.+?)(?:\s+STEP\s+(.+?))?$', for_part, re.IGNORECASE)
+        if not match:
+            error = self.error_context.syntax_error(
+                "SYNTAX ERROR: Invalid FOR statement",
+                self.current_line,
+                suggestions=[
+                    "Correct syntax: FOR variable = start TO end [STEP increment]",
+                    "Example: FOR I = 1 TO 10 or FOR X = 0 TO 100 STEP 5",
+                    "Variable name must be a single letter or word"
+                ]
+            )
+            return [{'type': 'error', 'message': error.format_detailed()}]
+        
+        var_name = match.group(1).strip()
+        
+        # Evaluate expressions
+        try:
+            start_val = self.evaluate_expression(match.group(2).strip(), self.current_line)
+            end_val = self.evaluate_expression(match.group(3).strip(), self.current_line)
+            step_val = self.evaluate_expression(match.group(4).strip(), self.current_line) if match.group(4) else 1
+        except ValueError as e:
+            return [{'type': 'error', 'message': str(e)}]
+        except Exception as e:
+            error = self.error_context.runtime_error(
+                f"Error evaluating FOR loop values: {str(e)}",
+                self.current_line,
+                suggestions=[
+                    "Check that start, end, and step values are valid numbers",
+                    "Ensure all variables used in expressions are defined"
+                ]
+            )
+            return [{'type': 'error', 'message': error.format_detailed()}]
+        
+        # Execute the loop
+        results = []
+        current_val = start_val
+        max_iterations = getattr(self, 'max_iterations', 10000)
+        iteration_count = 0
+        
+        # Remove NEXT from body_part if present (since we handle it ourselves)
+        body_statements = body_part
+        if body_statements.upper().endswith(' NEXT ' + var_name.upper()):
+            body_statements = body_statements[:-len(' NEXT ' + var_name)]
+        elif body_statements.upper().endswith(' NEXT'):
+            body_statements = body_statements[:-5]
+        
+        while iteration_count < max_iterations:
+            # Check loop condition
+            if step_val > 0 and current_val > end_val:
+                break
+            elif step_val < 0 and current_val < end_val:
+                break
+            elif step_val == 0:
+                error = self.error_context.runtime_error(
+                    "FOR loop with STEP 0 would cause infinite loop",
+                    self.current_line,
+                    suggestions=[
+                        "Use a non-zero STEP value",
+                        "Example: FOR I = 1 TO 10 STEP 1"
+                    ]
+                )
+                return [{'type': 'error', 'message': error.format_detailed()}]
+            
+            # Set loop variable
+            self.variables[var_name] = current_val
+            
+            # Execute body statements
+            if body_statements.strip():
+                body_result = self.process_line(body_statements)
+                if body_result:
+                    results.extend(body_result)
+            
+            # Increment loop variable
+            current_val += step_val
+            iteration_count += 1
+        
+        if iteration_count >= max_iterations:
+            error = self.error_context.runtime_error(
+                f"FOR loop exceeded maximum iterations ({max_iterations})",
+                self.current_line,
+                suggestions=[
+                    "Check loop bounds to prevent infinite loops",
+                    "Verify STEP value moves toward the end value"
+                ]
+            )
+            return [{'type': 'error', 'message': error.format_detailed()}]
+        
+        return results
+    
     def execute_next(self, args):
         if not self.for_stack:
             error = self.error_context.runtime_error(
@@ -1298,7 +1413,7 @@ class CoCoBasic:
             return []
     
     def execute_if(self, args):
-        # IF condition THEN [action | multi-line]
+        # IF condition THEN [action | multi-line] - now using AST parser
         if 'THEN' not in args.upper():
             error = self.error_context.syntax_error(
                 "SYNTAX ERROR: Missing THEN in IF statement",
@@ -1352,21 +1467,71 @@ class CoCoBasic:
             else:
                 return []  # Continue with THEN block
         else:
-            # Single-line IF - existing behavior
-            if condition_result:
-                # Check if it's a simple line number or contains statements
-                if ':' in then_part:
-                    # Multi-statement THEN clause - execute as command line
-                    return self.process_line(then_part)
+            # Single-line IF - use AST parser for proper handling
+            try:
+                # Use AST parser for condition evaluation only
+                # Parse condition using AST parser for better accuracy
+                condition_ast = self.expression_evaluator.ast_parser.parse_expression(condition, self.current_line)
+                condition_result = self.expression_evaluator.ast_evaluator.visit(condition_ast)
+                
+                # Convert to boolean (BASIC truth rules)
+                if isinstance(condition_result, (int, float)):
+                    condition_true = condition_result != 0
+                elif isinstance(condition_result, str):
+                    condition_true = len(condition_result) > 0
                 else:
-                    # Could be line number expression - try to evaluate
-                    try:
-                        line_num = int(self.evaluate_expression(then_part))
-                        # If it evaluates to a number, treat as line number
-                        return [{'type': 'jump', 'line': line_num}]
-                    except:
-                        # If evaluation fails, treat as command to execute
+                    condition_true = bool(condition_result)
+                
+                # Execute THEN clause only if condition is true
+                if condition_true:
+                    # Handle THEN clause - proper detection of commands vs numbers
+                    then_upper = then_part.upper().strip()
+                    
+                    # Check if it starts with a BASIC keyword
+                    basic_keywords = ['PRINT', 'LET', 'GOTO', 'GOSUB', 'RETURN', 'END', 'STOP', 
+                                    'IF', 'FOR', 'NEXT', 'DIM', 'INPUT', 'READ', 'DATA', 
+                                    'RESTORE', 'ON', 'DEF', 'PAUSE', 'NEW', 'LIST', 'RUN',
+                                    'EXIT', 'DO', 'LOOP', 'WHILE', 'WEND', 'ELSE', 'ENDIF']
+                    
+                    starts_with_keyword = any(then_upper.startswith(keyword) for keyword in basic_keywords)
+                    
+                    # Check if it looks like an assignment (contains = but not comparison operators)
+                    is_assignment = ('=' in then_part and 
+                                   not any(op in then_part for op in ['>=', '<=', '<>', '==']) and
+                                   not then_part.strip().startswith('='))
+                    
+                    # Check for multi-statement with colon
+                    has_colon = ':' in then_part
+                    
+                    if starts_with_keyword or is_assignment or has_colon:
+                        # Treat as statement to execute
                         return self.process_line(then_part)
+                    else:
+                        # Try to parse as line number - delegate to GOTO for validation
+                        try:
+                            # Test if it's a valid number
+                            int(self.evaluate_expression(then_part))
+                            # If it is, use GOTO command which has proper validation
+                            return self.execute_goto(then_part)
+                        except:
+                            # If evaluation fails, treat as statement
+                            return self.process_line(then_part)
+                else:
+                    # Condition false - do nothing
+                    return []
+                    
+            except Exception as e:
+                # If AST parsing fails, return error
+                error = self.error_context.syntax_error(
+                    f"Error in IF statement: {str(e)}",
+                    self.current_line,
+                    suggestions=[
+                        "Check IF statement syntax",
+                        "Verify condition and THEN clause are valid",
+                        'Example: IF A = 5 THEN PRINT "EQUAL"'
+                    ]
+                )
+                return [{'type': 'error', 'message': error.format_detailed()}]
             
             return []
     
