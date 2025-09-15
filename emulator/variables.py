@@ -26,7 +26,16 @@ class VariableManager:
         try:
             # DIM A(10), B$(5,10), C(20) - Parse comma-separated array declarations, respecting parentheses
             if not args:
-                return [{'type': 'error', 'message': 'SYNTAX ERROR'}]
+                error = self.emulator.error_context.syntax_error(
+                    "DIM command requires array declarations",
+                    self.emulator.current_line,
+                    suggestions=[
+                        'Correct syntax: DIM array_name(size)',
+                        'Example: DIM A(10), B$(5,10)',
+                        'Specify at least one array to dimension'
+                    ]
+                )
+                return [{'type': 'error', 'message': error.format_detailed()}]
             
             # Parse comma-separated array declarations, but be careful with parentheses
             array_defs = []
@@ -52,14 +61,32 @@ class VariableManager:
                 # Parse array_name(dimensions)
                 match = re.match(r'(\w+\$?)\(([^)]+)\)', array_def)
                 if not match:
-                    return [{'type': 'error', 'message': 'SYNTAX ERROR'}]
+                    error = self.emulator.error_context.syntax_error(
+                        f"Invalid array declaration syntax: {array_def}",
+                        self.emulator.current_line,
+                        suggestions=[
+                            'Correct syntax: array_name(dimensions)',
+                            'Example: DIM A(10), B$(5,10)',
+                            'Array name must be followed by parentheses with dimensions'
+                        ]
+                    )
+                    return [{'type': 'error', 'message': error.format_detailed()}]
                 
                 array_name = match.group(1).upper()
                 dimensions_str = match.group(2)
                 
                 # Check if array name conflicts with reserved function names
                 if array_name in self.emulator.get_reserved_function_names():
-                    return [{'type': 'error', 'message': 'SYNTAX ERROR'}]
+                    error = self.emulator.error_context.syntax_error(
+                        f"Cannot use reserved function name as array: {array_name}",
+                        self.emulator.current_line,
+                        suggestions=[
+                            'Choose a different array name',
+                            'Reserved names include built-in functions like SIN, COS, etc.',
+                            'Example: Use DATA instead of SIN'
+                        ]
+                    )
+                    return [{'type': 'error', 'message': error.format_detailed()}]
                 
                 # Parse dimensions (comma-separated numbers)
                 try:
@@ -67,12 +94,29 @@ class VariableManager:
                     for dim_str in dimensions_str.split(','):
                         dim_value = int(self.emulator.evaluate_expression(dim_str.strip()))
                         if dim_value <= 0:
-                            return [{'type': 'error', 'message': 'SYNTAX ERROR'}]
+                            error = self.emulator.error_context.syntax_error(
+                                f"Array dimension must be positive: {dim_value}",
+                                self.emulator.current_line,
+                                suggestions=[
+                                    'Array dimensions must be greater than 0',
+                                    'Example: DIM A(10) not DIM A(0)',
+                                    'Use positive integers for array sizes'
+                                ]
+                            )
+                            return [{'type': 'error', 'message': error.format_detailed()}]
                         dimensions.append(dim_value)
                     
                     # Check if array is already dimensioned (after syntax validation)
                     if array_name in self.emulator.arrays:
-                        return [{'type': 'error', 'message': 'REDIM\'D ARRAY'}]
+                        error = self.emulator.error_context.runtime_error(
+                            f"Array {array_name} is already dimensioned",
+                            suggestions=[
+                                'Arrays can only be dimensioned once',
+                                'Use NEW to clear existing arrays',
+                                'Choose a different array name'
+                            ]
+                        )
+                        return [{'type': 'error', 'message': error.format_detailed()}]
                     
                     # Create multi-dimensional array initialized to 0 or ""
                     # Note: Color Computer BASIC arrays - DIM A(10) creates indices 0-10 (11 elements)
@@ -84,19 +128,45 @@ class VariableManager:
                         # Numeric array
                         self.emulator.arrays[array_name] = self._create_multidim_array(dimensions, 0)
                         
-                except ValueError:
-                    return [{'type': 'error', 'message': 'SYNTAX ERROR'}]
+                except ValueError as e:
+                    error = self.emulator.error_context.syntax_error(
+                        f"Invalid array dimension expression: {str(e)}",
+                        self.emulator.current_line,
+                        suggestions=[
+                            'Array dimensions must evaluate to positive integers',
+                            'Example: DIM A(N), B(X*2)',
+                            'Check that all variables in dimensions are defined'
+                        ]
+                    )
+                    return [{'type': 'error', 'message': error.format_detailed()}]
             
             return []  # DIM doesn't produce output
         except Exception as e:
-            return [{'type': 'error', 'message': f'Error in DIM: {str(e)}'}]
+            error = self.emulator.error_context.runtime_error(
+                f"Unexpected error in DIM command: {str(e)}",
+                suggestions=[
+                    'Check DIM syntax and array declarations',
+                    'Example: DIM A(10), B$(5,10)',
+                    'Ensure all expressions are valid'
+                ]
+            )
+            return [{'type': 'error', 'message': error.format_detailed()}]
     
     def execute_let(self, args):
         """Execute LET statement or variable assignment"""
         try:
             # Handle both "LET X = 5" and "X = 5"
             if '=' not in args:
-                return [{'type': 'error', 'message': 'SYNTAX ERROR: Missing = in assignment'}]
+                error = self.emulator.error_context.syntax_error(
+                    "Missing assignment operator in LET statement",
+                    self.emulator.current_line,
+                    suggestions=[
+                        'Correct syntax: LET variable = expression',
+                        'Example: LET X = 5 or X = 10',
+                        'Assignment requires = operator'
+                    ]
+                )
+                return [{'type': 'error', 'message': error.format_detailed()}]
             
             var_name, expression = args.split('=', 1)
             var_name = var_name.strip().upper()
@@ -104,7 +174,16 @@ class VariableManager:
             
             # Validate variable name is not empty
             if not var_name:
-                return [{'type': 'error', 'message': 'SYNTAX ERROR'}]
+                error = self.emulator.error_context.syntax_error(
+                    "Empty variable name in assignment",
+                    self.emulator.current_line,
+                    suggestions=[
+                        'Variable name cannot be empty',
+                        'Example: X = 5 not = 5',
+                        'Specify a valid variable name before ='
+                    ]
+                )
+                return [{'type': 'error', 'message': error.format_detailed()}]
             
             # Check if this is an array assignment
             if '(' in var_name and var_name.endswith(')'):
@@ -114,7 +193,16 @@ class VariableManager:
                 
                 # Check if array name conflicts with reserved function names
                 if array_part in self.emulator.get_reserved_function_names():
-                    return [{'type': 'error', 'message': 'SYNTAX ERROR'}]
+                    error = self.emulator.error_context.syntax_error(
+                        f"Cannot assign to reserved function name: {array_part}",
+                        self.emulator.current_line,
+                        suggestions=[
+                            'Choose a different variable name',
+                            'Reserved names include built-in functions',
+                            'Example: Use DATA instead of SIN'
+                        ]
+                    )
+                    return [{'type': 'error', 'message': error.format_detailed()}]
                 
                 # Parse indices
                 indices = [int(self.emulator.evaluate_expression(idx.strip())) for idx in indices_str.split(',')]
@@ -135,7 +223,16 @@ class VariableManager:
                 # Regular variable assignment
                 # Check if variable name conflicts with reserved function names
                 if var_name in self.emulator.get_reserved_function_names():
-                    return [{'type': 'error', 'message': 'SYNTAX ERROR'}]
+                    error = self.emulator.error_context.syntax_error(
+                        f"Cannot assign to reserved function name: {var_name}",
+                        self.emulator.current_line,
+                        suggestions=[
+                            'Choose a different variable name',
+                            'Reserved names include built-in functions',
+                            'Example: Use DATA instead of SIN'
+                        ]
+                    )
+                    return [{'type': 'error', 'message': error.format_detailed()}]
                 
                 # Evaluate the expression
                 if expression.startswith('"') and expression.endswith('"'):
@@ -149,7 +246,15 @@ class VariableManager:
                 return [{'type': 'text', 'text': 'OK'}]
                 
         except Exception as e:
-            return [{'type': 'error', 'message': f'Error in assignment: {str(e)}'}]
+            error = self.emulator.error_context.runtime_error(
+                f"Unexpected error in assignment: {str(e)}",
+                suggestions=[
+                    'Check assignment syntax and expression',
+                    'Example: X = 5 or A$(1) = "hello"',
+                    'Ensure all variables and expressions are valid'
+                ]
+            )
+            return [{'type': 'error', 'message': error.format_detailed()}]
     
     def get_array_element(self, array_name, indices):
         """Get value from array element using nested array structure"""

@@ -110,22 +110,22 @@ class FileCommandsTest(BaseTestCase):
 
     # FILES Command Tests
     def test_files_empty_directory(self):
-        """Test FILES command shows available files"""
-        # The FILES command will show files from multiple directories
+        """Test DIR command shows available files"""
+        # The DIR command will show files from multiple directories
         # This test just verifies it works and shows the basic structure
-        result = self.basic.execute_command('FILES')
+        result = self.basic.execute_command('DIR')
         self.assert_output_contains(result, 'BASIC PROGRAM FILES:')
         self.assert_output_contains(result, 'Use LOAD "filename" to load a program')
 
     def test_files_with_programs(self):
-        """Test FILES command with existing programs"""
+        """Test DIR command with existing programs"""
         # Create test files
         with open('programs/test1.bas', 'w') as f:
             f.write('10 PRINT "TEST1"\n')
         with open('programs/test2.bas', 'w') as f:
             f.write('10 PRINT "TEST2"\n')
         
-        result = self.basic.execute_command('FILES')
+        result = self.basic.execute_command('DIR')
         self.assert_output_contains(result, 'BASIC PROGRAM FILES:')
         self.assert_output_contains(result, 'test1.bas')
         self.assert_output_contains(result, 'test2.bas')
@@ -138,7 +138,7 @@ class FileCommandsTest(BaseTestCase):
         with open('programs/info_test.bas', 'w') as f:
             f.write('10 PRINT "SIZE TEST"\n')
         
-        result = self.basic.execute_command('FILES')
+        result = self.basic.execute_command('DIR')
         output_text = ' '.join([item['text'] for item in result if item['type'] == 'text'])
         
         # Should contain filename and size information
@@ -289,9 +289,9 @@ class FileCommandsTest(BaseTestCase):
             self.assertIn(line_number, list_text)
 
     def test_files_after_save_operations(self):
-        """Test FILES command reflects SAVE operations"""
+        """Test DIR command reflects SAVE operations"""
         # Initially should have no files or existing files
-        initial_result = self.basic.execute_command('FILES')
+        initial_result = self.basic.execute_command('DIR')
         
         # Create and save some programs
         programs = ['prog1', 'prog2', 'prog3']
@@ -300,8 +300,8 @@ class FileCommandsTest(BaseTestCase):
             self.basic.execute_command(f'10 PRINT "{prog.upper()}"')
             self.basic.execute_command(f'SAVE "{prog}"')
         
-        # Check FILES shows all programs
-        result = self.basic.execute_command('FILES')
+        # Check DIR shows all programs
+        result = self.basic.execute_command('DIR')
         output_text = ' '.join([item['text'] for item in result if item['type'] == 'text'])
         
         for prog in programs:
@@ -317,8 +317,8 @@ class FileCommandsTest(BaseTestCase):
         result = self.basic.execute_command('CD "programs"')
         self.assert_output_contains(result, 'CHANGED FROM')
         
-        # FILES should still work from subdirectory
-        files_result = self.basic.execute_command('FILES')
+        # DIR should still work from subdirectory
+        files_result = self.basic.execute_command('DIR')
         self.assert_output_contains(files_result, 'main_test.bas')
 
     # Error Handling Tests

@@ -1,0 +1,34 @@
+Disk Basic Summary
+
+In addition to the capabilities of Extended Color BASIC, Color Disk BASIC
+adds the following.
+--------------------------------------------------------------------------
+
+Disk management commands
+   BACKUP n TO m            Copy all files from one disk to another
+   BACKUP n                 BACKUP a disk using only a single disk drive
+   COPY file1 TO file2      Make a duplicate of a file
+   DIR n                    List the files that are on the disk
+   DRIVE n                  Use drive n as the default
+   DSKINIn                  Initialize (format) a disk
+   KILL file                Delete a file from the disk
+   LOAD file,R              Load a program, and optionally start it running
+   LOADM file,offset        Load a machine-code program, shifting by offset
+   MERGE file,R             Load an ASCII program without clearing the old one
+   RENAME file1 TO file2    Change the name of a file
+   RUN file,R               Load a program, and optionally start it running
+   SAVE file,A              Save a program, optionally in ASCII
+   SAVEM file,a1,a2,ax      Save a machine-code program, from a1 to a2, exec at ax
+   VERIFY ON                Double-check all writes to the disk
+   VERIFY OFF               Don't double-check
+
+Programming commands
+   FILES max_f,size         Reserve buffers for open files
+   FREE(n)                  Returns the number of free granules (2304 bytes each)
+   UNLOAD n                 Close all open files on drive n
+   DSKI$ n,t,s,v1$,v2$      Read track t sector s into v1$ and v2$
+   DSKO$ n,t,s,v1$,v2$      Write track t sector s from v1$ and v2$
+   OPEN "I",f,file          Open a file for sequential input (ie: INPUT)
+   OPEN "O",f,file          Open a file for sequential output (ie: PRINT/WRITE)
+   OPEN "D",f,file,len      Open a file for direct access; (ie: GET/PUT);
+                              record length len

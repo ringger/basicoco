@@ -4,6 +4,15 @@ BASIC Functions module for TRS-80 Color Computer BASIC Emulator
 This module contains all BASIC function implementations as standalone functions,
 making them easily extensible and maintainable. Functions are registered with
 the FunctionRegistry and called during expression evaluation.
+
+ARCHITECTURE OWNERSHIP:
+The function registry system in this module is the SINGLE authoritative source
+for all BASIC functions. All function calls in BASIC programs are dispatched
+through this registry. No BASIC functions should be implemented elsewhere in
+the codebase - this prevents duplication and ensures consistent behavior.
+
+Function implementations must be registered at the bottom of this file to be
+available in BASIC programs.
 """
 
 import math

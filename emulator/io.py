@@ -47,18 +47,45 @@ class IOHandler:
                         variables = [var.strip().upper() for var in remainder.split(',')]
                 else:
                     # No closing quote - syntax error
-                    return [{'type': 'error', 'message': 'SYNTAX ERROR in INPUT'}]
+                    error = self.emulator.error_context.syntax_error(
+                        "Missing closing quote in INPUT prompt",
+                        self.emulator.current_line,
+                        suggestions=[
+                            'Correct syntax: INPUT "prompt"; variable',
+                            'Example: INPUT "Enter value"; X',
+                            'Make sure prompt string has closing quote'
+                        ]
+                    )
+                    return [{'type': 'error', 'message': error.format_detailed()}]
             else:
                 # No prompt, just variables
                 variables = [var.strip().upper() for var in args.split(',')]
             
             if not variables:
-                return [{'type': 'error', 'message': 'SYNTAX ERROR in INPUT'}]
+                error = self.emulator.error_context.syntax_error(
+                    "No variables specified in INPUT statement",
+                    self.emulator.current_line,
+                    suggestions=[
+                        'Correct syntax: INPUT variable1, variable2, ...',
+                        'Example: INPUT X, Y, NAME$',
+                        'Specify at least one variable to input'
+                    ]
+                )
+                return [{'type': 'error', 'message': error.format_detailed()}]
             
             # Validate all variable names
             for variable in variables:
                 if not self._is_valid_variable_name(variable):
-                    return [{'type': 'error', 'message': 'SYNTAX ERROR: Invalid variable name'}]
+                    error = self.emulator.error_context.syntax_error(
+                        f"Invalid variable name: {variable}",
+                        self.emulator.current_line,
+                        suggestions=[
+                            'Variable names must start with a letter',
+                            'Use only letters, numbers, and $ for strings',
+                            'Examples: X, NAME$, COUNT, SCORE1'
+                        ]
+                    )
+                    return [{'type': 'error', 'message': error.format_detailed()}]
             
             # Store multi-variable INPUT state
             self.emulator.input_variables = variables
@@ -72,7 +99,15 @@ class IOHandler:
             return [{'type': 'input_request', 'prompt': prompt_text, 'variable': variables[0]}]
             
         except Exception as e:
-            return [{'type': 'error', 'message': f'Error in INPUT: {str(e)}'}]
+            error = self.emulator.error_context.runtime_error(
+                f"Unexpected error in INPUT statement: {str(e)}",
+                suggestions=[
+                    'Check INPUT syntax and variable names',
+                    'Example: INPUT "prompt"; variable',
+                    'Ensure all variables are valid'
+                ]
+            )
+            return [{'type': 'error', 'message': error.format_detailed()}]
     
     def execute_print(self, args):
         """Execute PRINT statement"""
@@ -105,7 +140,15 @@ class IOHandler:
                         # Semicolon adds no spacing
                         
                 except Exception as e:
-                    return [{'type': 'error', 'message': f'Error in PRINT: {str(e)}'}]
+                    error = self.emulator.error_context.runtime_error(
+                        f"Error evaluating PRINT expression: {part}",
+                        suggestions=[
+                            'Check that all variables are defined',
+                            'Verify expression syntax is correct',
+                            'Example: PRINT X, "Hello", Y+5'
+                        ]
+                    )
+                    return [{'type': 'error', 'message': error.format_detailed()}]
             
             # Check if the last part had a trailing separator (semicolon or comma)
             has_trailing_separator = False
@@ -119,26 +162,18 @@ class IOHandler:
             else:
                 return [{'type': 'text', 'text': result_text}]
         except Exception as e:
-            return [{'type': 'error', 'message': f'Error in PRINT: {str(e)}'}]
+            error = self.emulator.error_context.runtime_error(
+                f"Unexpected error in PRINT statement: {str(e)}",
+                suggestions=[
+                    'Check PRINT syntax and expressions',
+                    'Example: PRINT expression1; expression2',
+                    'Verify all variables and functions are valid'
+                ]
+            )
+            return [{'type': 'error', 'message': error.format_detailed()}]
     
-    def evaluate_inkey_function(self, expr):
-        """Evaluate INKEY$ function"""
-        # INKEY$ - return next key from keyboard buffer or empty string
-        if expr == 'INKEY$' or re.match(r'INKEY\$\(\s*\)', expr):
-            if self.emulator.keyboard_buffer:
-                return self.emulator.keyboard_buffer.pop(0)
-            else:
-                return ""
-        else:
-            return [{'type': 'error', 'message': 'SYNTAX ERROR in INKEY$'}]
-    
-    def add_key_to_buffer(self, key):
-        """Add a key to the keyboard buffer for INKEY$"""
-        self.emulator.keyboard_buffer.append(key)
-    
-    def clear_keyboard_buffer(self):
-        """Clear the keyboard buffer"""
-        self.emulator.keyboard_buffer.clear()
+    # INKEY$ functionality consolidated in functions.py function registry
+    # Keyboard buffer managed directly by emulator, not through I/O handler
     
     def _split_print_arguments_with_separators(self, args):
         """Split PRINT arguments by semicolon/comma, preserving separator info"""

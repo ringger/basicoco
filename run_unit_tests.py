@@ -1,9 +1,8 @@
 #!/usr/bin/env python3
 
 """
-Master Test Runner for TRS-80 Color Computer BASIC emulator.
-Runs both unit tests and integration tests with comprehensive reporting.
-For focused testing, use run_unit_tests.py or run_integration_tests.py directly.
+Unit Test Runner for TRS-80 Color Computer BASIC emulator.
+Runs only unit tests located in tests/unit/ directory.
 """
 
 import sys
@@ -20,16 +19,18 @@ sys.path.append(os.path.dirname(__file__))
 from test_base import BaseTestCase, TestSuite, TestResult, print_test_results
 
 
-class TestDiscovery:
-    """Discovers test files and classes in the project directory"""
+class UnitTestDiscovery:
+    """Discovers unit test files in the tests/unit/ directory"""
     
-    def __init__(self, test_directory: str = "tests"):
-        self.test_directory = Path(test_directory)
+    def __init__(self):
+        self.test_directory = Path("tests/unit")
         self.discovered_tests: List[Dict[str, Any]] = []
 
     def discover_test_files(self, pattern: str = "test_*.py") -> List[Path]:
-        """Find all test files matching the pattern (recursively)"""
-        return list(self.test_directory.rglob(pattern))
+        """Find all unit test files matching the pattern"""
+        if not self.test_directory.exists():
+            return []
+        return list(self.test_directory.glob(pattern))
 
     def load_test_module(self, file_path: Path):
         """Load a Python module from file path"""
@@ -65,19 +66,12 @@ class TestDiscovery:
         return test_functions
 
     def discover_all_tests(self) -> List[Dict[str, Any]]:
-        """Discover all tests in the directory"""
+        """Discover all unit tests"""
         self.discovered_tests = []
         
         test_files = self.discover_test_files()
         
         for file_path in test_files:
-            if file_path.name in ['test_base.py', 'run_tests.py']:
-                continue  # Skip framework files
-                
-            # Skip development test scripts (they're for manual use)
-            if 'dev_tests' in str(file_path):
-                continue
-                
             module = self.load_test_module(file_path)
             if not module:
                 continue
@@ -107,8 +101,8 @@ class TestDiscovery:
         return self.discovered_tests
 
 
-class TestRunner:
-    """Runs discovered tests and collects results"""
+class UnitTestRunner:
+    """Runs unit tests and collects results"""
     
     def __init__(self, verbose: bool = False, stop_on_failure: bool = False):
         self.verbose = verbose
@@ -144,12 +138,12 @@ class TestRunner:
         return suite
 
     def run_discovered_tests(self, discovered_tests: List[Dict[str, Any]]) -> List[TestSuite]:
-        """Run all discovered tests"""
+        """Run all discovered unit tests"""
         self.start_time = time.time()
         self.all_results = []
         
         total_tests = len(discovered_tests)
-        print(f"Running {total_tests} test suites...")
+        print(f"Running {total_tests} unit test suites...")
         print("=" * 60)
         
         for i, test_info in enumerate(discovered_tests):
@@ -186,7 +180,7 @@ class TestRunner:
     def print_summary(self):
         """Print overall test summary"""
         if not self.all_results:
-            print("No tests were run.")
+            print("No unit tests were run.")
             return
 
         total_suites = len(self.all_results)
@@ -198,7 +192,7 @@ class TestRunner:
         duration = self.end_time - self.start_time if self.start_time and self.end_time else 0
         
         print("\n" + "=" * 60)
-        print("OVERALL SUMMARY")
+        print("UNIT TEST SUMMARY")
         print("=" * 60)
         print(f"Test suites run: {total_suites}")
         print(f"Total tests: {total_tests}")
@@ -212,7 +206,7 @@ class TestRunner:
         print(f"Duration: {duration:.2f}s")
         
         if total_failed > 0:
-            print("\nFAILED TEST SUITES:")
+            print("\nFAILED UNIT TEST SUITES:")
             for suite in self.all_results:
                 if suite.failed_count > 0:
                     print(f"  ❌ {suite.name}: {suite.failed_count}/{suite.total_count} failed")
@@ -235,16 +229,15 @@ class TestRunner:
 
 
 def main():
-    """Main entry point for the test runner"""
+    """Main entry point for the unit test runner"""
     parser = argparse.ArgumentParser(
-        description="TRS-80 Color Computer BASIC Emulator Test Runner",
+        description="TRS-80 Color Computer BASIC Emulator Unit Test Runner",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  python run_tests.py                    # Run all tests
-  python run_tests.py -v                 # Run with verbose output
-  python run_tests.py --stop-on-failure # Stop on first failure
-  python run_tests.py --pattern "test_*math*.py"  # Run specific pattern
+  python run_unit_tests.py                    # Run all unit tests
+  python run_unit_tests.py -v                 # Run with verbose output
+  python run_unit_tests.py --stop-on-failure  # Stop on first failure
         """
     )
     
@@ -260,42 +253,25 @@ Examples:
         help="Stop running tests after the first failure"
     )
     
-    parser.add_argument(
-        "--pattern", 
-        default="test_*.py", 
-        help="Pattern to match test files (default: test_*.py)"
-    )
-    
-    parser.add_argument(
-        "--directory", 
-        default="tests", 
-        help="Directory to search for tests (default: tests directory)"
-    )
-    
     args = parser.parse_args()
     
-    print("TRS-80 Color Computer BASIC Emulator Master Test Runner")
+    print("TRS-80 Color Computer BASIC Emulator Unit Test Runner")
     print("=" * 60)
-    print("Running both unit tests and integration tests")
-    print("For focused testing, use run_unit_tests.py or run_integration_tests.py")
-    print()
     
-    # Discover tests
-    discovery = TestDiscovery(args.directory)
-    print(f"Discovering tests in {args.directory} with pattern {args.pattern}")
+    # Discover unit tests
+    discovery = UnitTestDiscovery()
+    print("Discovering unit tests in tests/unit/...")
     
-    # Override the pattern for discovery
-    discovery.test_directory = Path(args.directory)
     discovered_tests = discovery.discover_all_tests()
     
     if not discovered_tests:
-        print("❌ No tests found!")
+        print("❌ No unit tests found!")
         return 1
     
-    print(f"Found {len(discovered_tests)} test suites")
+    print(f"Found {len(discovered_tests)} unit test suites")
     
     # Run tests
-    runner = TestRunner(verbose=args.verbose, stop_on_failure=args.stop_on_failure)
+    runner = UnitTestRunner(verbose=args.verbose, stop_on_failure=args.stop_on_failure)
     runner.run_discovered_tests(discovered_tests)
     
     # Print summary

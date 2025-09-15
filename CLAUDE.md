@@ -2,11 +2,48 @@
 
 *This roadmap focuses exclusively on future enhancements and development priorities. Current capabilities and recent achievements are documented in README.md and git commit history.*
 
+## Current Architecture Foundation 🏗️
+
+The emulator now has a **clean, well-established architecture** that provides the foundation for future development:
+
+- **✅ Unified Error Handling**: 145+ educational error messages across all modules
+- **✅ Clean Method Naming**: `process_*` for internal system vs `execute_*` for user commands  
+- **✅ Command Registry**: Unified plugin-based command dispatch system
+- **✅ Function Registry**: Single source of truth for all BASIC functions
+- **✅ Modular Design**: Clear separation of concerns across specialized modules
+- **✅ Enhanced Testing**: Comprehensive test coverage with architectural guardrails
+
+**Architecture Patterns to Maintain:**
+- Command registration via `register_commands()` in each module
+- Enhanced error context with educational suggestions
+- Clear internal/external API boundaries
+- Function ownership by `functions.py` module only
+
 ## Forward Development Priorities 🎯
 
-*Note: The revolutionary Dual Monitor Interface has been completed with full production-ready stability. Advanced String Processing, Expression Enhancement, Control Flow features, Program Management commands (SAVE, FILES, KILL, LOAD), and critical WebSocket architecture fixes are all fully functional. The roadmap reflects remaining priorities for enhanced user experience and expanded BASIC language support.*
+### Phase 1: State Management Architecture Enhancement 🏗️
 
-### Phase 1: Essential Disk BASIC File Operations (NEXT PRIORITY)
+**Create specialized state managers for improved maintainability and clear separation of concerns:**
+
+- **Implement Specialized State Managers**
+  - `VariableStateManager` - variables, arrays, and type management
+  - `ExecutionStateManager` - program counter, call stacks, loops, execution flow  
+  - `IOStateManager` - keyboard buffer, input state, cursor management
+  - `GraphicsStateManager` - graphics mode, screen state, cursor positioning
+  
+- **Refactor State Management Interface**
+  - Refactor `clear_interpreter_state()` to delegate to appropriate managers
+  - Define clear state clearing policies for NEW, LOAD, RUN operations
+  - Establish state isolation boundaries between different concerns
+  - Create state snapshots for debugging and program state inspection
+
+- **Architecture Documentation & Testing**
+  - Create architecture decision records (ADRs) for all design choices
+  - Add integration tests specifically for architectural boundaries
+  - Document clear component responsibilities and interfaces
+  - Add static analysis rules to enforce architectural decisions
+
+### Phase 2: Essential Disk BASIC File Operations
 - **Core File I/O Commands**
   - OPEN "mode",#device,"filename" - Open files for sequential/random access (#1-#15)
   - CLOSE #device - Close opened file buffers
@@ -16,11 +53,8 @@
   - FIELD #device, width AS variable$ - Organize file buffer into named fields
   - GET #device [,record] - Read specific record from random access file
   - PUT #device [,record] - Write current buffer to random access file
-- **Directory Operations**
-  - DIR [drive] [filespec] - Display directory listing of files
-  - DRIVE drive_number - Change default disk drive
 
-### Phase 2: Advanced System Functions & Memory Simulation
+### Phase 3: Advanced System Functions & Memory Simulation
 - **Authentic Memory Access**
   - PEEK(address) - Read simulated memory location with TRS-80 memory map
   - POKE address, value - Write to simulated memory location
@@ -37,30 +71,17 @@
   - LOADM "filename" [,offset] - Load machine language program from disk
   - SAVEM "filename",start,end,execute - Save machine language program to disk
 
-### Phase 3: Enhanced File Operations & Program Management
-- **Enhanced Web Storage**
-  - **Web SAVE** - Save programs to browser localStorage with auto-sync
-  - **Advanced file management** - Organize, rename, delete programs in web interface
-  - **Program versioning** - Automatic backup and restore points
-- **Cross-Platform Persistence**
-  - **Server-side mirroring** - Sync web storage to filesystem for persistence
-  - **Repository integration** - Auto-commit programs to version control
-  - **Export/Import** - Download/upload .BAS files between web and desktop
-  - **Cross-session survival** - Programs persist through server restarts
-- **Enhanced Disk BASIC Commands**
+### Phase 4: Enhanced Disk BASIC Commands
+- **Program Management**
   - MERGE "filename" - Merge BASIC program with current program
   - RENAME "oldname","newname" - Rename disk files
   - COPY "source","destination" - Copy files on disk
-  - RENUM [start],[increment] - Renumber program lines
-  - DELETE start[-end] - Delete range of program lines
-- **Tape/Cassette Operations**
-  - CLOAD ["filename"] - Load program from cassette tape
-  - CSAVE ["filename"] - Save program to cassette tape
+- **Machine Language Tape Operations**
   - CLOADM "filename" [,offset] - Load machine language from tape
   - CSAVEM "filename",start,end,execute - Save machine language to tape
-  - MOTOR ON/OFF - Control cassette motor
+  - MOTOR ON/OFF - Control cassette motor (no-op)
 
-### Phase 4: Advanced Error Handling & Recovery
+### Phase 5: Advanced Error Handling & Recovery
 - **Structured Error Handling**
   - ON ERROR GOTO line - Error trapping with proper stack management
   - RESUME [line] - Resume execution after error handling
@@ -75,7 +96,6 @@
 
 ### Next-Generation CLI Experience  
 - **Enhanced Terminal Features**
-  - Authentic cursor blinking and character timing effects
   - Optional retro font rendering for authentic feel
   - Screen scroll behavior matching original hardware behavior
 - **Advanced Input Features**
@@ -222,6 +242,76 @@
   - Smooth animation at 60fps for graphics
   - Memory usage optimization
 
+## Architecture Guidelines 🏗️
+
+### Internal Architecture Patterns
+
+#### Method Naming Convention
+**CRITICAL**: Maintain clear separation between internal system methods and user command methods:
+
+- **`process_*` methods**: Internal system processing (process_command, process_line, process_statement)
+- **`execute_*` methods**: User BASIC commands (execute_if, execute_goto, execute_print)
+- **Backwards Compatibility**: External API maintains `execute_command()` as alias to `process_command()`
+
+#### Command Registry Architecture
+**ESTABLISHED PATTERN**: All BASIC commands use the unified `CommandRegistry` system:
+
+**Adding New Commands:**
+1. ✅ **DO**: Add to appropriate module's `register_commands()` method
+2. ✅ **DO**: Use the established registration pattern with metadata
+3. ❌ **DON'T**: Add hardcoded if/elif chains in `process_statement()`
+4. ❌ **DON'T**: Bypass the command registry system
+
+**Registration Pattern:**
+```python
+def register_commands(self, registry):
+    registry.register('COMMAND_NAME', self.execute_method, 
+                     category='appropriate_category',
+                     description="Command description",
+                     syntax="COMMAND syntax",
+                     examples=["COMMAND example"])
+```
+
+**Function Registry Architecture:**
+- All BASIC functions (CHR$, ASC, LEFT$, etc.) are handled by `/emulator/functions.py`
+- Functions are registered at module bottom and called during expression evaluation
+- ❌ **NEVER** duplicate function implementations in other modules
+
+### Error Handling Standards
+**ESTABLISHED PATTERN**: All modules use the Enhanced Error Context system for educational error messages.
+
+**Standard Error Pattern:**
+```python
+error = self.emulator.error_context.syntax_error(
+    "Clear description of what went wrong",
+    self.emulator.current_line,
+    suggestions=[
+        'Specific suggestion for fixing the error',
+        'Example of correct syntax',
+        'Additional helpful guidance'
+    ]
+)
+return [{'type': 'error', 'message': error.format_detailed()}]
+```
+
+**Error Types Available:**
+- `syntax_error()` - For invalid BASIC syntax
+- `runtime_error()` - For execution-time errors
+- `type_error()` - For data type mismatches
+- `arithmetic_error()` - For mathematical domain/range errors
+
+**Error Handling Requirements:**
+1. ✅ **REQUIRED**: Use enhanced error context with 2-3 helpful suggestions
+2. ✅ **REQUIRED**: Provide specific examples of correct syntax
+3. ✅ **REQUIRED**: Return `[{'type': 'error', 'message': formatted_message}]` format
+4. ❌ **FORBIDDEN**: Generic error messages without educational value
+
+### State Management Boundaries
+**Clear Separation of Concerns:**
+- `keyboard_buffer` belongs to execution state, NOT cleared during program RUN
+- Each state manager has clear ownership boundaries
+- `clear_interpreter_state()` only clears program execution state, not input state
+
 ## Implementation Notes 🔧
 
 ### Browser Compatibility
@@ -311,15 +401,26 @@
 
 ## Debugging and Issue Tracking Guidelines
 
+### Architecture Issue Priority
+**CRITICAL**: When encountering architectural inconsistencies, these must be treated as **immediate blockers** that prevent feature development until resolved. Examples:
+- Duplicate function implementations across modules
+- Missing method dependencies or dead code references
+- Bypassing established command registry patterns
+- Inconsistent error handling patterns
+- State management boundary violations
+- Method naming convention violations (`process_*` vs `execute_*`)
+
 ### Side Issue Management
 When encountering **side issues** during debugging or development (bugs, inconsistencies, or missing features discovered while working on the main task):
 
 1. **Do NOT** just mention and forget the issue
 2. **DO** add it immediately to the TodoWrite task list at the bottom with status "pending"
-3. **Example Format**: 
+3. **Prioritize architectural issues above feature issues**
+4. **Example Format**: 
    - "Fix PAUSE command syntax error discovered during testing"
    - "Investigate tuple/int comparison bug in INPUT processing"  
    - "Address missing error messages in command X"
+   - "Remove duplicate PRINT implementation found in core.py" (architectural)
 
 This ensures side issues are captured for later resolution and don't get lost in the development process.
 

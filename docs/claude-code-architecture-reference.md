@@ -513,6 +513,14 @@ claude config set -g verbose true|false
 - Complex searches requiring multiple rounds
 - Specialized domain knowledge needed
 - Long-running analysis that benefits from focus
+- Open-ended searches where you're not confident you'll find matches in first few tries
+- Tasks requiring autonomous planning and decision-making between steps
+
+**When NOT to Use Sub-Agents:**
+- Reading specific file paths (use Read/Glob instead)
+- Searching for specific class definitions (use Glob instead)
+- Searching within 2-3 known files (use Read tool directly)
+- Simple, single-step tasks where direct tool use is more efficient
 
 **Multi-Agent Performance Benefits:**
 - Anthropic reports 90.2% performance improvement using Claude Opus 4 as lead agent with Claude Sonnet 4 sub-agents
@@ -525,6 +533,43 @@ claude config set -g verbose true|false
 - **Test-Driven Agentic Development**: Using agents to write tests based on input/output specifications
 - **Container-Based Experimentation**: Running agent experiments entirely in Docker environments
 - **General-Purpose Terminal Agent**: Treating Claude Code as a universal agent rather than just a coding tool
+
+### Agent Task Recovery and Limitations
+
+**The Agent Abandonment Problem:**
+A critical limitation discovered in Claude Code's agent system is the lack of recovery mechanisms for abandoned agent tasks. This creates inefficient resource usage and lost computational work.
+
+**How Agent Abandonment Occurs:**
+1. Claude launches an agent task using the Task tool for complex, time-consuming work
+2. After some time, Claude stops waiting and continues with other work
+3. The agent completes its work autonomously but Claude has no access to results
+4. No tools exist to retrieve agent output after abandoning the wait
+
+**Technical Implementation Details:**
+- Agent tasks run in completely separate, isolated contexts from the main Claude session
+- Agents cannot communicate back and forth - they receive one prompt and return one final message
+- No equivalent to `BashOutput` tool exists for agent tasks
+- No `TaskStatus` or `TaskOutput` tools for checking or retrieving agent results
+- Agent work becomes completely inaccessible once the initial wait is abandoned
+
+**Current Workarounds:**
+- Wait patiently for agent completion (can be indefinite)
+- Use direct tool calls instead of agents for systematic searches
+- Break complex tasks into smaller, manageable chunks
+- Duplicate agent work manually if results are lost
+
+**Submitted Issue:**
+This limitation has been reported as [Issue #7652](https://github.com/anthropics/claude-code/issues/7652) in the Claude Code repository, requesting:
+- `TaskOutput` tool to retrieve agent results by task ID
+- `TaskStatus` tool to check running agent tasks
+- Automatic notifications when agents complete
+- Task persistence across sessions
+
+**Best Practices Until Fixed:**
+- Use agents only when you can wait for completion
+- Prefer direct tool usage for systematic searches
+- Launch agents for truly complex tasks requiring autonomous planning
+- Consider breaking large tasks into smaller, more manageable operations
 
 ### Integration with Development Workflows
 

@@ -1,7 +1,49 @@
-# TRS-80 Color Computer BASIC Emulator - Test Suite
+# TRS-80 Color Computer BASIC Emulator Test Suite
 
-## Overview
-This document describes the comprehensive test suite created for the TRS-80 Color Computer BASIC emulator. The test suite provides structured, automated testing with detailed reporting and utilities for validating emulator functionality.
+This directory contains the comprehensive test suite for the TRS-80 Color Computer BASIC emulator, organized into unit tests and integration tests.
+
+## Test Structure
+
+### Unit Tests (`unit/`)
+Tests individual components in isolation:
+- `test_ast_parser.py` - Abstract syntax tree parsing
+- `test_command_*.py` - Individual BASIC command implementations
+- `test_expressions.py` - Expression evaluation
+- `test_functions.py` - Built-in BASIC functions
+- `test_variables.py` - Variable management
+- `test_error_*.py` - Error handling and context management
+- `test_graphics_commands.py` - Graphics system components
+- `test_output_manager.py` - Output streaming and management
+- `test_direct_emulator.py` - Direct emulator unit testing
+- `test_utilities.py` - Utility functions unit testing
+- `test_program_management_commands.py` - DIR, FILES, DRIVE, SAVE, CLOAD, CSAVE commands
+- `test_renum_command.py` - RENUM line renumbering functionality
+- `test_on_commands.py` - ON GOTO and ON GOSUB multi-way branching
+- And more...
+
+### Integration Tests (`integration/`)
+Tests multiple components working together:
+
+#### Core Integration (`integration/`)
+- `test_comprehensive_program.py` - Complex program execution
+- `test_cross_command_interactions.py` - Command interaction testing
+- `test_for_loops.py` - Loop execution testing
+- `test_program_execution_flow.py` - Program flow control
+- `test_state_isolation.py` - State management between sessions
+- `test_websocket_completion_signals.py` - WebSocket communication
+- `test_complex_if_then.py` - Complex conditional logic
+
+#### CLI Tests (`integration/cli/`)
+- `test_cli_with_pexpect.py` - Interactive CLI testing
+- `test_cli_logged.py` - CLI with logging verification
+
+#### End-to-End Tests (`integration/e2e/`)
+- `test_minimal.py` - Basic functionality verification  
+- `test_step_by_step.py` - Step-by-step execution testing
+- `test_manual_lunar.py` - Complex lunar lander program
+- `test_complete_lunar.py` - Full lunar lander execution
+- `test_complex_lunar.py` - Advanced lunar lander scenarios
+- `test_complex_lunar_fixed.py` - Lunar lander with fixes
 
 ## Test Suite Components
 
@@ -24,22 +66,77 @@ This document describes the comprehensive test suite created for the TRS-80 Colo
 - **Command Line Interface**: Flexible execution options
 - **Statistics**: Success rates, timing, and failure analysis
 
-#### Usage
+## Running Tests
+
+### Run All Tests
 ```bash
-# Run all tests
-python run_tests.py
-
-# Run with verbose output
-python run_tests.py -v
-
-# Run tests in specific directory
-python run_tests.py --directory tests
-
-# Stop on first failure
-python run_tests.py --stop-on-failure
+python run_tests.py                    # All tests with discovery
+python run_tests.py -v                 # Verbose output
+python run_tests.py --stop-on-failure  # Stop on first failure
 ```
 
-### 3. Test Utilities (`test_utilities.py`)
+### Run Only Unit Tests
+```bash
+python run_unit_tests.py               # Fast, isolated component tests
+python run_unit_tests.py -v            # Verbose unit test output
+```
+
+### Run Only Integration Tests  
+```bash
+python run_integration_tests.py        # Multi-component and E2E tests
+python run_integration_tests.py -v     # Verbose integration test output
+```
+
+## Test Categories
+
+- **Unit Tests**: Fast, isolated tests of individual components (~25 test suites)
+- **Integration Tests**: Slower tests of component interactions (~15 test suites)
+- **CLI Tests**: Interactive command-line interface testing
+- **E2E Tests**: Full end-to-end program execution testing
+
+## Development Guidelines
+
+### Adding Unit Tests
+- Place in `unit/` directory
+- Test single components in isolation
+- Use mocks/stubs for dependencies
+- Focus on edge cases and error conditions
+- Keep tests fast (< 100ms each)
+
+### Adding Integration Tests
+- Place in `integration/` or appropriate subdirectory
+- Test component interactions
+- Use real components (minimal mocking)
+- Test realistic usage scenarios
+- CLI tests go in `integration/cli/`
+- Full program tests go in `integration/e2e/`
+
+### Test Naming
+- File names: `test_[component].py`
+- Class names: `[Component]Test` (inherits from `BaseTestCase`)
+- Method names: `test_[specific_behavior]`
+
+### Test Structure
+All tests inherit from `BaseTestCase` in `/test_base.py` which provides:
+- Emulator instance setup/teardown
+- Common assertion methods
+- Test result collection
+- Error handling and reporting
+
+## Test Results
+
+Recent test run results show excellent coverage:
+- **Overall Success Rate**: 96.6% (368/381 unit tests passing)
+- **Total Test Suites**: 37+ comprehensive test suites
+- **Unit Tests**: Comprehensive coverage including new commands (DIR, SAVE, RENUM, ON GOTO/GOSUB)
+- **Integration Tests**: Full end-to-end scenario validation
+
+### New Command Coverage Added
+- **Program Management**: DIR, FILES, DRIVE, SAVE, CLOAD, CSAVE (14 tests)
+- **RENUM Command**: Line renumbering with reference updates (15 tests)
+- **ON Commands**: ON GOTO and ON GOSUB multi-way branching (19 tests)
+
+### Test Utilities (`test_utilities.py`)
 - **MockGraphicsOutput**: Captures and validates graphics commands
 - **MockSoundOutput**: Captures sound command execution
 - **InputSimulator**: Simulates user input for INPUT/INKEY$ commands

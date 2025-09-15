@@ -138,11 +138,29 @@ class BasicGraphics:
                 # Parentheses syntax: PSET(x,y)[,color]
                 coords_end = self._find_matching_parenthesis(args, 0)
                 if coords_end == -1:
-                    return [{'type': 'error', 'message': 'SYNTAX ERROR in PSET'}]
+                    error = self.emulator.error_context.syntax_error(
+                        "Missing closing parenthesis in PSET coordinates",
+                        self.emulator.current_line,
+                        suggestions=[
+                            'Correct syntax: PSET(x,y) or PSET(x,y),color',
+                            'Example: PSET(100,50)',
+                            'Make sure parentheses are properly matched'
+                        ]
+                    )
+                    return [{'type': 'error', 'message': error.format_detailed()}]
                 coords = args[1:coords_end]
                 coord_parts = self._split_arguments_respecting_parentheses(coords)
                 if len(coord_parts) != 2:
-                    return [{'type': 'error', 'message': 'SYNTAX ERROR in PSET'}]
+                    error = self.emulator.error_context.syntax_error(
+                        "PSET requires exactly two coordinates",
+                        self.emulator.current_line,
+                        suggestions=[
+                            'Correct syntax: PSET(x,y) or PSET(x,y),color',
+                            'Example: PSET(100,50,1)',
+                            'Specify both X and Y coordinates'
+                        ]
+                    )
+                    return [{'type': 'error', 'message': error.format_detailed()}]
                 x = int(self.emulator.evaluate_expression(coord_parts[0].strip()))
                 y = int(self.emulator.evaluate_expression(coord_parts[1].strip()))
                 
@@ -159,7 +177,16 @@ class BasicGraphics:
                 # Space-separated syntax: PSET x,y[,color]
                 parts = self._split_arguments_respecting_parentheses(args)
                 if len(parts) < 2:
-                    return [{'type': 'error', 'message': 'SYNTAX ERROR in PSET'}]
+                    error = self.emulator.error_context.syntax_error(
+                        "PSET requires X and Y coordinates",
+                        self.emulator.current_line,
+                        suggestions=[
+                            'Correct syntax: PSET x,y or PSET x,y,color',
+                            'Example: PSET 100,50',
+                            'Specify both X and Y coordinates'
+                        ]
+                    )
+                    return [{'type': 'error', 'message': error.format_detailed()}]
                 
                 x = int(self.emulator.evaluate_expression(parts[0].strip()))
                 y = int(self.emulator.evaluate_expression(parts[1].strip()))
@@ -185,11 +212,29 @@ class BasicGraphics:
                 # Parentheses syntax: PRESET(x,y)
                 coords_end = self._find_matching_parenthesis(args, 0)
                 if coords_end == -1:
-                    return [{'type': 'error', 'message': 'SYNTAX ERROR in PRESET'}]
+                    error = self.emulator.error_context.syntax_error(
+                        "Missing closing parenthesis in PRESET coordinates",
+                        self.emulator.current_line,
+                        suggestions=[
+                            'Correct syntax: PRESET(x,y)',
+                            'Example: PRESET(100,50)',
+                            'Make sure parentheses are properly matched'
+                        ]
+                    )
+                    return [{'type': 'error', 'message': error.format_detailed()}]
                 coords = args[1:coords_end]
                 coord_parts = self._split_arguments_respecting_parentheses(coords)
                 if len(coord_parts) != 2:
-                    return [{'type': 'error', 'message': 'SYNTAX ERROR in PRESET'}]
+                    error = self.emulator.error_context.syntax_error(
+                        "PRESET requires exactly two coordinates",
+                        self.emulator.current_line,
+                        suggestions=[
+                            'Correct syntax: PRESET(x,y)',
+                            'Example: PRESET(100,50)',
+                            'Specify both X and Y coordinates'
+                        ]
+                    )
+                    return [{'type': 'error', 'message': error.format_detailed()}]
                 x = int(self.emulator.evaluate_expression(coord_parts[0].strip()))
                 y = int(self.emulator.evaluate_expression(coord_parts[1].strip()))
                 
@@ -198,7 +243,16 @@ class BasicGraphics:
                 # Space-separated syntax: PRESET x,y
                 parts = self._split_arguments_respecting_parentheses(args)
                 if len(parts) != 2:
-                    return [{'type': 'error', 'message': 'SYNTAX ERROR in PRESET'}]
+                    error = self.emulator.error_context.syntax_error(
+                        "PRESET requires exactly two coordinates",
+                        self.emulator.current_line,
+                        suggestions=[
+                            'Correct syntax: PRESET x,y',
+                            'Example: PRESET 100,50',
+                            'Specify both X and Y coordinates'
+                        ]
+                    )
+                    return [{'type': 'error', 'message': error.format_detailed()}]
                 
                 x = int(self.emulator.evaluate_expression(parts[0].strip()))
                 y = int(self.emulator.evaluate_expression(parts[1].strip()))
@@ -247,7 +301,16 @@ class BasicGraphics:
                 # Space-separated syntax: LINE x1,y1,x2,y2[,color]
                 parts = self._split_arguments_respecting_parentheses(args)
                 if len(parts) < 4:
-                    return [{'type': 'error', 'message': 'SYNTAX ERROR in LINE'}]
+                    error = self.emulator.error_context.syntax_error(
+                        "LINE requires four coordinates",
+                        self.emulator.current_line,
+                        suggestions=[
+                            'Correct syntax: LINE x1,y1,x2,y2 or LINE(x1,y1)-(x2,y2)',
+                            'Example: LINE 10,10,100,100',
+                            'Specify start and end coordinates'
+                        ]
+                    )
+                    return [{'type': 'error', 'message': error.format_detailed()}]
                 
                 x1 = int(self.emulator.evaluate_expression(parts[0].strip()))
                 y1 = int(self.emulator.evaluate_expression(parts[1].strip()))
@@ -275,11 +338,29 @@ class BasicGraphics:
                 # Parentheses syntax: CIRCLE(x,y),radius[,color]
                 coords_end = self._find_matching_parenthesis(args, 0)
                 if coords_end == -1:
-                    return [{'type': 'error', 'message': 'SYNTAX ERROR in CIRCLE'}]
+                    error = self.emulator.error_context.syntax_error(
+                        "Missing closing parenthesis in CIRCLE coordinates",
+                        self.emulator.current_line,
+                        suggestions=[
+                            'Correct syntax: CIRCLE(x,y),radius or CIRCLE(x,y),radius,color',
+                            'Example: CIRCLE(100,50),25',
+                            'Make sure parentheses are properly matched'
+                        ]
+                    )
+                    return [{'type': 'error', 'message': error.format_detailed()}]
                 coords = args[1:coords_end]
                 coord_parts = self._split_arguments_respecting_parentheses(coords)
                 if len(coord_parts) != 2:
-                    return [{'type': 'error', 'message': 'SYNTAX ERROR in CIRCLE'}]
+                    error = self.emulator.error_context.syntax_error(
+                        "CIRCLE requires exactly two coordinates",
+                        self.emulator.current_line,
+                        suggestions=[
+                            'Correct syntax: CIRCLE(x,y),radius',
+                            'Example: CIRCLE(100,50),25',
+                            'Specify center X and Y coordinates'
+                        ]
+                    )
+                    return [{'type': 'error', 'message': error.format_detailed()}]
                 x = int(self.emulator.evaluate_expression(coord_parts[0].strip()))
                 y = int(self.emulator.evaluate_expression(coord_parts[1].strip()))
                 
@@ -299,7 +380,16 @@ class BasicGraphics:
                 # Space-separated syntax: CIRCLE x,y,radius[,color]
                 parts = self._split_arguments_respecting_parentheses(args)
                 if len(parts) < 3:
-                    return [{'type': 'error', 'message': 'SYNTAX ERROR in CIRCLE'}]
+                    error = self.emulator.error_context.syntax_error(
+                        "CIRCLE requires center coordinates and radius",
+                        self.emulator.current_line,
+                        suggestions=[
+                            'Correct syntax: CIRCLE x,y,radius or CIRCLE x,y,radius,color',
+                            'Example: CIRCLE 100,50,25',
+                            'Specify center X, Y coordinates and radius'
+                        ]
+                    )
+                    return [{'type': 'error', 'message': error.format_detailed()}]
                 
                 x = int(self.emulator.evaluate_expression(parts[0].strip()))
                 y = int(self.emulator.evaluate_expression(parts[1].strip()))
@@ -325,13 +415,31 @@ class BasicGraphics:
             if args.startswith('(') and ')' in args:
                 coords_end = self._find_matching_parenthesis(args, 0)
                 if coords_end == -1:
-                    return [{'type': 'error', 'message': 'SYNTAX ERROR in PAINT'}]
+                    error = self.emulator.error_context.syntax_error(
+                        "Missing closing parenthesis in PAINT coordinates",
+                        self.emulator.current_line,
+                        suggestions=[
+                            'Correct syntax: PAINT(x,y),color or PAINT(x,y),color,boundary',
+                            'Example: PAINT(100,50),1',
+                            'Make sure parentheses are properly matched'
+                        ]
+                    )
+                    return [{'type': 'error', 'message': error.format_detailed()}]
                 coords = args[1:coords_end]
                 
                 # Must have exactly 2 coordinates
                 coord_parts = coords.split(',')
                 if len(coord_parts) != 2:
-                    return [{'type': 'error', 'message': 'SYNTAX ERROR in PAINT'}]
+                    error = self.emulator.error_context.syntax_error(
+                        "PAINT requires exactly two coordinates",
+                        self.emulator.current_line,
+                        suggestions=[
+                            'Correct syntax: PAINT(x,y),color',
+                            'Example: PAINT(100,50),1',
+                            'Specify both X and Y coordinates'
+                        ]
+                    )
+                    return [{'type': 'error', 'message': error.format_detailed()}]
                 
                 x_str, y_str = coord_parts
                 x = int(self.emulator.evaluate_expression(x_str.strip()))
@@ -350,12 +458,30 @@ class BasicGraphics:
                         border_color = int(self.emulator.evaluate_expression(parts[1].strip()))
                 elif remainder == '':
                     # PAINT(x,y) without color is a syntax error
-                    return [{'type': 'error', 'message': 'SYNTAX ERROR in PAINT'}]
+                    error = self.emulator.error_context.syntax_error(
+                        "PAINT requires color parameter",
+                        self.emulator.current_line,
+                        suggestions=[
+                            'Correct syntax: PAINT(x,y),color',
+                            'Example: PAINT(100,50),1',
+                            'Specify the fill color after coordinates'
+                        ]
+                    )
+                    return [{'type': 'error', 'message': error.format_detailed()}]
                 
                 # Use the key names expected by tests
                 return [{'type': 'paint', 'x': x, 'y': y, 'fill_color': paint_color, 'boundary_color': border_color}]
             else:
-                return [{'type': 'error', 'message': 'SYNTAX ERROR in PAINT'}]
+                error = self.emulator.error_context.syntax_error(
+                    "Invalid PAINT syntax",
+                    self.emulator.current_line,
+                    suggestions=[
+                        'Correct syntax: PAINT(x,y),color or PAINT(x,y),color,boundary',
+                        'Example: PAINT(100,50),1',
+                        'Coordinates must be enclosed in parentheses'
+                    ]
+                )
+                return [{'type': 'error', 'message': error.format_detailed()}]
         except Exception as e:
             return [{'type': 'error', 'message': f'Error in PAINT: {str(e)}'}]
     
@@ -388,7 +514,16 @@ class BasicGraphics:
                 
                 return [{'type': 'get', 'x1': x1, 'y1': y1, 'x2': x2, 'y2': y2, 'array': array_name}]
             else:
-                return [{'type': 'error', 'message': 'SYNTAX ERROR in GET'}]
+                error = self.emulator.error_context.syntax_error(
+                    "Invalid GET syntax",
+                    self.emulator.current_line,
+                    suggestions=[
+                        'Correct syntax: GET(x1,y1)-(x2,y2),array_name',
+                        'Example: GET(0,0)-(50,50),A',
+                        'Specify rectangular area and target array'
+                    ]
+                )
+                return [{'type': 'error', 'message': error.format_detailed()}]
         except Exception as e:
             return [{'type': 'error', 'message': f'Error in GET: {str(e)}'}]
     
@@ -416,9 +551,27 @@ class BasicGraphics:
                     
                     return [{'type': 'put', 'x': x, 'y': y, 'array': array_name, 'action': action}]
                 else:
-                    return [{'type': 'error', 'message': 'SYNTAX ERROR in PUT coordinates'}]
+                    error = self.emulator.error_context.syntax_error(
+                        "Invalid PUT coordinate syntax",
+                        self.emulator.current_line,
+                        suggestions=[
+                            'Correct syntax: PUT(x,y),array_name',
+                            'Example: PUT(100,50),A',
+                            'Coordinates must be enclosed in parentheses'
+                        ]
+                    )
+                    return [{'type': 'error', 'message': error.format_detailed()}]
             else:
-                return [{'type': 'error', 'message': 'SYNTAX ERROR in PUT'}]
+                error = self.emulator.error_context.syntax_error(
+                    "Invalid PUT syntax",
+                    self.emulator.current_line,
+                    suggestions=[
+                        'Correct syntax: PUT(x,y),array_name or PUT(x,y),array_name,action',
+                        'Example: PUT(100,50),A,PSET',
+                        'Specify coordinates, array name, and optional action'
+                    ]
+                )
+                return [{'type': 'error', 'message': error.format_detailed()}]
         except Exception as e:
             return [{'type': 'error', 'message': f'Error in PUT: {str(e)}'}]
     
