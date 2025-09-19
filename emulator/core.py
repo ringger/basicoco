@@ -143,11 +143,6 @@ class CoCoBasic:
         # If no command was found, try to execute as a line of code
         return self.process_line(command)
     
-    # Backwards compatibility alias for external API
-    def execute_command(self, command):
-        """Backwards compatibility alias for process_command"""
-        return self.process_command(command)
-    
     def list_program(self):
         output = []
         for line_num in sorted(self.program.keys()):
@@ -631,10 +626,32 @@ class CoCoBasic:
             return [{'type': 'error', 'message': error.format_detailed()}]
     
     def expand_line_to_sublines(self, line_num, code):
-        """Expand line using BasicParser"""
+        """Expand line using BasicParser or AST converter for single-line control structures"""
+        # Check if this is a single-line control structure that should use AST conversion
+        control_keywords = ['IF', 'FOR', 'WHILE', 'DO']
+        has_control = any(keyword in code.upper() for keyword in control_keywords)
+        has_colons = ':' in code
+
+        if has_control and has_colons:
+            # Try AST conversion for single-line control structures
+            try:
+                from .ast_converter import parse_and_convert_single_line
+                converted = parse_and_convert_single_line(code, self.expression_evaluator.ast_parser)
+
+                if converted:
+                    # Add converted statements as sublines
+                    for i, statement in enumerate(converted):
+                        if statement.strip():
+                            self.expanded_program[(line_num, i)] = statement.strip()
+                    return
+            except Exception:
+                # Fall back to BasicParser if AST conversion fails
+                pass
+
+        # Use BasicParser for normal statements
         return BasicParser.expand_line_to_sublines(line_num, code, self.expanded_program)
         
-    def run_program(self):
+    def run_program(self, clear_variables=True):
         if not self.program:
             error = self.error_context.runtime_error(
                 "NO PROGRAM",
@@ -647,7 +664,9 @@ class CoCoBasic:
             return [{'type': 'error', 'message': error.format_detailed()}]
         
         # Clear variables and arrays but keep program (like authentic BASIC)
-        self.clear_interpreter_state(clear_program=False)
+        # For temporary execution, we may want to preserve variables
+        if clear_variables:
+            self.clear_interpreter_state(clear_program=False)
         
         output = []
         self.running = True
@@ -1079,34 +1098,13 @@ class CoCoBasic:
         return output
     
     def split_statements(self, code):
-        """Split a line into statements on colons, but respect quoted strings and IF/THEN constructs"""
+        """Split a line into statements on colons, but respect quoted strings"""
         statements = []
         current_statement = ""
         in_quotes = False
-        
-        # Check if this line contains an IF/THEN construct that starts the line
-        code_upper = code.upper().strip()
-        if_pos = code_upper.find('IF ')
-        then_pos = code_upper.find(' THEN ')
-        
-        # If this line STARTS with an IF/THEN statement, don't split after THEN
-        if if_pos == 0 and then_pos > if_pos:
-            # This line starts with IF/THEN - treat the whole thing as one statement
-            statements.append(code.strip())
-            return statements
-        
-        # Check if this line contains a single-line FOR loop that starts the line
-        for_pos = code_upper.find('FOR ')
-        to_pos = code_upper.find(' TO ')
-        colon_pos = code_upper.find(':')
-        
-        # If this line STARTS with a FOR loop and contains TO and colons, treat as single statement
-        if for_pos == 0 and to_pos > for_pos and colon_pos > to_pos:
-            # This line starts with single-line FOR loop - treat the whole thing as one statement
-            statements.append(code.strip())
-            return statements
-        
-        # Normal colon splitting for other statements (including FOR loops)
+
+        # Simple colon splitting that respects quoted strings
+        # Control structure handling is now done by AST converter
         for char in code:
             if char == '"':
                 in_quotes = not in_quotes
@@ -1117,32 +1115,126 @@ class CoCoBasic:
                 current_statement = ""
             else:
                 current_statement += char
-        
+
         if current_statement.strip():
             statements.append(current_statement.strip())
-        
+
         return statements
     
     
     def process_line(self, code):
-        # Handle multi-statement lines separated by colons
+        """
+        Process a line of BASIC code, converting single-line control structures
+        to multi-line equivalents using the AST parser infrastructure.
+        """
+        # First, check if this is a single-line control structure that needs conversion
+        code_upper = code.upper().strip()
+
+        # Enhanced detection of control structures with colons (single-line format)
+        control_keywords = ['IF ', 'FOR ', 'WHILE ', 'DO:', 'DO ']
+        has_control = any(code_upper.startswith(kw) for kw in control_keywords)
+        has_colons = ':' in code
+
+        if has_control and has_colons:
+            # Try to convert single-line control structure to multi-line using AST parser
+            try:
+                from .ast_converter import parse_and_convert_single_line
+                converted = parse_and_convert_single_line(code, self.expression_evaluator.ast_parser)
+
+                if converted:
+                    # For immediate mode, create a temporary program entry and reuse run_program logic
+                    return self._execute_converted_as_temporary_program(converted)
+            except Exception as e:
+                # Log debug info for AST conversion failures but continue with fallback
+                if hasattr(self, 'emit_debug'):
+                    self.emit_debug(f"AST conversion failed for '{code}': {str(e)}")
+                # Fall back to original processing
+
+        # Original processing for non-control structures or if AST conversion failed
         statements = self.split_statements(code)
         if len(statements) > 1:
             # Execute each statement and collect results
             all_results = []
             for statement in statements:
-                result = self.process_statement(statement)
-                if result:
-                    all_results.extend(result)
-                    # Handle jumps in multi-statement lines
-                    for item in result:
-                        if item.get('type') == 'jump':
-                            return all_results  # Return all accumulated results including jump
+                if statement.strip():  # Skip empty statements
+                    result = self.process_statement(statement)
+                    if result:
+                        all_results.extend(result)
+                        # Handle jumps in multi-statement lines
+                        for item in result:
+                            if isinstance(item, dict) and item.get('type') in ['jump', 'jump_return']:
+                                return all_results  # Return all accumulated results including jump
             return all_results
         else:
             # Single statement
             return self.process_statement(code)
-    
+
+    def _execute_converted_as_temporary_program(self, converted_statements):
+        """
+        Execute AST-converted statements by creating a temporary program entry
+        and using the existing run_program infrastructure completely.
+        """
+        if not converted_statements:
+            return []
+
+        # Use a temporary line number for immediate mode (negative to avoid conflicts)
+        temp_line_num = -1
+
+        # Save current program state completely
+        old_program = self.program.copy()
+        old_expanded_program = self.expanded_program.copy()
+        old_running = self.running
+        old_current_line = self.current_line
+        old_current_sub_line = self.current_sub_line
+        old_for_stack = getattr(self, 'for_stack', []).copy()
+        old_call_stack = getattr(self, 'call_stack', []).copy()
+
+        try:
+            # Clear program and set up temporary program
+            self.program = {temp_line_num: '# AST Converted statements'}  # Placeholder only
+            self.expanded_program = {}
+
+            # Initialize stacks if they don't exist
+            if not hasattr(self, 'for_stack'):
+                self.for_stack = []
+            if not hasattr(self, 'call_stack'):
+                self.call_stack = []
+
+            self.for_stack.clear()
+            self.call_stack.clear()
+
+            # Add AST-converted statements directly as sublines - no rejoining needed!
+            for i, statement in enumerate(converted_statements):
+                if statement.strip():
+                    self.expanded_program[(temp_line_num, i)] = statement.strip()
+
+            # Use the actual run_program method - it has all the sophisticated control flow logic
+            # Don't clear variables since we want to preserve the current variable state
+            results = self.run_program(clear_variables=False)
+
+            # Filter out any "OK" messages and other program-mode artifacts
+            filtered_results = []
+            for item in results:
+                if isinstance(item, dict):
+                    if item.get('type') == 'text' and item.get('text') == 'OK':
+                        continue  # Skip OK messages
+                    elif item.get('type') in ['program_end', 'program_start']:
+                        continue  # Skip program control messages
+
+                filtered_results.append(item)
+
+            return filtered_results
+
+        finally:
+            # Restore complete program state
+            self.program = old_program
+            self.expanded_program = old_expanded_program
+            self.running = old_running
+            self.current_line = old_current_line
+            self.current_sub_line = old_current_sub_line
+            self.for_stack = old_for_stack
+            self.call_stack = old_call_stack
+
     def process_statement(self, code):
         if not code.strip():
             return []
@@ -1205,17 +1297,9 @@ class CoCoBasic:
             raise ValueError(str(e))
 
     def execute_for(self, args):
-        # FOR I=1 TO 10 [STEP 1] - handle single-line and multi-line FOR loops
-        # Check if this is a single-line FOR loop (contains colon)
-        if ':' in args:
-            # Single-line FOR loop: FOR I=1 TO 3: PRINT I: NEXT I
-            colon_pos = args.find(':')
-            for_part = args[:colon_pos].strip()
-            body_part = args[colon_pos+1:].strip()
-            return self._execute_single_line_for(for_part, body_part)
-        else:
-            # Multi-line FOR loop: FOR I=1 TO 10 (body on subsequent lines)
-            for_part = args.strip()
+        # FOR I=1 TO 10 [STEP 1] - handle multi-line FOR loops
+        # Single-line FOR loops are now handled by AST converter
+        for_part = args.strip()
         
         # Set error context for FOR command
         self.error_context.set_context(self.current_line, f"FOR {for_part}")
@@ -1282,100 +1366,7 @@ class CoCoBasic:
         
         return []
     
-    def _execute_single_line_for(self, for_part, body_part):
-        """Execute a single-line FOR loop: FOR I=1 TO 3: PRINT I: NEXT I"""
-        # Set error context
-        self.error_context.set_context(self.current_line, f"FOR {for_part}")
-        
-        # Parse the FOR statement part
-        match = re.match(r'(\w+)\s*=\s*(.+?)\s+TO\s+(.+?)(?:\s+STEP\s+(.+?))?$', for_part, re.IGNORECASE)
-        if not match:
-            error = self.error_context.syntax_error(
-                "SYNTAX ERROR: Invalid FOR statement",
-                self.current_line,
-                suggestions=[
-                    "Correct syntax: FOR variable = start TO end [STEP increment]",
-                    "Example: FOR I = 1 TO 10 or FOR X = 0 TO 100 STEP 5",
-                    "Variable name must be a single letter or word"
-                ]
-            )
-            return [{'type': 'error', 'message': error.format_detailed()}]
-        
-        var_name = match.group(1).strip()
-        
-        # Evaluate expressions
-        try:
-            start_val = self.evaluate_expression(match.group(2).strip(), self.current_line)
-            end_val = self.evaluate_expression(match.group(3).strip(), self.current_line)
-            step_val = self.evaluate_expression(match.group(4).strip(), self.current_line) if match.group(4) else 1
-        except ValueError as e:
-            return [{'type': 'error', 'message': str(e)}]
-        except Exception as e:
-            error = self.error_context.runtime_error(
-                f"Error evaluating FOR loop values: {str(e)}",
-                self.current_line,
-                suggestions=[
-                    "Check that start, end, and step values are valid numbers",
-                    "Ensure all variables used in expressions are defined"
-                ]
-            )
-            return [{'type': 'error', 'message': error.format_detailed()}]
-        
-        # Execute the loop
-        results = []
-        current_val = start_val
-        max_iterations = getattr(self, 'max_iterations', 10000)
-        iteration_count = 0
-        
-        # Remove NEXT from body_part if present (since we handle it ourselves)
-        body_statements = body_part
-        if body_statements.upper().endswith(' NEXT ' + var_name.upper()):
-            body_statements = body_statements[:-len(' NEXT ' + var_name)]
-        elif body_statements.upper().endswith(' NEXT'):
-            body_statements = body_statements[:-5]
-        
-        while iteration_count < max_iterations:
-            # Check loop condition
-            if step_val > 0 and current_val > end_val:
-                break
-            elif step_val < 0 and current_val < end_val:
-                break
-            elif step_val == 0:
-                error = self.error_context.runtime_error(
-                    "FOR loop with STEP 0 would cause infinite loop",
-                    self.current_line,
-                    suggestions=[
-                        "Use a non-zero STEP value",
-                        "Example: FOR I = 1 TO 10 STEP 1"
-                    ]
-                )
-                return [{'type': 'error', 'message': error.format_detailed()}]
-            
-            # Set loop variable
-            self.variables[var_name] = current_val
-            
-            # Execute body statements
-            if body_statements.strip():
-                body_result = self.process_line(body_statements)
-                if body_result:
-                    results.extend(body_result)
-            
-            # Increment loop variable
-            current_val += step_val
-            iteration_count += 1
-        
-        if iteration_count >= max_iterations:
-            error = self.error_context.runtime_error(
-                f"FOR loop exceeded maximum iterations ({max_iterations})",
-                self.current_line,
-                suggestions=[
-                    "Check loop bounds to prevent infinite loops",
-                    "Verify STEP value moves toward the end value"
-                ]
-            )
-            return [{'type': 'error', 'message': error.format_detailed()}]
-        
-        return results
+    # Removed _execute_single_line_for method - now handled by AST converter
     
     def execute_next(self, args):
         if not self.for_stack:
@@ -1450,90 +1441,63 @@ class CoCoBasic:
         
         condition_result = self.evaluate_condition(condition.strip())
         
-        # Check if it's a single-line IF or multi-line IF
-        if then_part == '' or then_part.upper() == 'THEN':
-            # Multi-line IF - push to stack
-            if_info = {
-                'condition_met': condition_result,
-                'line': self.current_line,
-                'sub_line': self.current_sub_line,
-                'in_else': False
-            }
-            self.if_stack.append(if_info)
-            
-            # If condition is false, skip to ELSE or ENDIF
-            if not condition_result:
-                return [{'type': 'skip_if_block'}]
+        # Handle both single-line and multi-line IF statements
+        # Complex single-line IF statements (with colons) are handled by AST converter in process_line()
+        # Simple single-line IF statements (without colons) are handled here
+        if then_part and then_part.upper() != 'THEN':
+            # Single-line IF with action in THEN clause
+            if ':' in then_part:
+                # Complex single-line IF with multiple statements - should be handled by AST converter
+                # If we get here, it means the AST converter didn't catch it, so provide fallback
+                return self.process_line(then_part)
             else:
-                return []  # Continue with THEN block
-        else:
-            # Single-line IF - use AST parser for proper handling
-            try:
-                # Use AST parser for condition evaluation only
-                # Parse condition using AST parser for better accuracy
-                condition_ast = self.expression_evaluator.ast_parser.parse_expression(condition, self.current_line)
-                condition_result = self.expression_evaluator.ast_evaluator.visit(condition_ast)
-                
-                # Convert to boolean (BASIC truth rules)
-                if isinstance(condition_result, (int, float)):
-                    condition_true = condition_result != 0
-                elif isinstance(condition_result, str):
-                    condition_true = len(condition_result) > 0
-                else:
-                    condition_true = bool(condition_result)
-                
-                # Execute THEN clause only if condition is true
-                if condition_true:
-                    # Handle THEN clause - proper detection of commands vs numbers
+                # Simple single-line IF - handle directly
+                if condition_result:
+                    # Handle THEN clause - check if it's a line number or statement
                     then_upper = then_part.upper().strip()
-                    
+
                     # Check if it starts with a BASIC keyword
-                    basic_keywords = ['PRINT', 'LET', 'GOTO', 'GOSUB', 'RETURN', 'END', 'STOP', 
-                                    'IF', 'FOR', 'NEXT', 'DIM', 'INPUT', 'READ', 'DATA', 
+                    basic_keywords = ['PRINT', 'LET', 'GOTO', 'GOSUB', 'RETURN', 'END', 'STOP',
+                                    'IF', 'FOR', 'NEXT', 'DIM', 'INPUT', 'READ', 'DATA',
                                     'RESTORE', 'ON', 'DEF', 'PAUSE', 'NEW', 'LIST', 'RUN',
                                     'EXIT', 'DO', 'LOOP', 'WHILE', 'WEND', 'ELSE', 'ENDIF']
-                    
+
                     starts_with_keyword = any(then_upper.startswith(keyword) for keyword in basic_keywords)
-                    
-                    # Check if it looks like an assignment (contains = but not comparison operators)
-                    is_assignment = ('=' in then_part and 
+
+                    # Check if it looks like an assignment
+                    is_assignment = ('=' in then_part and
                                    not any(op in then_part for op in ['>=', '<=', '<>', '==']) and
                                    not then_part.strip().startswith('='))
-                    
-                    # Check for multi-statement with colon
-                    has_colon = ':' in then_part
-                    
-                    if starts_with_keyword or is_assignment or has_colon:
-                        # Treat as statement to execute
+
+                    if starts_with_keyword or is_assignment:
+                        # Execute as statement
                         return self.process_line(then_part)
                     else:
-                        # Try to parse as line number - delegate to GOTO for validation
+                        # Try to parse as line number - use GOTO
                         try:
-                            # Test if it's a valid number
                             int(self.evaluate_expression(then_part))
-                            # If it is, use GOTO command which has proper validation
                             return self.execute_goto(then_part)
                         except:
-                            # If evaluation fails, treat as statement
+                            # If not a number, treat as statement
                             return self.process_line(then_part)
                 else:
                     # Condition false - do nothing
                     return []
-                    
-            except Exception as e:
-                # If AST parsing fails, return error
-                error = self.error_context.syntax_error(
-                    f"Error in IF statement: {str(e)}",
-                    self.current_line,
-                    suggestions=[
-                        "Check IF statement syntax",
-                        "Verify condition and THEN clause are valid",
-                        'Example: IF A = 5 THEN PRINT "EQUAL"'
-                    ]
-                )
-                return [{'type': 'error', 'message': error.format_detailed()}]
-            
-            return []
+
+        # Multi-line IF - push to stack
+        if_info = {
+            'condition_met': condition_result,
+            'line': self.current_line,
+            'sub_line': self.current_sub_line,
+            'in_else': False
+        }
+        self.if_stack.append(if_info)
+
+        # If condition is false, skip to ELSE or ENDIF
+        if not condition_result:
+            return [{'type': 'skip_if_block'}]
+        else:
+            return []  # Continue with THEN block
     
     def evaluate_condition(self, condition):
         # Simple condition evaluation

@@ -112,19 +112,10 @@ class CommandRegistry:
     
     def _has_multi_statements(self, line: str) -> bool:
         """Check if line contains multiple statements (colons outside strings)
-        
-        Special case: IF/THEN statements are handled by the IF command even if
-        they contain colons in the THEN clause.
+
+        All control structures with colons are now handled by the AST converter,
+        so no special cases are needed here.
         """
-        # Check if this line starts with IF - if so, let the IF handler deal with it
-        stripped = line.strip().upper()
-        if stripped.startswith('IF '):
-            return False
-        
-        # Check if this line starts with FOR and contains TO - if so, let the FOR handler deal with it
-        if stripped.startswith('FOR ') and ' TO ' in stripped:
-            return False
-            
         in_quotes = False
         for char in line:
             if char == '"':

@@ -35,6 +35,7 @@ class NodeType(Enum):
     RETURN_STATEMENT = "return_statement"
     PRINT_STATEMENT = "print_statement"
     INPUT_STATEMENT = "input_statement"
+    END_STATEMENT = "end_statement"
     
     # Control Flow
     BLOCK = "block"
@@ -193,6 +194,12 @@ class ExitForStatementNode(ASTNode):
     """Node for EXIT FOR statements"""
     def __init__(self, location: Optional[SourceLocation] = None):
         super().__init__(NodeType.GOTO_STATEMENT, location)  # Reuse GOTO type for now
+
+
+class EndStatementNode(ASTNode):
+    """Node for END statements"""
+    def __init__(self, location: Optional[SourceLocation] = None):
+        super().__init__(NodeType.END_STATEMENT, location)
 
 
 class PrintStatementNode(ASTNode):
@@ -815,9 +822,13 @@ class ASTParser:
         # PRINT statement
         if self._match('KEYWORD') and token['value'] == 'PRINT':
             return self._parse_print_statement()
-        
+
+        # END statement
+        if self._match('KEYWORD') and token['value'] == 'END':
+            return self._parse_end_statement()
+
         # More statements can be added here...
-        
+
         # Fallback: treat as expression
         return self._parse_or_expression()
     
@@ -893,19 +904,39 @@ class ASTParser:
             location=target_location
         )
     
+    def _parse_colon_separated_statements(self) -> ASTNode:
+        """Parse a sequence of colon-separated statements"""
+        statements = []
+
+        # Parse first statement
+        statements.append(self._parse_statement())
+
+        # Parse additional statements after colons
+        while self._match('PUNCTUATION') and self._current_token()['value'] == ':':
+            self._advance()  # consume ':'
+            if self._current_token() and not self._match_value('ELSE'):  # Don't consume ELSE
+                statements.append(self._parse_statement())
+
+        # If only one statement, return it directly
+        if len(statements) == 1:
+            return statements[0]
+
+        # Multiple statements - return as a block
+        return BlockNode(statements=statements)
+
     def _parse_if_statement(self) -> IfStatementNode:
         """Parse IF statement"""
         if_token = self._advance()  # consume 'IF'
         condition = self._parse_or_expression()
-        
+
         self._consume('KEYWORD', "Expected 'THEN' after IF condition")
-        then_branch = self._parse_statement()
-        
+        then_branch = self._parse_colon_separated_statements()
+
         else_branch = None
         if self._match_value('ELSE'):
             self._advance()  # consume 'ELSE'
-            else_branch = self._parse_statement()
-        
+            else_branch = self._parse_colon_separated_statements()
+
         return IfStatementNode(
             condition=condition,
             then_branch=then_branch,
@@ -1013,7 +1044,12 @@ class ASTParser:
         self._advance()  # consume 'FOR'
         
         return ExitForStatementNode(location=self._make_location(exit_token))
-    
+
+    def _parse_end_statement(self) -> EndStatementNode:
+        """Parse END statement"""
+        end_token = self._advance()  # consume 'END'
+        return EndStatementNode(location=self._make_location(end_token))
+
     def _parse_print_statement(self) -> PrintStatementNode:
         """Parse PRINT statement"""
         print_token = self._advance()  # consume 'PRINT'

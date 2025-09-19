@@ -5,50 +5,52 @@ Integration tests for cross-command interactions and edge cases.
 Tests scenarios discovered during debugging of command interaction issues.
 """
 
-import sys
-import os
-sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..'))
-
-from test_base import BaseTestCase
+import pytest
 
 
-class CrossCommandInteractionTest(BaseTestCase):
+class TestCrossCommandInteraction:
     """Test cases for cross-command interactions and edge cases"""
 
-    def test_basic_functionality(self):
+    def test_basic_functionality(self, basic, helpers):
         """Test basic cross-command functionality"""
-        self.basic.execute_command('A = 5')
-        self.assert_text_output('PRINT A', '5')
+        basic.process_command('A = 5')
+        result = basic.process_command('PRINT A')
+        text_output = helpers.get_text_output(result)
+        assert text_output == ['5']
 
-    def test_inkey_with_program_vs_immediate_mode(self):
+    def test_inkey_with_program_vs_immediate_mode(self, basic, helpers):
         """Test INKEY$ behavior in program vs immediate mode"""
         # Test immediate mode
-        self.basic.key_buffer = ['X']
-        result1 = self.basic.execute_command('PRINT INKEY$')
-        text1 = self.get_text_output(result1)
-        self.assertIn('X', text1)
-        self.assertEqual(len(self.basic.key_buffer), 0)
+        basic.key_buffer = ['X']
+        result1 = basic.process_command('PRINT INKEY$')
+        text1 = helpers.get_text_output(result1)
+        assert 'X' in text1
+        assert len(basic.key_buffer) == 0
         
         # Test program mode (separate test since execute_program calls NEW which clears key_buffer)
         program = ['10 PRINT INKEY$']
-        self.load_program(program)
-        self.basic.key_buffer = ['Y']  # Set key buffer after loading program
-        results2 = self.basic.execute_command('RUN')
-        text2 = self.get_text_output(results2)
-        self.assertIn('Y', ' '.join(text2))
-        self.assertEqual(len(self.basic.key_buffer), 0)
+        helpers.load_program(basic, program)
+        basic.key_buffer = ['Y']  # Set key buffer after loading program
+        results2 = basic.process_command('RUN')
+        text2 = helpers.get_text_output(results2)
+        assert 'Y' in ' '.join(text2)
+        assert len(basic.key_buffer) == 0
 
-    def test_array_access_in_different_contexts(self):
+    def test_array_access_in_different_contexts(self, basic, helpers):
         """Test array access in various command contexts"""
         # Set up array in immediate mode
-        self.basic.execute_command('DIM A(5)')
-        self.basic.execute_command('A(3) = 42')
+        basic.process_command('DIM A(5)')
+        basic.process_command('A(3) = 42')
         
         # Direct access
-        self.assert_text_output('PRINT A(3)', '42')
+        result = basic.process_command('PRINT A(3)')
+        text_output = helpers.get_text_output(result)
+        assert text_output == ['42']
         
         # In expression
-        self.assert_text_output('PRINT A(3) + 8', '50')
+        result = basic.process_command('PRINT A(3) + 8')
+        text_output = helpers.get_text_output(result)
+        assert text_output == ['50']
         
         # In FOR loop - test with program that includes its own DIM
         program = [
@@ -59,43 +61,57 @@ class CrossCommandInteractionTest(BaseTestCase):
             '40 PRINT A(2)',
             '50 IF A(2) = 20 THEN PRINT "CORRECT"'  # Test IF statement within same program
         ]
-        results = self.execute_program(program)
-        text_outputs = self.get_text_output(results)
-        self.assertIn('20', ' '.join(text_outputs))
-        self.assertIn('CORRECT', ' '.join(text_outputs))
+        results = helpers.execute_program(basic, program)
+        text_outputs = helpers.get_text_output(results)
+        assert '20' in ' '.join(text_outputs)
+        assert 'CORRECT' in ' '.join(text_outputs)
 
-    def test_string_functions_with_variables_and_arrays(self):
+    def test_string_functions_with_variables_and_arrays(self, basic, helpers):
         """Test string functions with mixed variable types"""
         # Set up string variables and arrays
-        self.basic.execute_command('A$ = "HELLO"')
-        self.basic.execute_command('DIM B$(3)')
-        self.basic.execute_command('B$(1) = "WORLD"')
+        basic.process_command('A$ = "HELLO"')
+        basic.process_command('DIM B$(3)')
+        basic.process_command('B$(1) = "WORLD"')
         
         # String functions with variables
-        self.assert_text_output('PRINT LEN(A$)', '5')
-        self.assert_text_output('PRINT LEFT$(A$, 3)', 'HEL')
+        result = basic.process_command('PRINT LEN(A$)')
+        text_output = helpers.get_text_output(result)
+        assert text_output == ['5']
+        result = basic.process_command("PRINT LEFT$(A$, 3)")
+        text_output = helpers.get_text_output(result)
+        assert text_output == ["HEL"]
         
         # String functions with array elements
-        self.assert_text_output('PRINT LEN(B$(1))', '5')
-        self.assert_text_output('PRINT B$(1) + "!"', 'WORLD!')
+        result = basic.process_command('PRINT LEN(B$(1))')
+        text_output = helpers.get_text_output(result)
+        assert text_output == ['5']
+        result = basic.process_command('PRINT B$(1) + "!"')
+        text_output = helpers.get_text_output(result)
+        assert text_output == ['WORLD!']
 
-    def test_math_functions_with_variable_expressions(self):
+    def test_math_functions_with_variable_expressions(self, basic, helpers):
         """Test math functions with complex variable expressions"""
-        self.basic.execute_command('A = 9')
-        self.basic.execute_command('B = 16')
+        basic.process_command('A = 9')
+        basic.process_command('B = 16')
         
         # Nested function calls
-        self.assert_text_output('PRINT SQR(A) + SQR(B)', '7')
+        result = basic.process_command('PRINT SQR(A) + SQR(B)')
+        text_output = helpers.get_text_output(result)
+        assert text_output == ['7']
         
         # Functions in expressions
-        self.assert_text_output('PRINT INT(SQR(A) * 2.5)', '7')
+        result = basic.process_command('PRINT INT(SQR(A) * 2.5)')
+        text_output = helpers.get_text_output(result)
+        assert text_output == ['7']
         
         # Functions with array elements
-        self.basic.execute_command('DIM C(5)')
-        self.basic.execute_command('C(2) = 25')
-        self.assert_text_output('PRINT SQR(C(2))', '5')
+        basic.process_command('DIM C(5)')
+        basic.process_command('C(2) = 25')
+        result = basic.process_command('PRINT SQR(C(2))')
+        text_output = helpers.get_text_output(result)
+        assert text_output == ['5']
 
-    def test_data_read_with_different_variable_types(self):
+    def test_data_read_with_different_variable_types(self, basic, helpers):
         """Test DATA/READ with mixed numeric and string variables/arrays"""
         program = [
             '10 DIM A$(3), B(3)',
@@ -104,16 +120,16 @@ class CrossCommandInteractionTest(BaseTestCase):
             '40 PRINT A$(1); B(1); A$(2); B(2)'
         ]
         
-        results = self.execute_program(program)
-        text_outputs = self.get_text_output(results)
+        results = helpers.execute_program(basic, program)
+        text_outputs = helpers.get_text_output(results)
         
         combined = ' '.join(text_outputs)
-        self.assertIn('TEST', combined)
-        self.assertIn('42', combined)
-        self.assertIn('HELLO', combined)
-        self.assertIn('99', combined)
+        assert 'TEST' in combined
+        assert '42' in combined
+        assert 'HELLO' in combined
+        assert '99' in combined
 
-    def test_for_loop_with_array_bounds_and_functions(self):
+    def test_for_loop_with_array_bounds_and_functions(self, basic, helpers):
         """Test FOR loop with array bounds checking and function calls"""
         program = [
             '10 DIM A(10)',
@@ -125,35 +141,35 @@ class CrossCommandInteractionTest(BaseTestCase):
             '70 NEXT J'
         ]
         
-        results = self.execute_program(program)
+        results = helpers.execute_program(basic, program)
         errors = self.get_error_messages(results)
         
         # Should execute without array bounds errors
-        self.assertEqual(len(errors), 0)
+        assert len(errors) == 0
         
         # Should print square roots (which should equal the original indices)
-        text_outputs = self.get_text_output(results)
+        text_outputs = helpers.get_text_output(results)
         combined = ' '.join(text_outputs)
-        self.assertIn('0', combined)  # sqrt(0) = 0
-        self.assertIn('1', combined)  # sqrt(1) = 1
-        self.assertIn('2', combined)  # sqrt(4) = 2
+        assert '0' in combined  # sqrt(0) = 0
+        assert '1' in combined  # sqrt(1) = 1
+        assert '2' in combined  # sqrt(4) = 2
 
-    def test_input_with_array_elements(self):
+    def test_input_with_array_elements(self, basic, helpers):
         """Test INPUT command with array elements"""
         # This would require input simulation, but test the parsing at least
-        self.basic.execute_command('DIM A$(3)')
+        basic.process_command('DIM A$(3)')
         
         # Test that INPUT with array elements parses correctly
         # (This mainly tests that the parser handles array subscripts in INPUT)
-        result = self.basic.execute_command('INPUT "NAME"; A$(1)')
+        result = basic.process_command('INPUT "NAME"; A$(1)')
         
         # Should create input request, not error
         has_input_request = any(item.get('type') == 'input_request' for item in result)
         errors = [item for item in result if item.get('type') == 'error']
         
-        self.assertTrue(has_input_request or len(errors) == 0)
+        assert has_input_request or len(errors == 0)
 
-    def test_gosub_return_with_array_and_loop_interaction(self):
+    def test_gosub_return_with_array_and_loop_interaction(self, basic, helpers):
         """Test GOSUB/RETURN with arrays and loops"""
         program = [
             '10 DIM A(5)',
@@ -166,54 +182,49 @@ class CrossCommandInteractionTest(BaseTestCase):
             '110 RETURN'
         ]
         
-        results = self.execute_program(program)
-        text_outputs = self.get_text_output(results)
+        results = helpers.execute_program(basic, program)
+        text_outputs = helpers.get_text_output(results)
         
         # Should complete without errors and show final value
         errors = self.get_error_messages(results)
-        self.assertEqual(len(errors), 0)
+        assert len(errors) == 0
         
         combined = ' '.join(text_outputs)
-        self.assertIn('FINAL: 30', combined)  # A(3) should be 3 * 10 = 30
+        assert 'FINAL: 30' in combined  # A(3) should be 3 * 10 = 30
 
-    def test_error_recovery_across_commands(self):
+    def test_error_recovery_across_commands(self, basic, helpers):
         """Test error recovery and state after command errors"""
         # Cause an error
-        result1 = self.basic.execute_command('PRINT A(5)')  # Undimensioned array
+        result1 = basic.process_command('PRINT A(5)')  # Undimensioned array
         errors1 = self.get_error_messages(result1)
-        self.assertTrue(len(errors1) > 0)
+        assert len(errors1 > 0)
         
         # Subsequent commands should work normally
-        self.basic.execute_command('A = 42')
-        self.assert_variable_equals('A', 42)
+        basic.process_command('A = 42')
+        helpers.assert_variable_equals(basic, 'A', 42)
         
         # Can now dimension the array and use it
-        self.basic.execute_command('DIM A(10)')
-        self.basic.execute_command('A(5) = 99')
-        self.assert_text_output('PRINT A(5)', '99')
+        basic.process_command('DIM A(10)')
+        basic.process_command('A(5) = 99')
+        result = basic.process_command('PRINT A(5)')
+        text_output = helpers.get_text_output(result)
+        assert text_output == ['99']
 
-    def test_graphics_commands_with_variable_expressions(self):
+    def test_graphics_commands_with_variable_expressions(self, basic, helpers):
         """Test graphics commands with complex variable expressions"""
         # Set up variables
-        self.basic.execute_command('X = 50')
-        self.basic.execute_command('Y = 75')
-        self.basic.execute_command('R = 25')
+        basic.process_command('X = 50')
+        basic.process_command('Y = 75')
+        basic.process_command('R = 25')
         
         # Graphics commands should accept variable expressions
-        result1 = self.basic.execute_command('PMODE 1,1')
-        result2 = self.basic.execute_command('PSET(X, Y)')
-        result3 = self.basic.execute_command('CIRCLE(X, Y), R')
+        result1 = basic.process_command('PMODE 1,1')
+        result2 = basic.process_command('PSET(X, Y)')
+        result3 = basic.process_command('CIRCLE(X, Y), R')
         
         # Should produce graphics output, not errors
         errors = []
         for result in [result1, result2, result3]:
             errors.extend(self.get_error_messages(result))
         
-        self.assertEqual(len(errors), 0)
-
-
-if __name__ == '__main__':
-    test = CrossCommandInteractionTest("Cross-Command Interaction Tests")
-    results = test.run_all_tests()
-    from test_base import print_test_results
-    print_test_results(results, verbose=True)
+        assert len(errors) == 0

@@ -4,17 +4,13 @@
 Comprehensive integration test demonstrating multiple BASIC features together
 """
 
-import sys
-import os
-sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..'))
-
-from test_base import BaseTestCase
+import pytest
 
 
-class ComprehensiveProgramTest(BaseTestCase):
+class TestComprehensiveProgram:
     """Test cases for complex programs using multiple BASIC features"""
 
-    def test_basic_functionality(self):
+    def test_basic_functionality(self, basic, helpers):
         """Test that comprehensive programs can run without errors"""
         program = [
             '10 PRINT "BASIC TEST"',
@@ -22,11 +18,11 @@ class ComprehensiveProgramTest(BaseTestCase):
             '30 PRINT A'
         ]
         
-        results = self.execute_program(program)
+        results = helpers.execute_program(basic, program)
         # Should complete without errors
-        self.assertTrue(len(results) > 0)
+        assert len(results > 0)
 
-    def test_math_and_variables_program(self):
+    def test_math_and_variables_program(self, basic, helpers):
         """Test program with math operations and variables"""
         program = [
             '10 REM MATH TEST PROGRAM',
@@ -42,16 +38,16 @@ class ComprehensiveProgramTest(BaseTestCase):
             '110 PRINT "DIVISION: "; A; " / "; B; " = "; F'
         ]
         
-        results = self.execute_program(program)
-        text_outputs = self.get_text_output(results)
+        results = helpers.execute_program(basic, program)
+        text_outputs = helpers.get_text_output(results)
         
         # Should produce mathematical results
-        self.assertTrue(len(text_outputs) >= 4)
-        self.assertTrue(any('15' in output for output in text_outputs))  # A + B
-        self.assertTrue(any('5' in output for output in text_outputs))   # A - B
-        self.assertTrue(any('50' in output for output in text_outputs))  # A * B
+        assert len(text_outputs >= 4)
+        assert any('15' in output for output in text_outputs)  # A + B
+        assert any('5' in output for output in text_outputs)   # A - B
+        assert any('50' in output for output in text_outputs)  # A * B
 
-    def test_string_operations_program(self):
+    def test_string_operations_program(self, basic, helpers):
         """Test program with string operations"""
         program = [
             '10 REM STRING TEST PROGRAM',
@@ -62,14 +58,14 @@ class ComprehensiveProgramTest(BaseTestCase):
             '60 PRINT "LENGTH OF "; C$; " IS"; LEN(C$)' if self.has_string_functions() else '60 PRINT C$',
         ]
         
-        results = self.execute_program(program)
-        text_outputs = self.get_text_output(results)
+        results = helpers.execute_program(basic, program)
+        text_outputs = helpers.get_text_output(results)
         
         # Should handle string operations
-        self.assertTrue(len(text_outputs) >= 2)
-        self.assertTrue(any('HELLO' in output and 'WORLD' in output for output in text_outputs))
+        assert len(text_outputs >= 2)
+        assert any('HELLO' in output and 'WORLD' in output for output in text_outputs)
 
-    def test_for_loop_with_calculations(self):
+    def test_for_loop_with_calculations(self, basic, helpers):
         """Test FOR loop doing calculations"""
         program = [
             '10 REM CALCULATE FACTORIAL OF 5',
@@ -81,14 +77,14 @@ class ComprehensiveProgramTest(BaseTestCase):
             '70 PRINT "FINAL: 5! = "; FACTORIAL'
         ]
         
-        results = self.execute_program(program)
-        text_outputs = self.get_text_output(results)
+        results = helpers.execute_program(basic, program)
+        text_outputs = helpers.get_text_output(results)
         
         # Should calculate factorial: 5! = 120
-        self.assertTrue(len(text_outputs) >= 5)
-        self.assertTrue(any('120' in output for output in text_outputs))
+        assert len(text_outputs >= 5)
+        assert any('120' in output for output in text_outputs)
 
-    def test_if_then_logic_program(self):
+    def test_if_then_logic_program(self, basic, helpers):
         """Test program with IF/THEN logic"""
         program = [
             '10 REM TEST IF/THEN LOGIC',
@@ -98,15 +94,15 @@ class ComprehensiveProgramTest(BaseTestCase):
             '50 NEXT I'
         ]
         
-        results = self.execute_program(program)
-        text_outputs = self.get_text_output(results)
+        results = helpers.execute_program(basic, program)
+        text_outputs = helpers.get_text_output(results)
         
         # Should have outputs for both conditions
-        self.assertTrue(len(text_outputs) >= 10)
-        self.assertTrue(any('SMALL' in output for output in text_outputs))
-        self.assertTrue(any('BIG' in output for output in text_outputs))
+        assert len(text_outputs >= 10)
+        assert any('SMALL' in output for output in text_outputs)
+        assert any('BIG' in output for output in text_outputs)
 
-    def test_gosub_return_program(self):
+    def test_gosub_return_program(self, basic, helpers):
         """Test program with subroutines"""
         program = [
             '10 REM MAIN PROGRAM',
@@ -119,15 +115,15 @@ class ComprehensiveProgramTest(BaseTestCase):
             '120 RETURN'
         ]
         
-        results = self.execute_program(program)
-        text_outputs = self.get_text_output(results)
+        results = helpers.execute_program(basic, program)
+        text_outputs = helpers.get_text_output(results)
         
         # Should show subroutine call and return
-        self.assertTrue(any('CALLING SUBROUTINE' in output for output in text_outputs))
-        self.assertTrue(any('IN SUBROUTINE' in output for output in text_outputs))
-        self.assertTrue(any('BACK FROM SUBROUTINE' in output for output in text_outputs))
+        assert any('CALLING SUBROUTINE' in output for output in text_outputs)
+        assert any('IN SUBROUTINE' in output for output in text_outputs)
+        assert any('BACK FROM SUBROUTINE' in output for output in text_outputs)
 
-    def test_nested_structures_program(self):
+    def test_nested_structures_program(self, basic, helpers):
         """Test program with nested FOR loops and IF statements"""
         program = [
             '10 REM MULTIPLICATION TABLE',
@@ -141,14 +137,14 @@ class ComprehensiveProgramTest(BaseTestCase):
             '90 NEXT I'
         ]
         
-        results = self.execute_program(program)
-        text_outputs = self.get_text_output(results)
+        results = helpers.execute_program(basic, program)
+        text_outputs = helpers.get_text_output(results)
         
         # Should produce multiplication table with conditional output
-        self.assertTrue(len(text_outputs) >= 9)  # 3x3 = 9 products
-        self.assertTrue(any('LARGE' in output for output in text_outputs))
+        assert len(text_outputs >= 9)  # 3x3 = 9 products
+        assert any('LARGE' in output for output in text_outputs)
 
-    def test_data_read_program(self):
+    def test_data_read_program(self, basic, helpers):
         """Test program using DATA/READ statements"""
         program = [
             '10 REM DATA PROCESSING PROGRAM',
@@ -159,16 +155,16 @@ class ComprehensiveProgramTest(BaseTestCase):
             '60 NEXT I'
         ]
         
-        results = self.execute_program(program)
-        text_outputs = self.get_text_output(results)
+        results = helpers.execute_program(basic, program)
+        text_outputs = helpers.get_text_output(results)
         
         # Should process all data items
-        self.assertTrue(len(text_outputs) >= 3)
-        self.assertTrue(any('APPLE' in output for output in text_outputs))
-        self.assertTrue(any('BANANA' in output for output in text_outputs))
-        self.assertTrue(any('CHERRY' in output for output in text_outputs))
+        assert len(text_outputs >= 3)
+        assert any('APPLE' in output for output in text_outputs)
+        assert any('BANANA' in output for output in text_outputs)
+        assert any('CHERRY' in output for output in text_outputs)
 
-    def test_complex_mathematical_program(self):
+    def test_complex_mathematical_program(self, basic, helpers):
         """Test program with complex mathematical operations"""
         program = [
             '10 REM COMPLEX MATH PROGRAM',
@@ -183,26 +179,19 @@ class ComprehensiveProgramTest(BaseTestCase):
             '100 IF AREA <= 50 THEN PRINT "SMALL CIRCLE"'
         ]
         
-        results = self.execute_program(program)
-        text_outputs = self.get_text_output(results)
+        results = helpers.execute_program(basic, program)
+        text_outputs = helpers.get_text_output(results)
         
         # Should calculate circle properties
-        self.assertTrue(len(text_outputs) >= 4)
-        self.assertTrue(any('RADIUS' in output for output in text_outputs))
-        self.assertTrue(any('AREA' in output for output in text_outputs))
-        self.assertTrue(any('LARGE CIRCLE' in output for output in text_outputs))
+        assert len(text_outputs >= 4)
+        assert any('RADIUS' in output for output in text_outputs)
+        assert any('AREA' in output for output in text_outputs)
+        assert any('LARGE CIRCLE' in output for output in text_outputs)
 
     def has_string_functions(self):
         """Helper to check if string functions are implemented"""
         try:
-            result = self.basic.execute_command('PRINT LEN("TEST")')
+            result = basic.process_command('PRINT LEN("TEST")')
             return len(result) > 0 and result[0].get('type') != 'error'
         except:
             return False
-
-
-if __name__ == '__main__':
-    test = ComprehensiveProgramTest("Comprehensive Program Tests")
-    results = test.run_all_tests()
-    from test_base import print_test_results
-    print_test_results(results, verbose=True)

@@ -5,85 +5,81 @@ Integration tests for state isolation and cleanup between operations.
 Tests scenarios that revealed state bleedover issues during debugging.
 """
 
-import sys
-import os
-sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..'))
-
-from test_base import BaseTestCase
+import pytest
 
 
-class StateIsolationTest(BaseTestCase):
+class TestStateIsolation:
     """Test cases for state isolation and cleanup"""
 
-    def test_basic_functionality(self):
+    def test_basic_functionality(self, basic, helpers):
         """Test basic state isolation"""
-        self.basic.execute_command('A = 5')
-        self.assert_variable_equals('A', 5)
+        basic.process_command('A = 5')
+        helpers.assert_variable_equals(basic, 'A', 5)
 
-    def test_new_command_clears_all_state(self):
+    def test_new_command_clears_all_state(self, basic, helpers):
         """Test that NEW command properly clears all state"""
         # Set up various state
-        self.basic.execute_command('A = 42')
-        self.basic.execute_command('DIM B(10)')
-        self.basic.execute_command('B(5) = 99')
-        self.basic.execute_command('10 PRINT "TEST"')
-        self.basic.key_buffer = ['X', 'Y', 'Z']
+        basic.process_command('A = 42')
+        basic.process_command('DIM B(10)')
+        basic.process_command('B(5) = 99')
+        basic.process_command('10 PRINT "TEST"')
+        basic.key_buffer = ['X', 'Y', 'Z']
         
         # Verify state is set
-        self.assert_variable_equals('A', 42)
-        self.assertTrue('B' in self.basic.arrays)
-        self.assertTrue(10 in self.basic.program)
-        self.assertTrue(len(self.basic.key_buffer) == 3)
+        helpers.assert_variable_equals(basic, 'A', 42)
+        assert 'B' in basic.arrays
+        assert 10 in basic.program
+        assert len(basic.key_buffer == 3)
         
         # Clear with NEW
-        result = self.basic.execute_command('NEW')
+        result = basic.process_command('NEW')
         
         # Verify everything is cleared
-        self.assertNotIn('A', self.basic.variables)
-        self.assertNotIn('B', self.basic.arrays)
-        self.assertEqual(len(self.basic.program), 0)
-        self.assertEqual(len(self.basic.key_buffer), 0)
+        assert 'A' not in basic.variables
+        assert 'B' not in basic.arrays
+        assert len(basic.program) == 0
+        assert len(basic.key_buffer) == 0
         
         # Should return READY message
-        self.assertTrue(any(item.get('text') == 'READY' for item in result))
+        assert any(item.get('text' == 'READY' for item in result))
 
-    def test_key_buffer_persistence_across_commands(self):
+    def test_key_buffer_persistence_across_commands(self, basic, helpers):
         """Test key buffer behavior across different command contexts"""
         # Set up key buffer
-        self.basic.key_buffer = ['A', 'B', 'C']
+        basic.key_buffer = ['A', 'B', 'C']
         
         # INKEY$ should consume keys
-        result1 = self.basic.execute_command('PRINT INKEY$')
-        self.assertEqual(len(self.basic.key_buffer), 2)
+        result1 = basic.process_command('PRINT INKEY$')
+        assert len(basic.key_buffer) == 2
         
         # Variable assignment should not affect buffer
-        self.basic.execute_command('X = 5')
-        self.assertEqual(len(self.basic.key_buffer), 2)
+        basic.process_command('X = 5')
+        assert len(basic.key_buffer) == 2
         
         # Another INKEY$ should consume next key
-        result2 = self.basic.execute_command('PRINT INKEY$')
-        self.assertEqual(len(self.basic.key_buffer), 1)
+        result2 = basic.process_command('PRINT INKEY$')
+        assert len(basic.key_buffer) == 1
 
-    def test_array_state_after_redim_error(self):
+    def test_array_state_after_redim_error(self, basic, helpers):
         """Test array state after REDIM'D ARRAY error"""
         # Create array
-        self.basic.execute_command('DIM A(5)')
-        self.basic.execute_command('A(3) = 42')
+        basic.process_command('DIM A(5)')
+        basic.process_command('A(3) = 42')
         
         # Verify array exists and has value
-        self.assertTrue('A' in self.basic.arrays)
-        self.assert_variable_equals('A(3)', 42)
+        assert 'A' in basic.arrays
+        helpers.assert_variable_equals(basic, 'A(3)', 42)
         
         # Try to redimension (should error)
-        result = self.basic.execute_command('DIM A(10)')
+        result = basic.process_command('DIM A(10)')
         errors = [item for item in result if item.get('type') == 'error']
-        self.assertTrue(len(errors) > 0)
+        assert len(errors > 0)
         
         # Original array should still exist and retain values
-        self.assertTrue('A' in self.basic.arrays)
-        self.assert_variable_equals('A(3)', 42)
+        assert 'A' in basic.arrays
+        helpers.assert_variable_equals(basic, 'A(3)', 42)
 
-    def test_for_loop_stack_cleanup_on_error(self):
+    def test_for_loop_stack_cleanup_on_error(self, basic, helpers):
         """Test FOR loop stack cleanup when errors occur"""
         program = [
             '10 FOR I = 1 TO 5',
@@ -93,14 +89,14 @@ class StateIsolationTest(BaseTestCase):
         ]
         
         # Verify no FOR stack initially
-        self.assertEqual(len(self.basic.for_stack), 0)
+        assert len(basic.for_stack) == 0
         
-        results = self.execute_program(program)
+        results = helpers.execute_program(basic, program)
         
         # FOR stack should be clean after program execution
-        self.assertEqual(len(self.basic.for_stack), 0)
+        assert len(basic.for_stack) == 0
 
-    def test_variable_scoping_with_gosub(self):
+    def test_variable_scoping_with_gosub(self, basic, helpers):
         """Test variable state across GOSUB/RETURN boundaries"""
         program = [
             '10 A = 10',
@@ -113,18 +109,18 @@ class StateIsolationTest(BaseTestCase):
             '130 RETURN'
         ]
         
-        results = self.execute_program(program)
-        text_outputs = self.get_text_output(results)
+        results = helpers.execute_program(basic, program)
+        text_outputs = helpers.get_text_output(results)
         
         # Variables should be shared between main and subroutine
         combined = ' '.join(text_outputs)
-        self.assertIn('SUB A:10', combined)  # A starts as 10 (semicolon concatenates without spaces)
-        self.assertIn('MAIN A:20', combined)  # A modified to 20 in subroutine
+        assert 'SUB A:10' in combined  # A starts as 10 (semicolon concatenates without spaces)
+        assert 'MAIN A:20' in combined  # A modified to 20 in subroutine
         
         # B should exist after return
-        self.assert_variable_equals('B', 30)
+        helpers.assert_variable_equals(basic, 'B', 30)
 
-    def test_data_pointer_state_across_operations(self):
+    def test_data_pointer_state_across_operations(self, basic, helpers):
         """Test DATA pointer state across different operations"""
         program = [
             '10 DATA 1, 2, 3, 4, 5',
@@ -132,17 +128,17 @@ class StateIsolationTest(BaseTestCase):
             '30 PRINT A; B'
         ]
         
-        results = self.execute_program(program)
+        results = helpers.execute_program(basic, program)
         
         # Data pointer should be at position 2 (after reading 2 items)
-        self.assertEqual(self.basic.data_pointer, 2)
+        assert basic.data_pointer == 2
         
         # Additional READ should continue from where we left off
-        result = self.basic.execute_command('READ C')
-        self.assert_variable_equals('C', 3)
-        self.assertEqual(self.basic.data_pointer, 3)
+        result = basic.process_command('READ C')
+        helpers.assert_variable_equals(basic, 'C', 3)
+        assert basic.data_pointer == 3
 
-    def test_program_state_after_stop_and_cont(self):
+    def test_program_state_after_stop_and_cont(self, basic, helpers):
         """Test program state preservation with STOP/CONT"""
         program = [
             '10 A = 1',
@@ -152,40 +148,33 @@ class StateIsolationTest(BaseTestCase):
             '50 PRINT A'
         ]
         
-        results1 = self.execute_program(program)
+        results1 = helpers.execute_program(basic, program)
         
         # Should stop at line 30
-        self.assertFalse(self.basic.running)
-        self.assertTrue(self.basic.stopped_position is not None)
+        assert not basic.running
+        assert basic.stopped_position is not None
         
         # Variables should be preserved
-        self.assert_variable_equals('A', 1)
+        helpers.assert_variable_equals(basic, 'A', 1)
         
         # CONT should resume
-        results2 = self.basic.execute_command('CONT')
+        results2 = basic.process_command('CONT')
         
         # Should have completed execution
-        self.assert_variable_equals('A', 2)
+        helpers.assert_variable_equals(basic, 'A', 2)
 
-    def test_graphics_mode_state_persistence(self):
+    def test_graphics_mode_state_persistence(self, basic, helpers):
         """Test graphics mode state across operations"""
         # Set graphics mode
-        self.basic.execute_command('PMODE 1,1')
-        initial_mode = self.basic.graphics_mode
+        basic.process_command('PMODE 1,1')
+        initial_mode = basic.graphics_mode
         
         # Graphics mode should persist across other commands
-        self.basic.execute_command('A = 5')
-        self.basic.execute_command('PRINT A')
+        basic.process_command('A = 5')
+        basic.process_command('PRINT A')
         
-        self.assertEqual(self.basic.graphics_mode, initial_mode)
+        assert basic.graphics_mode == initial_mode
         
         # NEW should reset graphics mode
-        self.basic.execute_command('NEW')
-        self.assertEqual(self.basic.graphics_mode, 0)  # Reset to text mode
-
-
-if __name__ == '__main__':
-    test = StateIsolationTest("State Isolation Tests")
-    results = test.run_all_tests()
-    from test_base import print_test_results
-    print_test_results(results, verbose=True)
+        basic.process_command('NEW')
+        assert basic.graphics_mode == 0  # Reset to text mode

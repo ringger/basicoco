@@ -96,7 +96,7 @@ def comprehensive_smoke_test():
     
     for command, description in tests:
         try:
-            result = basic.execute_command(command)
+            result = basic.process_command(command)
             formatted = format_result(result)
             
             # Check if it's an error
@@ -134,7 +134,7 @@ def quick_smoke_test():
     
     print("⚡ Quick Smoke Test Mode")
     for i, test in enumerate(tests, 1):
-        result = basic.execute_command(test)
+        result = basic.process_command(test)
         has_error = any(item.get('type') == 'error' for item in result) if result else False
         status = "❌" if has_error else "✅"
         print(f"{status} Smoke Test {i}: {test}")

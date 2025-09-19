@@ -5,17 +5,13 @@ Unit tests for DATA/READ/RESTORE commands - structured data processing.
 Tests data statement parsing, sequential reading, and restore functionality.
 """
 
-import sys
-import os
-sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..'))
-
-from test_base import BaseTestCase
+import pytest
 
 
-class DataCommandTest(BaseTestCase):
+class TestDataCommand:
     """Test cases for DATA/READ/RESTORE command functionality"""
 
-    def test_basic_functionality(self):
+    def test_basic_functionality(self, basic, helpers):
         """Test basic DATA/READ functionality"""
         program = [
             '10 DATA 100',
@@ -23,12 +19,12 @@ class DataCommandTest(BaseTestCase):
             '30 PRINT A'
         ]
         
-        results = self.execute_program(program)
-        text_outputs = self.get_text_output(results)
+        results = helpers.execute_program(basic, program)
+        text_outputs = helpers.get_text_output(results)
         
-        self.assertTrue(any('100' in output for output in text_outputs))
+        assert any('100' in output for output in text_outputs)
 
-    def test_data_read_numeric_values(self):
+    def test_data_read_numeric_values(self, basic, helpers):
         """Test DATA/READ with numeric values"""
         program = [
             '10 DATA 100, 200, 300',
@@ -36,16 +32,16 @@ class DataCommandTest(BaseTestCase):
             '30 PRINT A; B; C'
         ]
         
-        results = self.execute_program(program)
-        text_outputs = self.get_text_output(results)
+        results = helpers.execute_program(basic, program)
+        text_outputs = helpers.get_text_output(results)
         
         # Should contain all three numbers
         combined_output = ' '.join(text_outputs)
-        self.assertIn('100', combined_output)
-        self.assertIn('200', combined_output)
-        self.assertIn('300', combined_output)
+        assert '100' in combined_output
+        assert '200' in combined_output
+        assert '300' in combined_output
 
-    def test_data_read_string_values(self):
+    def test_data_read_string_values(self, basic, helpers):
         """Test DATA/READ with string values"""
         program = [
             '10 DATA "HELLO", "WORLD"',
@@ -53,15 +49,15 @@ class DataCommandTest(BaseTestCase):
             '30 PRINT A$; " "; B$'
         ]
         
-        results = self.execute_program(program)
-        text_outputs = self.get_text_output(results)
+        results = helpers.execute_program(basic, program)
+        text_outputs = helpers.get_text_output(results)
         
         # Should contain the strings
         combined_output = ' '.join(text_outputs)
-        self.assertIn('HELLO', combined_output)
-        self.assertIn('WORLD', combined_output)
+        assert 'HELLO' in combined_output
+        assert 'WORLD' in combined_output
 
-    def test_data_read_mixed_types(self):
+    def test_data_read_mixed_types(self, basic, helpers):
         """Test DATA/READ with mixed numeric and string values"""
         program = [
             '10 DATA 123, "HELLO", 3.14, "WORLD"',
@@ -69,19 +65,19 @@ class DataCommandTest(BaseTestCase):
             '30 PRINT A; B$; C; D$'
         ]
         
-        results = self.execute_program(program)
-        errors = self.get_error_messages(results)
+        results = helpers.execute_program(basic, program)
+        errors = helpers.get_error_messages(results)
         
         # Should run without errors
-        self.assertEqual(len(errors), 0, f"Program should run without errors: {errors}")
+        assert len(errors) == 0, f"Program should run without errors: {errors}"
         
         # Check final variable values
-        self.assert_variable_equals('A', 123)
-        self.assert_variable_equals('B$', 'HELLO')
-        self.assert_variable_equals('C', 3.14)
-        self.assert_variable_equals('D$', 'WORLD')
+        helpers.assert_variable_equals(basic, 'A', 123)
+        helpers.assert_variable_equals(basic, 'B$', 'HELLO')
+        helpers.assert_variable_equals(basic, 'C', 3.14)
+        helpers.assert_variable_equals(basic, 'D$', 'WORLD')
 
-    def test_multiple_data_statements(self):
+    def test_multiple_data_statements(self, basic, helpers):
         """Test multiple DATA statements in sequence"""
         program = [
             '10 DATA 100, 200',
@@ -91,13 +87,13 @@ class DataCommandTest(BaseTestCase):
             '50 PRINT A; B; C$; D; E$; F'
         ]
         
-        results = self.execute_program(program)
-        errors = self.get_error_messages(results)
+        results = helpers.execute_program(basic, program)
+        errors = helpers.get_error_messages(results)
         
         # Should run without errors
-        self.assertEqual(len(errors), 0, f"Program should run without errors: {errors}")
+        assert len(errors) == 0, f"Program should run without errors: {errors}"
 
-    def test_restore_command(self):
+    def test_restore_command(self, basic, helpers):
         """Test RESTORE command resets data pointer"""
         program = [
             '10 DATA 100, 200, 300',
@@ -108,16 +104,16 @@ class DataCommandTest(BaseTestCase):
             '60 PRINT A; B; C'
         ]
         
-        results = self.execute_program(program)
-        text_outputs = self.get_text_output(results)
+        results = helpers.execute_program(basic, program)
+        text_outputs = helpers.get_text_output(results)
         
         # A should be 100, B should be 200, C should be 100 (after RESTORE)
         combined_output = ' '.join(text_outputs)
-        self.assertIn('100', combined_output)
-        self.assertIn('200', combined_output)
+        assert '100' in combined_output
+        assert '200' in combined_output
         # C should also be 100 since RESTORE reset to beginning
 
-    def test_restore_mid_program(self):
+    def test_restore_mid_program(self, basic, helpers):
         """Test RESTORE in middle of data reading"""
         program = [
             '10 DATA 10, 20, 30, 40, 50',
@@ -128,31 +124,31 @@ class DataCommandTest(BaseTestCase):
             '60 PRINT "AFTER RESTORE: "; C; D; E'
         ]
         
-        results = self.execute_program(program)
-        errors = self.get_error_messages(results)
+        results = helpers.execute_program(basic, program)
+        errors = helpers.get_error_messages(results)
         
         # Should run without errors
-        self.assertEqual(len(errors), 0, f"Program should run without errors: {errors}")
+        assert len(errors) == 0, f"Program should run without errors: {errors}"
         
         # After RESTORE, should start from beginning again
-        self.assert_variable_equals('C', 10)  # Should be first value again
-        self.assert_variable_equals('D', 20)  # Should be second value again
+        helpers.assert_variable_equals(basic, 'C', 10)  # Should be first value again
+        helpers.assert_variable_equals(basic, 'D', 20)  # Should be second value again
 
-    def test_out_of_data_error(self):
+    def test_out_of_data_error(self, basic, helpers):
         """Test reading beyond available data produces error"""
         program = [
             '10 DATA 100, 200',
             '20 READ A, B, C'  # C should cause "OUT OF DATA" error
         ]
         
-        results = self.execute_program(program)
-        errors = self.get_error_messages(results)
+        results = helpers.execute_program(basic, program)
+        errors = helpers.get_error_messages(results)
         
         # Should produce out of data error
-        self.assertTrue(len(errors) > 0, "Should produce OUT OF DATA error")
-        self.assertTrue(any('OUT OF DATA' in error for error in errors))
+        assert len(errors) > 0, "Should produce OUT OF DATA error"
+        assert any('OUT OF DATA' in error for error in errors)
 
-    def test_data_with_commas_in_strings(self):
+    def test_data_with_commas_in_strings(self, basic, helpers):
         """Test DATA statements with commas inside quoted strings"""
         program = [
             '10 DATA "HELLO, WORLD", 123, "A, B, C"',
@@ -160,13 +156,13 @@ class DataCommandTest(BaseTestCase):
             '30 PRINT A$; "|"; B; "|"; C$'
         ]
         
-        results = self.execute_program(program)
-        errors = self.get_error_messages(results)
+        results = helpers.execute_program(basic, program)
+        errors = helpers.get_error_messages(results)
         
         # Should handle quoted strings with commas correctly
-        self.assertEqual(len(errors), 0, f"Program should parse quoted strings correctly: {errors}")
+        assert len(errors) == 0, f"Program should parse quoted strings correctly: {errors}"
 
-    def test_data_floating_point_numbers(self):
+    def test_data_floating_point_numbers(self, basic, helpers):
         """Test DATA with floating point numbers"""
         program = [
             '10 DATA 3.14159, 2.718, 1.414',
@@ -174,13 +170,13 @@ class DataCommandTest(BaseTestCase):
             '30 PRINT PI; E; SQRT2'
         ]
         
-        results = self.execute_program(program)
-        errors = self.get_error_messages(results)
+        results = helpers.execute_program(basic, program)
+        errors = helpers.get_error_messages(results)
         
         # Should handle floating point numbers
-        self.assertEqual(len(errors), 0, f"Should handle floating point data: {errors}")
+        assert len(errors) == 0, f"Should handle floating point data: {errors}"
 
-    def test_data_negative_numbers(self):
+    def test_data_negative_numbers(self, basic, helpers):
         """Test DATA with negative numbers"""
         program = [
             '10 DATA -100, -3.14, 50',
@@ -188,14 +184,14 @@ class DataCommandTest(BaseTestCase):
             '30 PRINT A; B; C'
         ]
         
-        results = self.execute_program(program)
-        errors = self.get_error_messages(results)
+        results = helpers.execute_program(basic, program)
+        errors = helpers.get_error_messages(results)
         
         # Should handle negative numbers
-        self.assertEqual(len(errors), 0, f"Should handle negative numbers: {errors}")
-        self.assert_variable_equals('A', -100)
+        assert len(errors) == 0, f"Should handle negative numbers: {errors}"
+        helpers.assert_variable_equals(basic, 'A', -100)
 
-    def test_data_statements_out_of_order(self):
+    def test_data_statements_out_of_order(self, basic, helpers):
         """Test that DATA statements work regardless of line number order"""
         program = [
             '30 READ A, B',
@@ -204,13 +200,13 @@ class DataCommandTest(BaseTestCase):
             '20 DATA 300, 400'  # This should be read after first DATA
         ]
         
-        results = self.execute_program(program)
-        errors = self.get_error_messages(results)
+        results = helpers.execute_program(basic, program)
+        errors = helpers.get_error_messages(results)
         
         # Should collect DATA from all lines in line number order
-        self.assertEqual(len(errors), 0, f"Should handle out-of-order DATA lines: {errors}")
+        assert len(errors) == 0, f"Should handle out-of-order DATA lines: {errors}"
 
-    def test_read_into_array_elements(self):
+    def test_read_into_array_elements(self, basic, helpers):
         """Test READ into array elements"""
         program = [
             '10 DIM A(3)',
@@ -219,13 +215,13 @@ class DataCommandTest(BaseTestCase):
             '40 PRINT A(0); A(1); A(2)'
         ]
         
-        results = self.execute_program(program)
-        errors = self.get_error_messages(results)
+        results = helpers.execute_program(basic, program)
+        errors = helpers.get_error_messages(results)
         
         # Should read into array elements successfully
-        self.assertEqual(len(errors), 0, f"Should read into arrays: {errors}")
+        assert len(errors) == 0, f"Should read into arrays: {errors}"
 
-    def test_data_with_expressions(self):
+    def test_data_with_expressions(self, basic, helpers):
         """Test that DATA contains literal values, not expressions"""
         program = [
             '10 DATA 2+3, "HELLO"+"WORLD"',  # Should be literal strings, not evaluated
@@ -233,21 +229,21 @@ class DataCommandTest(BaseTestCase):
             '30 PRINT A$; "|"; B$'
         ]
         
-        results = self.execute_program(program)
+        results = helpers.execute_program(basic, program)
         
         # DATA should contain literal values, not evaluate expressions
         # This tests that "2+3" is read as string "2+3", not as number 5
 
-    def test_empty_data_statements(self):
+    def test_empty_data_statements(self, basic, helpers):
         """Test handling of empty or malformed DATA statements"""
         # Test DATA with no values
         try:
-            result = self.basic.execute_command('DATA')
+            result = basic.process_command('DATA')
             # Should either error or handle gracefully
         except:
             pass  # Expected behavior
 
-    def test_complex_data_program(self):
+    def test_complex_data_program(self, basic, helpers):
         """Test complex program using DATA/READ/RESTORE extensively"""
         program = [
             '10 DATA 5',  # Number of students
@@ -269,16 +265,16 @@ class DataCommandTest(BaseTestCase):
             '170 PRINT "AVERAGE: "; TOTAL / N'
         ]
         
-        results = self.execute_program(program)
-        errors = self.get_error_messages(results)
+        results = helpers.execute_program(basic, program)
+        errors = helpers.get_error_messages(results)
         
         # Should run complex data processing without errors
-        self.assertEqual(len(errors), 0, f"Complex data program should run: {errors}")
+        assert len(errors) == 0, f"Complex data program should run: {errors}"
         
-        text_outputs = self.get_text_output(results)
-        self.assertTrue(len(text_outputs) > 0, "Should produce output")
+        text_outputs = helpers.get_text_output(results)
+        assert len(text_outputs) > 0, "Should produce output"
 
-    def test_out_of_data_halts_execution(self):
+    def test_out_of_data_halts_execution(self, basic, helpers):
         """Test that OUT OF DATA error stops program execution"""
         program = [
             '10 DATA 100, 200', 
@@ -288,26 +284,23 @@ class DataCommandTest(BaseTestCase):
             '50 PRINT "SHOULD NOT REACH HERE"'
         ]
         
-        results = self.execute_program(program)
-        errors = self.get_error_messages(results)
-        text_outputs = self.get_text_output(results)
+        results = helpers.execute_program(basic, program)
+        errors = helpers.get_error_messages(results)
+        text_outputs = helpers.get_text_output(results)
         
         # Should have OUT OF DATA error
-        self.assertTrue(any('OUT OF DATA' in error for error in errors), 
-                       f"Expected OUT OF DATA error, got: {errors}")
+        assert any('OUT OF DATA' in error for error in errors), f"Expected OUT OF DATA error, got: {errors}"
         
         # Should NOT reach line 50
-        self.assertFalse(any('SHOULD NOT REACH HERE' in output for output in text_outputs),
-                        "Program should halt at OUT OF DATA error")
+        assert not any('SHOULD NOT REACH HERE' in output for output in text_outputs), "Program should halt at OUT OF DATA error"
         
         # Program should stop at line 40
-        self.assertEqual(self.basic.current_line, 40, 
-                        f"Expected program to stop at line 40, stopped at {self.basic.current_line}")
+        assert basic.current_line == 40, f"Expected program to stop at line 40, stopped at {basic.current_line}"
         
         # Program should not be running
-        self.assertFalse(self.basic.running, "Program should have stopped")
+        assert not basic.running, "Program should have stopped"
 
-    def test_out_of_data_with_continue_execution(self):
+    def test_out_of_data_with_continue_execution(self, basic, helpers):
         """Test OUT OF DATA error handling in continue execution context"""
         program = [
             '10 DATA 100',
@@ -317,21 +310,13 @@ class DataCommandTest(BaseTestCase):
             '50 PRINT "SHOULD NOT REACH HERE"'
         ]
         
-        results = self.execute_program(program)
-        errors = self.get_error_messages(results)
-        text_outputs = self.get_text_output(results)
+        results = helpers.execute_program(basic, program)
+        errors = helpers.get_error_messages(results)
+        text_outputs = helpers.get_text_output(results)
         
         # Should have OUT OF DATA error
-        self.assertTrue(any('OUT OF DATA' in error for error in errors))
+        assert any('OUT OF DATA' in error for error in errors)
         
         # Should print A value but not reach line 50
-        self.assertTrue(any('A =100' in output for output in text_outputs), 
-                       "Should print A value before error")
-        self.assertFalse(any('SHOULD NOT REACH HERE' in output for output in text_outputs))
-
-
-if __name__ == '__main__':
-    test = DataCommandTest("DATA/READ/RESTORE Command Tests")
-    results = test.run_all_tests()
-    from test_base import print_test_results
-    print_test_results(results, verbose=True)
+        assert any('A =100' in output for output in text_outputs), "Should print A value before error"
+        assert not any('SHOULD NOT REACH HERE' in output for output in text_outputs)

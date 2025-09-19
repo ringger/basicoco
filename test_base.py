@@ -76,7 +76,7 @@ class BaseTestCase(ABC):
         """Set up test fixture - create fresh CoCoBasic instance"""
         try:
             self.basic = CoCoBasic()
-            self.basic.execute_command('NEW')  # Clear any existing state
+            self.basic.process_command('NEW')  # Clear any existing state
         except Exception as e:
             self.test_suite.setup_error = e
             raise
@@ -135,7 +135,7 @@ class BaseTestCase(ABC):
         if not self.basic:
             raise AssertionError("CoCoBasic instance not initialized")
         
-        result = self.basic.execute_command(command)
+        result = self.basic.process_command(command)
         
         if expected_count is not None:
             if len(result) != expected_count:
@@ -162,7 +162,7 @@ class BaseTestCase(ABC):
         if not self.basic:
             raise AssertionError("CoCoBasic instance not initialized")
         
-        result = self.basic.execute_command(command)
+        result = self.basic.process_command(command)
         
         if not result or result[0].get('type') != 'error':
             raise AssertionError(f"Expected error from command '{command}', got: {result}")
@@ -177,7 +177,7 @@ class BaseTestCase(ABC):
         if not self.basic:
             raise AssertionError("CoCoBasic instance not initialized")
         
-        result = self.basic.execute_command(command)
+        result = self.basic.process_command(command)
         
         graphics_types = ['pmode', 'pset', 'preset', 'line', 'circle', 'draw', 'pcls', 
                          'set_pmode', 'clear_graphics', 'turtle_graphics', 'paint']
@@ -286,7 +286,7 @@ class BaseTestCase(ABC):
             raise AssertionError("CoCoBasic instance not initialized")
         
         # Clear any existing program first
-        self.basic.execute_command('NEW')
+        self.basic.process_command('NEW')
         
         for line in program_lines:
             line_num, code = self.basic.parse_line(line)
@@ -297,7 +297,7 @@ class BaseTestCase(ABC):
     def execute_program(self, program_lines: List[str]) -> List[Dict[str, Any]]:
         """Load and run a program, returning the execution results"""
         self.load_program(program_lines)
-        return self.basic.execute_command('RUN')
+        return self.basic.process_command('RUN')
 
     def get_text_output(self, results: List[Dict[str, Any]]) -> List[str]:
         """Extract text output from command results"""
@@ -355,7 +355,7 @@ class IntegrationTest(BaseTestCase):
         """Basic integration test"""
         # Test that basic operations work together
         self.assert_text_output('PRINT "HELLO"', 'HELLO')
-        self.basic.execute_command('A = 5')
+        self.basic.process_command('A = 5')
         self.assert_variable_equals('A', 5)
         self.assert_text_output('PRINT A', '5')
 
@@ -401,7 +401,7 @@ if __name__ == '__main__':
             self.assert_text_output('PRINT "TEST"', 'TEST')
         
         def test_variables(self):
-            self.basic.execute_command('X = 42')
+            self.basic.process_command('X = 42')
             self.assert_variable_equals('X', 42)
             self.assert_text_output('PRINT X', '42')
         

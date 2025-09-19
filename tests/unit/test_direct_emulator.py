@@ -17,11 +17,11 @@ def test_direct_emulator():
     emulator = CoCoBasic(output_callback=debug_output_callback, debug_mode=True)
     
     print("\n1. Testing simple PRINT statement...")
-    result = emulator.execute_command('10 PRINT "HELLO WORLD"')
+    result = emulator.process_command('10 PRINT "HELLO WORLD"')
     print(f"execute_command result: {result}")
     
     print("\n2. Testing RUN command...")
-    result = emulator.execute_command('RUN')
+    result = emulator.process_command('RUN')
     print(f"RUN result: {result}")
     
     print("\n3. Testing manual program execution...")

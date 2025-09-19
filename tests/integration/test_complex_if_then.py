@@ -5,21 +5,19 @@ Integration tests for complex IF/THEN statement constructs.
 Tests multi-statement THEN clauses and edge cases discovered during debugging.
 """
 
-import sys
-import os
-sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..'))
-
-from test_base import BaseTestCase
+import pytest
 
 
-class ComplexIfThenTest(BaseTestCase):
+class TestComplexIfThen:
     """Test cases for complex IF/THEN statement functionality"""
 
-    def test_basic_functionality(self):
+    def test_basic_functionality(self, basic, helpers):
         """Test basic IF/THEN functionality"""
-        self.assert_text_output('IF 1 = 1 THEN PRINT "TRUE"', 'TRUE')
+        result = basic.process_command('IF 1 = 1 THEN PRINT "TRUE"')
+        text_output = helpers.get_text_output(result)
+        assert text_output == ['TRUE']
 
-    def test_if_then_with_multiple_statements(self):
+    def test_if_then_with_multiple_statements(self, basic, helpers):
         """Test IF/THEN with multiple statements separated by colons"""
         program = [
             '10 A = 5',
@@ -27,15 +25,15 @@ class ComplexIfThenTest(BaseTestCase):
             '30 PRINT A'
         ]
         
-        results = self.execute_program(program)
-        text_outputs = self.get_text_output(results)
+        results = helpers.execute_program(basic, program)
+        text_outputs = helpers.get_text_output(results)
         
         # Should print "MATCH", "CONFIRMED", and "10"
-        self.assertIn('MATCH', ' '.join(text_outputs))
-        self.assertIn('CONFIRMED', ' '.join(text_outputs))
-        self.assertIn('10', ' '.join(text_outputs))
+        assert 'MATCH' in ' '.join(text_outputs)
+        assert 'CONFIRMED' in ' '.join(text_outputs)
+        assert '10' in ' '.join(text_outputs)
 
-    def test_if_then_goto_with_print(self):
+    def test_if_then_goto_with_print(self, basic, helpers):
         """Test IF/THEN with PRINT and GOTO combination"""
         program = [
             '10 A$ = "TEST"',
@@ -44,17 +42,17 @@ class ComplexIfThenTest(BaseTestCase):
             '40 PRINT "END"'
         ]
         
-        results = self.execute_program(program)
-        text_outputs = self.get_text_output(results)
+        results = helpers.execute_program(basic, program)
+        text_outputs = helpers.get_text_output(results)
         
         # Should print "FOUND: TEST" and "END", but not "NOT REACHED"
         combined = ' '.join(text_outputs)
-        self.assertIn('FOUND:', combined)
-        self.assertIn('TEST', combined)
-        self.assertIn('END', combined)
-        self.assertNotIn('NOT REACHED', combined)
+        assert 'FOUND:' in combined
+        assert 'TEST' in combined
+        assert 'END' in combined
+        assert 'NOT REACHED' not in combined
 
-    def test_if_then_with_string_concatenation(self):
+    def test_if_then_with_string_concatenation(self, basic, helpers):
         """Test IF/THEN with string operations in THEN clause"""
         program = [
             '10 A$ = "HELLO"',
@@ -63,15 +61,15 @@ class ComplexIfThenTest(BaseTestCase):
             '40 PRINT A$'
         ]
         
-        results = self.execute_program(program)
-        text_outputs = self.get_text_output(results)
+        results = helpers.execute_program(basic, program)
+        text_outputs = helpers.get_text_output(results)
         
         combined = ' '.join(text_outputs)
-        self.assertIn('HELLO', combined)
-        self.assertIn('WORLD', combined)
-        self.assertIn('HELLO!', combined)
+        assert 'HELLO' in combined
+        assert 'WORLD' in combined
+        assert 'HELLO!' in combined
 
-    def test_nested_if_then_statements(self):
+    def test_nested_if_then_statements(self, basic, helpers):
         """Test nested IF/THEN constructs"""
         program = [
             '10 A = 5',
@@ -81,15 +79,15 @@ class ComplexIfThenTest(BaseTestCase):
             '50 PRINT "SUCCESS"'
         ]
         
-        results = self.execute_program(program)
-        text_outputs = self.get_text_output(results)
+        results = helpers.execute_program(basic, program)
+        text_outputs = helpers.get_text_output(results)
         
         combined = ' '.join(text_outputs)
-        self.assertIn('BOTH TRUE', combined)
-        self.assertIn('SUCCESS', combined)
-        self.assertNotIn('NOT REACHED', combined)
+        assert 'BOTH TRUE' in combined
+        assert 'SUCCESS' in combined
+        assert 'NOT REACHED' not in combined
 
-    def test_if_then_with_variable_assignment_and_jump(self):
+    def test_if_then_with_variable_assignment_and_jump(self, basic, helpers):
         """Test IF/THEN with variable assignment followed by GOTO"""
         program = [
             '10 SCORE = 85',
@@ -99,14 +97,14 @@ class ComplexIfThenTest(BaseTestCase):
             '50 PRINT "GRADE: "; GRADE$'
         ]
         
-        results = self.execute_program(program)
-        text_outputs = self.get_text_output(results)
+        results = helpers.execute_program(basic, program)
+        text_outputs = helpers.get_text_output(results)
         
         combined = ' '.join(text_outputs)
-        self.assertIn('GRADE:', combined)
-        self.assertIn('B', combined)
+        assert 'GRADE:' in combined
+        assert 'B' in combined
 
-    def test_if_then_with_for_loop_interaction(self):
+    def test_if_then_with_for_loop_interaction(self, basic, helpers):
         """Test IF/THEN inside FOR loop with GOTO"""
         program = [
             '10 FOR I = 1 TO 10',
@@ -115,14 +113,14 @@ class ComplexIfThenTest(BaseTestCase):
             '40 PRINT "DONE"'
         ]
         
-        results = self.execute_program(program)
-        text_outputs = self.get_text_output(results)
+        results = helpers.execute_program(basic, program)
+        text_outputs = helpers.get_text_output(results)
         
         combined = ' '.join(text_outputs)
-        self.assertIn('FOUND 5', combined)
-        self.assertIn('DONE', combined)
+        assert 'FOUND 5' in combined
+        assert 'DONE' in combined
 
-    def test_if_then_with_function_calls(self):
+    def test_if_then_with_function_calls(self, basic, helpers):
         """Test IF/THEN with function calls in condition and action"""
         program = [
             '10 A$ = "HELLO"',
@@ -130,15 +128,15 @@ class ComplexIfThenTest(BaseTestCase):
             '30 PRINT A$'
         ]
         
-        results = self.execute_program(program)
-        text_outputs = self.get_text_output(results)
+        results = helpers.execute_program(basic, program)
+        text_outputs = helpers.get_text_output(results)
         
         combined = ' '.join(text_outputs)
-        self.assertIn('LENGTH:', combined)
-        self.assertIn('5', combined)
-        self.assertIn('HEL', combined)
+        assert 'LENGTH:' in combined
+        assert '5' in combined
+        assert 'HEL' in combined
 
-    def test_if_then_statement_boundary_parsing(self):
+    def test_if_then_statement_boundary_parsing(self, basic, helpers):
         """Test that IF/THEN statements are properly parsed as single units"""
         # This tests the fix for the statement splitting issue
         program = [
@@ -147,18 +145,11 @@ class ComplexIfThenTest(BaseTestCase):
             '30 PRINT "FINAL: "; FLAG'
         ]
         
-        results = self.execute_program(program)
-        text_outputs = self.get_text_output(results)
+        results = helpers.execute_program(basic, program)
+        text_outputs = helpers.get_text_output(results)
         
         combined = ' '.join(text_outputs)
-        self.assertIn('BEFORE', combined)
-        self.assertIn('AFTER', combined)
-        self.assertIn('FINAL:', combined)
-        self.assertIn('0', combined)
-
-
-if __name__ == '__main__':
-    test = ComplexIfThenTest("Complex IF/THEN Tests")
-    results = test.run_all_tests()
-    from test_base import print_test_results
-    print_test_results(results, verbose=True)
+        assert 'BEFORE' in combined
+        assert 'AFTER' in combined
+        assert 'FINAL:' in combined
+        assert '0' in combined

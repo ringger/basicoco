@@ -6,22 +6,20 @@ Comprehensive tests for Phase 3 Enhanced Control Flow features.
 Tests WHILE/WEND loops, DO/LOOP variants, EXIT FOR statements, and advanced control structures.
 """
 
-import sys
-import os
-sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..'))
-
-from test_base import BaseTestCase
+import pytest
 from emulator.core import CoCoBasic
 
 
-class EnhancedControlFlowTest(BaseTestCase):
+class TestEnhancedControlFlow:
     """Test cases for Phase 3 enhanced control flow functionality"""
 
-    def test_basic_functionality(self):
+    def test_basic_functionality(self, basic, helpers):
         """Test basic enhanced control flow functionality"""
-        self.assert_text_output('PRINT "ENHANCED CONTROL FLOW"', 'ENHANCED CONTROL FLOW')
+        result = basic.process_command('PRINT "ENHANCED CONTROL FLOW"')
+        text_output = helpers.get_text_output(result)
+        assert text_output == ['ENHANCED CONTROL FLOW']
 
-    def test_basic_while_loop(self):
+    def test_basic_while_loop(self, basic, helpers):
         """Test basic WHILE/WEND functionality"""
         program = [
             '10 X = 3',
@@ -32,16 +30,16 @@ class EnhancedControlFlowTest(BaseTestCase):
             '60 PRINT "DONE"'
         ]
         
-        results = self.execute_program(program)
-        text_outputs = self.get_text_output(results)
+        results = helpers.execute_program(basic, program)
+        text_outputs = helpers.get_text_output(results)
         
         # Should print 3, 2, 1, DONE
-        self.assertIn('3', ' '.join(text_outputs))
-        self.assertIn('2', ' '.join(text_outputs))
-        self.assertIn('1', ' '.join(text_outputs))
-        self.assertIn('DONE', ' '.join(text_outputs))
+        assert '3' in ' '.join(text_outputs)
+        assert '2' in ' '.join(text_outputs)
+        assert '1' in ' '.join(text_outputs)
+        assert 'DONE' in ' '.join(text_outputs)
 
-    def test_while_loop_false_condition(self):
+    def test_while_loop_false_condition(self, basic, helpers):
         """Test WHILE loop with false initial condition"""
         program = [
             '10 X = 0',
@@ -51,14 +49,14 @@ class EnhancedControlFlowTest(BaseTestCase):
             '50 PRINT "AFTER"'
         ]
         
-        results = self.execute_program(program)
-        text_outputs = self.get_text_output(results)
+        results = helpers.execute_program(basic, program)
+        text_outputs = helpers.get_text_output(results)
         
         # Should only print AFTER, never NEVER
-        self.assertNotIn('NEVER', ' '.join(text_outputs))
-        self.assertIn('AFTER', ' '.join(text_outputs))
+        assert 'NEVER' not in ' '.join(text_outputs)
+        assert 'AFTER' in ' '.join(text_outputs)
 
-    def test_while_string_condition(self):
+    def test_while_string_condition(self, basic, helpers):
         """Test WHILE loop with string condition"""
         program = [
             '10 A$ = "YES"',
@@ -69,13 +67,13 @@ class EnhancedControlFlowTest(BaseTestCase):
             '60 PRINT "END"'
         ]
         
-        results = self.execute_program(program)
-        text_outputs = self.get_text_output(results)
+        results = helpers.execute_program(basic, program)
+        text_outputs = helpers.get_text_output(results)
         
-        self.assertIn('YES', ' '.join(text_outputs))
-        self.assertIn('END', ' '.join(text_outputs))
+        assert 'YES' in ' '.join(text_outputs)
+        assert 'END' in ' '.join(text_outputs)
 
-    def test_exit_for_basic(self):
+    def test_exit_for_basic(self, basic, helpers):
         """Test basic EXIT FOR functionality"""
         program = [
             '10 FOR I = 1 TO 10',
@@ -85,17 +83,17 @@ class EnhancedControlFlowTest(BaseTestCase):
             '50 PRINT "DONE"'
         ]
         
-        results = self.execute_program(program)
-        text_outputs = self.get_text_output(results)
+        results = helpers.execute_program(basic, program)
+        text_outputs = helpers.get_text_output(results)
         
         # Should print 1, 2, 3, DONE but not 4 or higher
-        self.assertIn('1', ' '.join(text_outputs))
-        self.assertIn('2', ' '.join(text_outputs))
-        self.assertIn('3', ' '.join(text_outputs))
-        self.assertNotIn('4', ' '.join(text_outputs))
-        self.assertIn('DONE', ' '.join(text_outputs))
+        assert '1' in ' '.join(text_outputs)
+        assert '2' in ' '.join(text_outputs)
+        assert '3' in ' '.join(text_outputs)
+        assert '4' not in ' '.join(text_outputs)
+        assert 'DONE' in ' '.join(text_outputs)
 
-    def test_do_loop_infinite(self):
+    def test_do_loop_infinite(self, basic, helpers):
         """Test basic DO/LOOP with break condition"""
         program = [
             '10 X = 1',
@@ -107,16 +105,16 @@ class EnhancedControlFlowTest(BaseTestCase):
             '70 PRINT "EXIT"'
         ]
         
-        results = self.execute_program(program)
-        text_outputs = self.get_text_output(results)
+        results = helpers.execute_program(basic, program)
+        text_outputs = helpers.get_text_output(results)
         
         # Should print 1, 2, 3, EXIT
-        self.assertIn('1', ' '.join(text_outputs))
-        self.assertIn('2', ' '.join(text_outputs))
-        self.assertIn('3', ' '.join(text_outputs))
-        self.assertIn('EXIT', ' '.join(text_outputs))
+        assert '1' in ' '.join(text_outputs)
+        assert '2' in ' '.join(text_outputs)
+        assert '3' in ' '.join(text_outputs)
+        assert 'EXIT' in ' '.join(text_outputs)
 
-    def test_do_while_loop(self):
+    def test_do_while_loop(self, basic, helpers):
         """Test DO WHILE loop"""
         program = [
             '10 X = 3',
@@ -127,16 +125,16 @@ class EnhancedControlFlowTest(BaseTestCase):
             '60 PRINT "FINISHED"'
         ]
         
-        results = self.execute_program(program)
-        text_outputs = self.get_text_output(results)
+        results = helpers.execute_program(basic, program)
+        text_outputs = helpers.get_text_output(results)
         
         # Should print 3, 2, 1, FINISHED
-        self.assertIn('3', ' '.join(text_outputs))
-        self.assertIn('2', ' '.join(text_outputs))
-        self.assertIn('1', ' '.join(text_outputs))
-        self.assertIn('FINISHED', ' '.join(text_outputs))
+        assert '3' in ' '.join(text_outputs)
+        assert '2' in ' '.join(text_outputs)
+        assert '1' in ' '.join(text_outputs)
+        assert 'FINISHED' in ' '.join(text_outputs)
 
-    def test_do_until_loop(self):
+    def test_do_until_loop(self, basic, helpers):
         """Test DO UNTIL loop"""
         program = [
             '10 X = 1',
@@ -147,16 +145,16 @@ class EnhancedControlFlowTest(BaseTestCase):
             '60 PRINT "COMPLETE"'
         ]
         
-        results = self.execute_program(program)
-        text_outputs = self.get_text_output(results)
+        results = helpers.execute_program(basic, program)
+        text_outputs = helpers.get_text_output(results)
         
         # Should print 1, 2, 3, COMPLETE
-        self.assertIn('1', ' '.join(text_outputs))
-        self.assertIn('2', ' '.join(text_outputs))
-        self.assertIn('3', ' '.join(text_outputs))
-        self.assertIn('COMPLETE', ' '.join(text_outputs))
+        assert '1' in ' '.join(text_outputs)
+        assert '2' in ' '.join(text_outputs)
+        assert '3' in ' '.join(text_outputs)
+        assert 'COMPLETE' in ' '.join(text_outputs)
 
-    def test_loop_while_condition(self):
+    def test_loop_while_condition(self, basic, helpers):
         """Test DO/LOOP WHILE variant"""
         program = [
             '10 X = 0',
@@ -167,16 +165,16 @@ class EnhancedControlFlowTest(BaseTestCase):
             '60 PRINT "STOP"'
         ]
         
-        results = self.execute_program(program)
-        text_outputs = self.get_text_output(results)
+        results = helpers.execute_program(basic, program)
+        text_outputs = helpers.get_text_output(results)
         
         # Should print 1, 2, 3, STOP
-        self.assertIn('1', ' '.join(text_outputs))
-        self.assertIn('2', ' '.join(text_outputs))
-        self.assertIn('3', ' '.join(text_outputs))
-        self.assertIn('STOP', ' '.join(text_outputs))
+        assert '1' in ' '.join(text_outputs)
+        assert '2' in ' '.join(text_outputs)
+        assert '3' in ' '.join(text_outputs)
+        assert 'STOP' in ' '.join(text_outputs)
 
-    def test_loop_until_condition(self):
+    def test_loop_until_condition(self, basic, helpers):
         """Test DO/LOOP UNTIL variant"""
         program = [
             '10 X = 0',
@@ -187,16 +185,16 @@ class EnhancedControlFlowTest(BaseTestCase):
             '60 PRINT "FINAL"'
         ]
         
-        results = self.execute_program(program)
-        text_outputs = self.get_text_output(results)
+        results = helpers.execute_program(basic, program)
+        text_outputs = helpers.get_text_output(results)
         
         # Should print 1, 2, 3, FINAL
-        self.assertIn('1', ' '.join(text_outputs))
-        self.assertIn('2', ' '.join(text_outputs))
-        self.assertIn('3', ' '.join(text_outputs))
-        self.assertIn('FINAL', ' '.join(text_outputs))
+        assert '1' in ' '.join(text_outputs)
+        assert '2' in ' '.join(text_outputs)
+        assert '3' in ' '.join(text_outputs)
+        assert 'FINAL' in ' '.join(text_outputs)
 
-    def test_nested_while_loops(self):
+    def test_nested_while_loops(self, basic, helpers):
         """Test nested WHILE loops"""
         program = [
             '10 I = 1',
@@ -211,13 +209,13 @@ class EnhancedControlFlowTest(BaseTestCase):
             '100 PRINT "NESTED"'
         ]
         
-        results = self.execute_program(program)
-        text_outputs = self.get_text_output(results)
+        results = helpers.execute_program(basic, program)
+        text_outputs = helpers.get_text_output(results)
         
         # Should print 1,1  1,2  2,1  2,2  NESTED
-        self.assertIn('NESTED', ' '.join(text_outputs))
+        assert 'NESTED' in ' '.join(text_outputs)
 
-    def test_mixed_control_structures(self):
+    def test_mixed_control_structures(self, basic, helpers):
         """Test mixing FOR, WHILE, and DO loops"""
         program = [
             '10 FOR I = 1 TO 2',
@@ -232,12 +230,12 @@ class EnhancedControlFlowTest(BaseTestCase):
             '100 PRINT "MIXED"'
         ]
         
-        results = self.execute_program(program)
-        text_outputs = self.get_text_output(results)
+        results = helpers.execute_program(basic, program)
+        text_outputs = helpers.get_text_output(results)
         
-        self.assertIn('MIXED', ' '.join(text_outputs))
+        assert 'MIXED' in ' '.join(text_outputs)
 
-    def test_error_handling_wend_without_while(self):
+    def test_error_handling_wend_without_while(self, basic, helpers):
         """Test error handling for WEND without WHILE"""
         program = [
             '10 PRINT "START"',
@@ -245,13 +243,13 @@ class EnhancedControlFlowTest(BaseTestCase):
             '30 PRINT "NEVER"'
         ]
         
-        results = self.execute_program(program)
+        results = helpers.execute_program(basic, program)
         errors = [r for r in results if r.get('type') == 'error']
         
-        self.assertTrue(len(errors) > 0)
-        self.assertIn('WEND without matching WHILE', str(errors[0]))
+        assert len(errors) > 0
+        assert 'WEND without matching WHILE' in str(errors[0])
 
-    def test_error_handling_loop_without_do(self):
+    def test_error_handling_loop_without_do(self, basic, helpers):
         """Test error handling for LOOP without DO"""
         program = [
             '10 PRINT "START"',
@@ -259,13 +257,13 @@ class EnhancedControlFlowTest(BaseTestCase):
             '30 PRINT "NEVER"'
         ]
         
-        results = self.execute_program(program)
+        results = helpers.execute_program(basic, program)
         errors = [r for r in results if r.get('type') == 'error']
         
-        self.assertTrue(len(errors) > 0)
-        self.assertIn('LOOP without matching DO', str(errors[0]))
+        assert len(errors) > 0
+        assert 'LOOP without matching DO' in str(errors[0])
 
-    def test_error_handling_exit_for_without_for(self):
+    def test_error_handling_exit_for_without_for(self, basic, helpers):
         """Test error handling for EXIT FOR without FOR"""
         program = [
             '10 PRINT "START"',
@@ -273,13 +271,13 @@ class EnhancedControlFlowTest(BaseTestCase):
             '30 PRINT "NEVER"'
         ]
         
-        results = self.execute_program(program)
+        results = helpers.execute_program(basic, program)
         errors = [r for r in results if r.get('type') == 'error']
         
-        self.assertTrue(len(errors) > 0)
-        self.assertIn('EXIT FOR without matching FOR', str(errors[0]))
+        assert len(errors) > 0
+        assert 'EXIT FOR without matching FOR' in str(errors[0])
 
-    def test_complex_integration_scenario(self):
+    def test_complex_integration_scenario(self, basic, helpers):
         """Test complex integration of all new control structures"""
         program = [
             '10 PRINT "COMPLEX TEST"',
@@ -294,13 +292,13 @@ class EnhancedControlFlowTest(BaseTestCase):
             '100 PRINT "INTEGRATED"'
         ]
         
-        results = self.execute_program(program)
-        text_outputs = self.get_text_output(results)
+        results = helpers.execute_program(basic, program)
+        text_outputs = helpers.get_text_output(results)
         
-        self.assertIn('COMPLEX TEST', ' '.join(text_outputs))
-        self.assertIn('INTEGRATED', ' '.join(text_outputs))
+        assert 'COMPLEX TEST' in ' '.join(text_outputs)
+        assert 'INTEGRATED' in ' '.join(text_outputs)
 
-    def test_multiline_if_then_endif(self):
+    def test_multiline_if_then_endif(self, basic, helpers):
         """Test multi-line IF/THEN/ENDIF structure"""
         program = [
             '10 X = 5',
@@ -311,14 +309,14 @@ class EnhancedControlFlowTest(BaseTestCase):
             '60 PRINT "DONE"'
         ]
         
-        results = self.execute_program(program)
-        text_outputs = self.get_text_output(results)
+        results = helpers.execute_program(basic, program)
+        text_outputs = helpers.get_text_output(results)
         
-        self.assertIn('GREATER', ' '.join(text_outputs))
-        self.assertIn('THAN 3', ' '.join(text_outputs))
-        self.assertIn('DONE', ' '.join(text_outputs))
+        assert 'GREATER' in ' '.join(text_outputs)
+        assert 'THAN 3' in ' '.join(text_outputs)
+        assert 'DONE' in ' '.join(text_outputs)
 
-    def test_multiline_if_else_endif(self):
+    def test_multiline_if_else_endif(self, basic, helpers):
         """Test multi-line IF/ELSE/ENDIF structure"""
         program = [
             '10 X = 2',
@@ -330,14 +328,14 @@ class EnhancedControlFlowTest(BaseTestCase):
             '70 PRINT "END"'
         ]
         
-        results = self.execute_program(program)
-        text_outputs = self.get_text_output(results)
+        results = helpers.execute_program(basic, program)
+        text_outputs = helpers.get_text_output(results)
         
-        self.assertNotIn('BIG', ' '.join(text_outputs))
-        self.assertIn('SMALL', ' '.join(text_outputs))
-        self.assertIn('END', ' '.join(text_outputs))
+        assert 'BIG' not in ' '.join(text_outputs)
+        assert 'SMALL' in ' '.join(text_outputs)
+        assert 'END' in ' '.join(text_outputs)
 
-    def test_nested_multiline_if(self):
+    def test_nested_multiline_if(self, basic, helpers):
         """Test nested multi-line IF statements"""
         program = [
             '10 A = 5',
@@ -354,15 +352,15 @@ class EnhancedControlFlowTest(BaseTestCase):
             '120 PRINT "COMPLETE"'
         ]
         
-        results = self.execute_program(program)
-        text_outputs = self.get_text_output(results)
+        results = helpers.execute_program(basic, program)
+        text_outputs = helpers.get_text_output(results)
         
-        self.assertIn('BOTH POSITIVE', ' '.join(text_outputs))
-        self.assertNotIn('A POSITIVE, B NOT', ' '.join(text_outputs))
-        self.assertNotIn('A NOT POSITIVE', ' '.join(text_outputs))
-        self.assertIn('COMPLETE', ' '.join(text_outputs))
+        assert 'BOTH POSITIVE' in ' '.join(text_outputs)
+        assert 'A POSITIVE not in B NOT', ' '.join(text_outputs)
+        assert 'A NOT POSITIVE' not in ' '.join(text_outputs)
+        assert 'COMPLETE' in ' '.join(text_outputs)
 
-    def test_multiline_if_with_loops(self):
+    def test_multiline_if_with_loops(self, basic, helpers):
         """Test multi-line IF with loops inside"""
         program = [
             '10 MODE = 1',
@@ -376,16 +374,16 @@ class EnhancedControlFlowTest(BaseTestCase):
             '90 PRINT "FINISHED"'
         ]
         
-        results = self.execute_program(program)
-        text_outputs = self.get_text_output(results)
+        results = helpers.execute_program(basic, program)
+        text_outputs = helpers.get_text_output(results)
         
-        self.assertIn('1', ' '.join(text_outputs))
-        self.assertIn('2', ' '.join(text_outputs))
-        self.assertIn('3', ' '.join(text_outputs))
-        self.assertNotIn('DIFFERENT MODE', ' '.join(text_outputs))
-        self.assertIn('FINISHED', ' '.join(text_outputs))
+        assert '1' in ' '.join(text_outputs)
+        assert '2' in ' '.join(text_outputs)
+        assert '3' in ' '.join(text_outputs)
+        assert 'DIFFERENT MODE' not in ' '.join(text_outputs)
+        assert 'FINISHED' in ' '.join(text_outputs)
 
-    def test_multiline_if_error_handling(self):
+    def test_multiline_if_error_handling(self, basic, helpers):
         """Test error handling for mismatched IF/ELSE/ENDIF"""
         # ELSE without IF
         program1 = [
@@ -394,10 +392,10 @@ class EnhancedControlFlowTest(BaseTestCase):
             '30 PRINT "NEVER"'
         ]
         
-        results1 = self.execute_program(program1)
+        results1 = helpers.execute_program(basic, program1)
         errors1 = [r for r in results1 if r.get('type') == 'error']
-        self.assertTrue(len(errors1) > 0)
-        self.assertIn('ELSE without matching IF', str(errors1[0]))
+        assert len(errors1) > 0
+        assert 'ELSE without matching IF' in str(errors1[0])
 
         # ENDIF without IF
         program2 = [
@@ -406,14 +404,7 @@ class EnhancedControlFlowTest(BaseTestCase):
             '30 PRINT "NEVER"'
         ]
         
-        results2 = self.execute_program(program2)
+        results2 = helpers.execute_program(basic, program2)
         errors2 = [r for r in results2 if r.get('type') == 'error']
-        self.assertTrue(len(errors2) > 0)
-        self.assertIn('ENDIF without matching IF', str(errors2[0]))
-
-
-if __name__ == '__main__':
-    test = EnhancedControlFlowTest("Enhanced Control Flow Tests")
-    results = test.run_all_tests()
-    from test_base import print_test_results
-    print_test_results(results, verbose=True)
+        assert len(errors2) > 0
+        assert 'ENDIF without matching IF' in str(errors2[0])

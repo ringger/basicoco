@@ -11,7 +11,7 @@ from emulator.core import CoCoBasic
 print("Test 1: DRAW command with variables")
 basic = CoCoBasic()
 basic.variables['X'] = 10
-result = basic.execute_command('DRAW "R" + STR$(X)')
+result = basic.process_command('DRAW "R" + STR$(X)')
 print(f"  DRAW command result: {result}")
 print()
 
@@ -30,7 +30,7 @@ print("Test 3: Complex variable expressions")
 basic = CoCoBasic()
 basic.variables['A'] = 5
 basic.variables['B'] = 3
-result = basic.execute_command('LET C = A * B + 2')
+result = basic.process_command('LET C = A * B + 2')
 print(f"  LET C = A * B + 2 result: {result}")
 print(f"  C = {basic.variables.get('C')}")
 print()
@@ -44,9 +44,9 @@ program = """
 30 NEXT I
 """
 for line in program.strip().split('\n'):
-    basic.execute_command(line)
+    basic.process_command(line)
 
-result = basic.execute_command('RUN')
+result = basic.process_command('RUN')
 print(f"  FOR loop result has {len(result)} items")
 for item in result:
     if item.get('type') == 'text':

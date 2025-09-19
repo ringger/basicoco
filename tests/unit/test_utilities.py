@@ -340,7 +340,7 @@ def create_test_basic(mock_graphics: bool = True, mock_sound: bool = True) -> Te
 
 def run_test_program(basic_instance: CoCoBasic, program_lines: List[str]) -> List[Dict[str, Any]]:
     """Load and run a test program, returning results"""
-    basic_instance.execute_command('NEW')  # Clear any existing program
+    basic_instance.process_command('NEW')  # Clear any existing program
     
     for line in program_lines:
         line_num, code = basic_instance.parse_line(line)
@@ -348,7 +348,7 @@ def run_test_program(basic_instance: CoCoBasic, program_lines: List[str]) -> Lis
             basic_instance.program[line_num] = code
             basic_instance.expand_line_to_sublines(line_num, code)
     
-    return basic_instance.execute_command('RUN')
+    return basic_instance.process_command('RUN')
 
 def assert_output_contains(results: List[Dict[str, Any]], expected_text: str):
     """Assert that program output contains specific text"""
@@ -378,7 +378,7 @@ if __name__ == '__main__':
     test_basic = create_test_basic()
     
     # Test basic functionality
-    result = test_basic.execute_command('PRINT "HELLO WORLD"')
+    result = test_basic.process_command('PRINT "HELLO WORLD"')
     print(f"PRINT result: {result}")
     
     # Test program execution
@@ -390,8 +390,8 @@ if __name__ == '__main__':
     
     # Test graphics mocking
     if test_basic.mock_graphics:
-        test_basic.execute_command('PMODE 4,1')
-        test_basic.execute_command('PSET(100,100)')
+        test_basic.process_command('PMODE 4,1')
+        test_basic.process_command('PSET(100,100)')
         graphics_commands = test_basic.get_graphics_commands()
         print(f"\nGraphics commands recorded: {graphics_commands}")
     

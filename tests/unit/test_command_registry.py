@@ -7,24 +7,20 @@ Tests the plugin-like command architecture that provides extensible command regi
 metadata management, help system functionality, and plugin loading capabilities.
 """
 
-import sys
-import os
-sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..'))
-
-from test_base import BaseTestCase
+import pytest
 from emulator.commands import CommandRegistry
 from emulator.core import CoCoBasic
 
 
-class CommandRegistryTest(BaseTestCase):
+class TestCommandRegistry:
     """Test cases for Command Registry functionality"""
 
-    def setUp(self):
+    @pytest.fixture(autouse=True)
+    def setup_registry(self):
         """Set up test environment"""
-        super().setUp()
         self.registry = CommandRegistry()
 
-    def test_basic_functionality(self):
+    def test_basic_functionality(self, basic, helpers):
         """Test basic command registry functionality"""
         # Test registering a simple command
         def test_handler(args):
@@ -32,10 +28,10 @@ class CommandRegistryTest(BaseTestCase):
         
         self.registry.register('TEST', test_handler)
         handler = self.registry.get_handler('TEST')
-        self.assertTrue(handler is not None)
-        self.assertEqual(handler, test_handler)
+        assert handler is not None
+        assert handler == test_handler
 
-    def test_command_registration_with_metadata(self):
+    def test_command_registration_with_metadata(self, basic, helpers):
         """Test command registration with full metadata"""
         def print_handler(args):
             return [{'type': 'text', 'text': args}]
@@ -54,16 +50,16 @@ class CommandRegistryTest(BaseTestCase):
         
         # Test basic retrieval
         handler = self.registry.get_handler('PRINT')
-        self.assertEqual(handler, print_handler)
+        assert handler == print_handler
         
         # Test alias retrieval
         alias_handler = self.registry.get_handler('P')
-        self.assertEqual(alias_handler, print_handler)
+        assert alias_handler == print_handler
         
         another_alias = self.registry.get_handler('?')
-        self.assertEqual(another_alias, print_handler)
+        assert another_alias == print_handler
 
-    def test_command_info_retrieval(self):
+    def test_command_info_retrieval(self, basic, helpers):
         """Test detailed command information retrieval"""
         def for_handler(args):
             return []
@@ -80,15 +76,15 @@ class CommandRegistryTest(BaseTestCase):
         )
         
         info = self.registry.get_command_info('FOR')
-        self.assertTrue(info is not None)
-        self.assertEqual(info['description'], 'Begin FOR loop with counter variable')
-        self.assertEqual(info['category'], 'control')
-        self.assertEqual(info['syntax'], 'FOR variable = start TO end [STEP increment]')
-        self.assertEqual(len(info['examples']), 2)
-        self.assertEqual(info['min_args'], 1)
-        self.assertEqual(info['max_args'], 1)
+        assert info is not None
+        assert info['description'] == 'Begin FOR loop with counter variable'
+        assert info['category'] == 'control'
+        assert info['syntax'] == 'FOR variable = start TO end [STEP increment]'
+        assert len(info['examples']) == 2
+        assert info['min_args'] == 1
+        assert info['max_args'] == 1
 
-    def test_command_aliases(self):
+    def test_command_aliases(self, basic, helpers):
         """Test command alias functionality"""
         def cls_handler(args):
             return [{'type': 'clear_screen'}]
@@ -96,15 +92,15 @@ class CommandRegistryTest(BaseTestCase):
         self.registry.register('CLS', cls_handler, aliases=['CLEAR', 'CLR'])
         
         # Test all variations work
-        self.assertEqual(self.registry.get_handler('CLS'), cls_handler)
-        self.assertEqual(self.registry.get_handler('CLEAR'), cls_handler)
-        self.assertEqual(self.registry.get_handler('CLR'), cls_handler)
+        assert self.registry.get_handler('CLS') == cls_handler
+        assert self.registry.get_handler('CLEAR') == cls_handler
+        assert self.registry.get_handler('CLR') == cls_handler
         
         # Test case insensitivity
-        self.assertEqual(self.registry.get_handler('cls'), cls_handler)
-        self.assertEqual(self.registry.get_handler('clear'), cls_handler)
+        assert self.registry.get_handler('cls') == cls_handler
+        assert self.registry.get_handler('clear') == cls_handler
 
-    def test_category_management(self):
+    def test_category_management(self, basic, helpers):
         """Test command categorization functionality"""
         # Register commands in different categories
         self.registry.register('PRINT', lambda x: [], category='io')
@@ -119,25 +115,25 @@ class CommandRegistryTest(BaseTestCase):
         graphics_commands = self.registry.get_commands_by_category('graphics')
         control_commands = self.registry.get_commands_by_category('control')
         
-        self.assertEqual(len(io_commands), 2)
-        self.assertIn('PRINT', io_commands)
-        self.assertIn('INPUT', io_commands)
+        assert len(io_commands) == 2
+        assert 'PRINT' in io_commands
+        assert 'INPUT' in io_commands
         
-        self.assertEqual(len(graphics_commands), 2)
-        self.assertIn('PMODE', graphics_commands)
-        self.assertIn('LINE', graphics_commands)
+        assert len(graphics_commands) == 2
+        assert 'PMODE' in graphics_commands
+        assert 'LINE' in graphics_commands
         
-        self.assertEqual(len(control_commands), 2)
-        self.assertIn('IF', control_commands)
-        self.assertIn('FOR', control_commands)
+        assert len(control_commands) == 2
+        assert 'IF' in control_commands
+        assert 'FOR' in control_commands
         
         # Test getting all categories
         categories = self.registry.get_all_categories()
         expected_categories = ['control', 'data', 'graphics', 'io', 'variables', 'system', 'math', 'string']
         for cat in expected_categories:
-            self.assertIn(cat, categories)
+            assert cat in categories
 
-    def test_command_execution(self):
+    def test_command_execution(self, basic, helpers):
         """Test command execution through registry"""
         def echo_handler(args):
             return [{'type': 'text', 'text': f'Echo: {args}'}]
@@ -146,75 +142,75 @@ class CommandRegistryTest(BaseTestCase):
         
         # Test successful execution
         result = self.registry.execute('ECHO Hello World')
-        self.assertTrue(result is not None)
-        self.assertEqual(len(result), 1)
-        self.assertEqual(result[0]['type'], 'text')
-        self.assertIn('Hello World', result[0]['text'])
+        assert result is not None
+        assert len(result) == 1
+        assert result[0]['type'] == 'text'
+        assert 'Hello World' in result[0]['text']
         
         # Test unknown command
         result = self.registry.execute('UNKNOWN_COMMAND test')
-        self.assertTrue(result is None)
+        assert result is None
 
-    def test_command_tokenization(self):
+    def test_command_tokenization(self, basic, helpers):
         """Test command tokenization functionality"""
         # Test basic tokenization
         tokens = CommandRegistry.tokenize_command('PRINT "HELLO WORLD"')
-        self.assertEqual(len(tokens), 2)
-        self.assertEqual(tokens[0], 'PRINT')
-        self.assertEqual(tokens[1], '"HELLO WORLD"')
+        assert len(tokens) == 2
+        assert tokens[0] == 'PRINT'
+        assert tokens[1] == '"HELLO WORLD"'
         
         # Test complex command
         tokens = CommandRegistry.tokenize_command('LINE(10,20)-(30,40)')
-        self.assertEqual(len(tokens), 2)
-        self.assertEqual(tokens[0], 'LINE')
-        self.assertEqual(tokens[1], '(10,20)-(30,40)')
+        assert len(tokens) == 2
+        assert tokens[0] == 'LINE'
+        assert tokens[1] == '(10,20)-(30,40)'
         
         # Test empty command
         tokens = CommandRegistry.tokenize_command('')
-        self.assertEqual(len(tokens), 0)
+        assert len(tokens) == 0
         
         # Test command with no arguments
         tokens = CommandRegistry.tokenize_command('CLS')
-        self.assertEqual(len(tokens), 1)
-        self.assertEqual(tokens[0], 'CLS')
+        assert len(tokens) == 1
+        assert tokens[0] == 'CLS'
 
-    def test_coordinate_parsing(self):
+    def test_coordinate_parsing(self, basic, helpers):
         """Test coordinate parsing utilities"""
         # Test simple coordinates
         coords = CommandRegistry.parse_coordinates('10,20')
-        self.assertEqual(len(coords), 2)
-        self.assertEqual(coords[0], '10')
-        self.assertEqual(coords[1], '20')
+        assert len(coords) == 2
+        assert coords[0] == '10'
+        assert coords[1] == '20'
         
         # Test coordinates with parentheses
         coords = CommandRegistry.parse_coordinates('(10,20)')
-        self.assertEqual(len(coords), 2)
-        self.assertEqual(coords[0], '10')
-        self.assertEqual(coords[1], '20')
+        assert len(coords) == 2
+        assert coords[0] == '10'
+        assert coords[1] == '20'
         
         # Test coordinates with spaces
         coords = CommandRegistry.parse_coordinates(' 15 , 25 ')
-        self.assertEqual(len(coords), 2)
-        self.assertEqual(coords[0], '15')
-        self.assertEqual(coords[1], '25')
+        assert len(coords) == 2
+        assert coords[0] == '15'
+        assert coords[1] == '25'
 
-    def test_line_coordinate_parsing(self):
+    def test_line_coordinate_parsing(self, basic, helpers):
         """Test LINE command coordinate parsing"""
         # Test basic line specification
         start_coords, end_coords = CommandRegistry.parse_line_coordinates('(10,20)-(30,40)')
-        self.assertEqual(len(start_coords), 2)
-        self.assertEqual(start_coords[0], '10')
-        self.assertEqual(start_coords[1], '20')
-        self.assertEqual(len(end_coords), 2)
-        self.assertEqual(end_coords[0], '30')
-        self.assertEqual(end_coords[1], '40')
+        assert len(start_coords) == 2
+        assert start_coords[0] == '10'
+        assert start_coords[1] == '20'
+        assert len(end_coords) == 2
+        assert end_coords[0] == '30'
+        assert end_coords[1] == '40'
         
         # Test with variables
         start_coords, end_coords = CommandRegistry.parse_line_coordinates('(X1,Y1)-(X2,Y2)')
-        self.assertEqual(start_coords[0], 'X1')
-        self.assertEqual(end_coords[1], 'Y2')
+        assert start_coords[0] == 'X1'
+        assert end_coords[1] == 'Y2'
 
-    def test_help_system_general(self):
+    def test_help_system_general(self, basic, helpers):
         """Test general help system functionality"""
         # Register some test commands
         self.registry.register(
@@ -239,13 +235,13 @@ class CommandRegistryTest(BaseTestCase):
         help_lines = self.registry.generate_help()
         help_text = '\n'.join(help_lines)
         
-        self.assertIn('Available BASIC Commands', help_text)
-        self.assertIn('TEST1', help_text)
-        self.assertIn('TEST2', help_text)
-        self.assertIn('First test command', help_text)
-        self.assertIn('Second test command', help_text)
+        assert 'Available BASIC Commands' in help_text
+        assert 'TEST1' in help_text
+        assert 'TEST2' in help_text
+        assert 'First test command' in help_text
+        assert 'Second test command' in help_text
 
-    def test_help_system_specific_command(self):
+    def test_help_system_specific_command(self, basic, helpers):
         """Test help for specific commands"""
         self.registry.register(
             'DETAILED',
@@ -260,21 +256,21 @@ class CommandRegistryTest(BaseTestCase):
         help_lines = self.registry.generate_help('DETAILED')
         help_text = '\n'.join(help_lines)
         
-        self.assertIn('Command: DETAILED', help_text)
-        self.assertIn('A command with detailed help', help_text)
-        self.assertIn('DETAILED param1 [param2]', help_text)
-        self.assertIn('Category: system', help_text)
-        self.assertIn('Examples:', help_text)
-        self.assertIn('DETAILED value1', help_text)
-        self.assertIn('DETAILED value1 value2', help_text)
+        assert 'Command: DETAILED' in help_text
+        assert 'A command with detailed help' in help_text
+        assert 'DETAILED param1 [param2]' in help_text
+        assert 'Category: system' in help_text
+        assert 'Examples:' in help_text
+        assert 'DETAILED value1' in help_text
+        assert 'DETAILED value1 value2' in help_text
 
-    def test_help_for_unknown_command(self):
+    def test_help_for_unknown_command(self, basic, helpers):
         """Test help for unknown commands"""
         help_lines = self.registry.generate_help('NONEXISTENT')
         help_text = '\n'.join(help_lines)
-        self.assertIn('Unknown command: NONEXISTENT', help_text)
+        assert 'Unknown command: NONEXISTENT' in help_text
 
-    def test_help_for_aliases(self):
+    def test_help_for_aliases(self, basic, helpers):
         """Test help system with command aliases"""
         self.registry.register(
             'ORIGINAL',
@@ -287,10 +283,10 @@ class CommandRegistryTest(BaseTestCase):
         help_lines = self.registry.generate_help('ALIAS1')
         help_text = '\n'.join(help_lines)
         
-        self.assertIn('Command: ORIGINAL', help_text)
-        self.assertIn('alias for ORIGINAL', help_text)
+        assert 'Command: ORIGINAL' in help_text
+        assert 'alias for ORIGINAL' in help_text
 
-    def test_plugin_interface_validation(self):
+    def test_plugin_interface_validation(self, basic, helpers):
         """Test plugin interface validation"""
         # Valid plugin
         class ValidPlugin:
@@ -298,23 +294,23 @@ class CommandRegistryTest(BaseTestCase):
                 registry.register('PLUGIN_CMD', lambda x: [])
         
         valid_plugin = ValidPlugin()
-        self.assertTrue(self.registry.validate_plugin_interface(valid_plugin))
+        assert self.registry.validate_plugin_interface(valid_plugin)
         
         # Invalid plugin - no register_commands method
         class InvalidPlugin:
             pass
         
         invalid_plugin = InvalidPlugin()
-        self.assertFalse(self.registry.validate_plugin_interface(invalid_plugin))
+        assert not self.registry.validate_plugin_interface(invalid_plugin)
         
         # Invalid plugin - register_commands is not callable
         class BadPlugin:
             register_commands = "not a function"
         
         bad_plugin = BadPlugin()
-        self.assertFalse(self.registry.validate_plugin_interface(bad_plugin))
+        assert not self.registry.validate_plugin_interface(bad_plugin)
 
-    def test_plugin_loading(self):
+    def test_plugin_loading(self, basic, helpers):
         """Test plugin loading functionality"""
         # Valid plugin
         class TestPlugin:
@@ -323,17 +319,17 @@ class CommandRegistryTest(BaseTestCase):
         
         plugin = TestPlugin()
         success = self.registry.load_plugin(plugin)
-        self.assertTrue(success)
+        assert success
         
         # Verify plugin command was registered
         handler = self.registry.get_handler('PLUGIN_TEST')
-        self.assertTrue(handler is not None)
+        assert handler is not None
         
         # Test the plugin command works
         result = handler('')
-        self.assertEqual(result[0]['text'], 'Plugin works!')
+        assert result[0]['text'] == 'Plugin works!'
 
-    def test_plugin_loading_with_invalid_plugin(self):
+    def test_plugin_loading_with_invalid_plugin(self, basic, helpers):
         """Test plugin loading with invalid plugins"""
         # Plugin that raises exception during registration
         class BrokenPlugin:
@@ -342,7 +338,7 @@ class CommandRegistryTest(BaseTestCase):
         
         broken_plugin = BrokenPlugin()
         success = self.registry.load_plugin(broken_plugin)
-        self.assertFalse(success)
+        assert not success
         
         # Plugin with invalid interface
         class NoMethodPlugin:
@@ -350,9 +346,9 @@ class CommandRegistryTest(BaseTestCase):
         
         no_method_plugin = NoMethodPlugin()
         success = self.registry.load_plugin(no_method_plugin)
-        self.assertFalse(success)
+        assert not success
 
-    def test_command_list_functionality(self):
+    def test_command_list_functionality(self, basic, helpers):
         """Test command listing functionality"""
         # Register some commands with aliases
         self.registry.register('CMD1', lambda x: [], aliases=['C1'])
@@ -362,53 +358,53 @@ class CommandRegistryTest(BaseTestCase):
         all_commands = self.registry.list_commands()
         
         # Check primary commands are included
-        self.assertIn('CMD1', all_commands)
-        self.assertIn('CMD2', all_commands)
+        assert 'CMD1' in all_commands
+        assert 'CMD2' in all_commands
         
         # Check aliases are included
-        self.assertIn('C1', all_commands)
-        self.assertIn('C2', all_commands)
-        self.assertIn('COMMAND2', all_commands)
+        assert 'C1' in all_commands
+        assert 'C2' in all_commands
+        assert 'COMMAND2' in all_commands
         
         # Check list is sorted
-        self.assertEqual(all_commands, sorted(all_commands))
+        assert all_commands == sorted(all_commands)
 
-    def test_integration_with_basic_emulator(self):
+    def test_integration_with_basic_emulator(self, basic, helpers):
         """Test integration with the BASIC emulator"""
         # Test that the emulator's command registry works
-        commands = self.basic.command_registry.list_commands()
-        self.assertTrue(len(commands) > 0)
+        commands = basic.command_registry.list_commands()
+        assert len(commands) > 0
         
         # Test some known commands are registered
-        self.assertIn('PRINT', commands)
-        self.assertIn('IF', commands)
-        self.assertIn('FOR', commands)
-        self.assertIn('HELP', commands)
+        assert 'PRINT' in commands
+        assert 'IF' in commands
+        assert 'FOR' in commands
+        assert 'HELP' in commands
         
         # Test HELP command functionality
-        help_handler = self.basic.command_registry.get_handler('HELP')
-        self.assertTrue(help_handler is not None)
+        help_handler = basic.command_registry.get_handler('HELP')
+        assert help_handler is not None
 
-    def test_argument_parsing_utilities(self):
+    def test_argument_parsing_utilities(self, basic, helpers):
         """Test argument parsing helper functions"""
         # Test _tokenize_arguments
         args = CommandRegistry._tokenize_arguments('arg1 arg2 "arg with spaces"')
-        self.assertEqual(len(args), 3)
-        self.assertEqual(args[0], 'arg1')
-        self.assertEqual(args[1], 'arg2')
-        self.assertEqual(args[2], '"arg with spaces"')
+        assert len(args) == 3
+        assert args[0] == 'arg1'
+        assert args[1] == 'arg2'
+        assert args[2] == '"arg with spaces"'
         
         # Test with parentheses
         args = CommandRegistry._tokenize_arguments('func(a,b) value')
-        self.assertEqual(len(args), 2)
-        self.assertEqual(args[0], 'func(a,b)')
-        self.assertEqual(args[1], 'value')
+        assert len(args) == 2
+        assert args[0] == 'func(a,b)'
+        assert args[1] == 'value'
         
         # Test empty arguments
         args = CommandRegistry._tokenize_arguments('')
-        self.assertEqual(len(args), 0)
+        assert len(args) == 0
 
-    def test_case_insensitive_commands(self):
+    def test_case_insensitive_commands(self, basic, helpers):
         """Test that command names are case insensitive"""
         def test_handler(args):
             return [{'type': 'text', 'text': 'Case insensitive works'}]
@@ -416,12 +412,12 @@ class CommandRegistryTest(BaseTestCase):
         self.registry.register('TESTCASE', test_handler)
         
         # Test various cases
-        self.assertEqual(self.registry.get_handler('TESTCASE'), test_handler)
-        self.assertEqual(self.registry.get_handler('testcase'), test_handler)
-        self.assertEqual(self.registry.get_handler('TestCase'), test_handler)
-        self.assertEqual(self.registry.get_handler('TESTCASE'), test_handler)
+        assert self.registry.get_handler('TESTCASE') == test_handler
+        assert self.registry.get_handler('testcase') == test_handler
+        assert self.registry.get_handler('TestCase') == test_handler
+        assert self.registry.get_handler('TESTCASE') == test_handler
 
-    def test_command_info_for_aliases(self):
+    def test_command_info_for_aliases(self, basic, helpers):
         """Test that command info works correctly for aliases"""
         def original_handler(args):
             return []
@@ -435,18 +431,11 @@ class CommandRegistryTest(BaseTestCase):
         
         # Test info for original command
         original_info = self.registry.get_command_info('ORIGINAL')
-        self.assertEqual(original_info['description'], 'Original command')
-        self.assertFalse(original_info.get('is_alias', False))
+        assert original_info['description'] == 'Original command'
+        assert not original_info.get('is_alias', False)
         
         # Test info for alias
         alias_info = self.registry.get_command_info('SHORTCUT')
-        self.assertEqual(alias_info['description'], 'Original command')
-        self.assertTrue(alias_info.get('is_alias', False))
-        self.assertEqual(alias_info.get('primary_name'), 'ORIGINAL')
-
-
-if __name__ == '__main__':
-    test = CommandRegistryTest("Command Registry Tests")
-    results = test.run_all_tests()
-    from test_base import print_test_results
-    print_test_results(results, verbose=True)
+        assert alias_info['description'] == 'Original command'
+        assert alias_info.get('is_alias', False)
+        assert alias_info.get('primary_name') == 'ORIGINAL'

@@ -5,50 +5,46 @@ Integration tests for program execution flow and statement expansion.
 Tests scenarios discovered during debugging of execution order issues.
 """
 
-import sys
-import os
-sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..'))
-
-from test_base import BaseTestCase
+import pytest
 
 
-class ProgramExecutionFlowTest(BaseTestCase):
+class TestProgramExecutionFlow:
     """Test cases for program execution flow and statement expansion"""
 
-    def test_basic_functionality(self):
+    def test_basic_functionality(self, basic, helpers):
         """Test basic program execution"""
         program = ['10 PRINT "TEST"']
-        results = self.execute_program(program)
-        self.assertTrue(len(results) > 0)
+        results = helpers.execute_program(basic, program)
+        assert len(results > 0)
 
-    def test_multi_statement_line_execution_order(self):
+    def test_multi_statement_line_execution_order(self, basic, helpers):
         """Test that multi-statement lines execute in correct order"""
         program = [
             '10 A = 1: B = 2: C = A + B: PRINT C'
         ]
         
-        results = self.execute_program(program)
-        text_outputs = self.get_text_output(results)
+        results = helpers.execute_program(basic, program)
+        text_outputs = helpers.get_text_output(results)
         
-        self.assertIn('3', text_outputs)
+        assert '3' in text_outputs
 
-    def test_statement_expansion_verification(self):
+    def test_statement_expansion_verification(self, basic, helpers):
         """Test that complex statements are expanded correctly"""
         # This verifies the fix for statement splitting issues
         program = [
             '10 PRINT "START": FOR I = 1 TO 2: PRINT I: NEXT I: PRINT "END"'
         ]
         
-        results = self.execute_program(program)
-        text_outputs = self.get_text_output(results)
+        results = helpers.execute_program(basic, program)
+        text_outputs = helpers.get_text_output(results)
         
         combined = ' '.join(text_outputs)
-        self.assertIn('START', combined)
-        self.assertIn('1', combined)
-        self.assertIn('2', combined)
-        self.assertIn('END', combined)
+        assert 'START' in combined
+        assert '1' in combined
+        assert '2' in combined
+        assert 'END' in combined
 
-    def test_jump_target_resolution(self):
+    def test_jump_target_resolution(self, basic, helpers):
         """Test that GOTO targets are resolved correctly across statement boundaries"""
         program = [
             '10 GOTO 30',
@@ -58,16 +54,16 @@ class ProgramExecutionFlowTest(BaseTestCase):
             '50 PRINT "FINAL"'
         ]
         
-        results = self.execute_program(program)
-        text_outputs = self.get_text_output(results)
+        results = helpers.execute_program(basic, program)
+        text_outputs = helpers.get_text_output(results)
         
         combined = ' '.join(text_outputs)
-        self.assertIn('TARGET', combined)
-        self.assertIn('FINAL', combined)
-        self.assertNotIn('SKIPPED', combined)
-        self.assertNotIn('ALSO SKIPPED', combined)
+        assert 'TARGET' in combined
+        assert 'FINAL' in combined
+        assert 'SKIPPED' not in combined
+        assert 'ALSO SKIPPED' not in combined
 
-    def test_for_loop_with_complex_body(self):
+    def test_for_loop_with_complex_body(self, basic, helpers):
         """Test FOR loop with multi-statement body"""
         program = [
             '10 FOR I = 1 TO 3',
@@ -75,17 +71,17 @@ class ProgramExecutionFlowTest(BaseTestCase):
             '30 NEXT I'
         ]
         
-        results = self.execute_program(program)
-        text_outputs = self.get_text_output(results)
+        results = helpers.execute_program(basic, program)
+        text_outputs = helpers.get_text_output(results)
         
         combined = ' '.join(text_outputs)
         # Should see loop iterations and doubled values (semicolon concatenates without spaces)
-        self.assertIn('LOOP1', combined)
-        self.assertIn('DOUBLE2', combined)
-        self.assertIn('LOOP3', combined)
-        self.assertIn('DOUBLE6', combined)
+        assert 'LOOP1' in combined
+        assert 'DOUBLE2' in combined
+        assert 'LOOP3' in combined
+        assert 'DOUBLE6' in combined
 
-    def test_gosub_return_with_multi_statements(self):
+    def test_gosub_return_with_multi_statements(self, basic, helpers):
         """Test GOSUB/RETURN with multi-statement lines"""
         program = [
             '10 GOSUB 30: PRINT "RETURNED"',
@@ -93,23 +89,23 @@ class ProgramExecutionFlowTest(BaseTestCase):
             '30 PRINT "IN SUB": A = 42: PRINT A: RETURN'
         ]
         
-        results = self.execute_program(program)
-        text_outputs = self.get_text_output(results)
+        results = helpers.execute_program(basic, program)
+        text_outputs = helpers.get_text_output(results)
         
         combined = ' '.join(text_outputs)
-        self.assertIn('IN SUB', combined)
-        self.assertIn('42', combined)
-        self.assertIn('RETURNED', combined)
+        assert 'IN SUB' in combined
+        assert '42' in combined
+        assert 'RETURNED' in combined
 
-    def test_program_line_order_independence(self):
+    def test_program_line_order_independence(self, basic, helpers):
         """Test that program lines execute in numeric order regardless of entry order"""
         # Load lines in non-sequential order
-        self.basic.execute_command('30 PRINT "THREE"')
-        self.basic.execute_command('10 PRINT "ONE"')  
-        self.basic.execute_command('20 PRINT "TWO"')
+        basic.process_command('30 PRINT "THREE"')
+        basic.process_command('10 PRINT "ONE"')  
+        basic.process_command('20 PRINT "TWO"')
         
-        results = self.basic.execute_command('RUN')
-        text_outputs = self.get_text_output(results)
+        results = basic.process_command('RUN')
+        text_outputs = helpers.get_text_output(results)
         
         # Should execute in order: ONE, TWO, THREE
         combined = ' '.join(text_outputs)
@@ -117,10 +113,10 @@ class ProgramExecutionFlowTest(BaseTestCase):
         two_pos = combined.find('TWO') 
         three_pos = combined.find('THREE')
         
-        self.assertTrue(one_pos < two_pos < three_pos, 
-                       f"Execution order wrong: {combined}")
+        assert one_pos < two_pos < three_pos, \
+                       f"Execution order wrong: {combined}"
 
-    def test_data_read_across_statement_boundaries(self):
+    def test_data_read_across_statement_boundaries(self, basic, helpers):
         """Test DATA/READ operations across complex statement boundaries"""
         program = [
             '10 DATA 1, 2, 3, 4',
@@ -128,34 +124,27 @@ class ProgramExecutionFlowTest(BaseTestCase):
             '30 READ D: PRINT "LAST"; D'
         ]
         
-        results = self.execute_program(program)
-        text_outputs = self.get_text_output(results)
+        results = helpers.execute_program(basic, program)
+        text_outputs = helpers.get_text_output(results)
         
         combined = ' '.join(text_outputs)
-        self.assertIn('1', combined)
-        self.assertIn('2', combined) 
-        self.assertIn('3', combined)
-        self.assertIn('LAST4', combined)  # Semicolon concatenates without spaces
+        assert '1' in combined
+        assert '2' in combined 
+        assert '3' in combined
+        assert 'LAST4' in combined  # Semicolon concatenates without spaces
 
-    def test_error_handling_across_statements(self):
+    def test_error_handling_across_statements(self, basic, helpers):
         """Test division by zero handling in multi-statement lines"""
         program = [
             '10 A = 5: B = A / 0: PRINT "AFTER DIVISION: "; B'  # Division by zero returns infinity
         ]
         
-        results = self.execute_program(program)
+        results = helpers.execute_program(basic, program)
         errors = self.get_error_messages(results)
         
         # In authentic BASIC, division by zero returns infinity and continues execution
-        self.assertEqual(len(errors), 0)  # No errors should be generated
-        text_outputs = self.get_text_output(results)
+        assert len(errors) == 0  # No errors should be generated
+        text_outputs = helpers.get_text_output(results)
         combined = ' '.join(text_outputs)
-        self.assertIn('AFTER DIVISION:', combined)  # Should continue execution
-        self.assertIn('inf', combined.lower())  # Should show infinity
-
-
-if __name__ == '__main__':
-    test = ProgramExecutionFlowTest("Program Execution Flow Tests")
-    results = test.run_all_tests()
-    from test_base import print_test_results
-    print_test_results(results, verbose=True)
+        assert 'AFTER DIVISION:' in combined  # Should continue execution
+        assert 'inf' in combined.lower()  # Should show infinity

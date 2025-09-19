@@ -106,7 +106,7 @@ def handle_command(data):
         # Execute immediate command
         try:
             print(f"About to execute command: {command}")
-            output = basic.execute_command(command)
+            output = basic.process_command(command)
             print(f"Command execution returned: {output}")
             emit('output', output)
             
