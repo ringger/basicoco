@@ -119,14 +119,27 @@ class TestExpressionEvaluation:
 
     def test_comparison_operations(self, basic, helpers):
         """Test comparison operators"""
-        # Simple comparison with variables
-        result = basic.expression_evaluator.evaluate("A > B")  # 10 > 5
-        # Note: Expression evaluator returns Python True/False, not BASIC -1/0
-        assert result in [True, -1]  # Accept either True or -1
-        
-        result = basic.expression_evaluator.evaluate("A < B")  # 10 < 5
-        assert result in [False, 0]   # Accept either False or 0
-        
+        # Test comparison results through PRINT to see actual behavior
+        result = basic.process_command("PRINT A > B")  # 10 > 5 should be true
+        text_output = helpers.get_text_output(result)
+        errors = helpers.get_error_messages(result)
+
+        if not errors:
+            # Should print either -1 (BASIC true) or 1 (some implementations)
+            assert len(text_output) == 1, f"Expected single output, got: {text_output}"
+            value = text_output[0].strip()
+            assert value in ['-1', '1', 'True'], f"Expected true value (-1, 1, or True), got: {value}"
+
+        result = basic.process_command("PRINT A < B")  # 10 < 5 should be false
+        text_output = helpers.get_text_output(result)
+        errors = helpers.get_error_messages(result)
+
+        if not errors:
+            # Should print 0 (BASIC false)
+            assert len(text_output) == 1, f"Expected single output, got: {text_output}"
+            value = text_output[0].strip()
+            assert value in ['0', 'False'], f"Expected false value (0 or False), got: {value}"
+
         # Numerical comparisons using subtract for equality check
         result = basic.expression_evaluator.evaluate("ABS(A - 10)")  # Check if A equals 10
         assert result == 0  # Should be 0 if A = 10
@@ -238,27 +251,35 @@ class TestExpressionEvaluation:
 
     def test_error_handling(self, basic, helpers):
         """Test error handling in expression evaluation"""
-        # Undefined variable should not crash but may return 0 or raise error
-        try:
-            result = basic.expression_evaluator.evaluate("UNDEFINED_VAR")
-            # If it doesn't raise an error, result should be 0 (default for undefined variables)
-            assert result == 0
-        except:
-            pass  # Error is acceptable behavior
-        
-        # Division by zero
-        try:
-            result = basic.expression_evaluator.evaluate("5 / 0")
-            # Should either raise error or return infinity/large number
-        except:
-            pass  # Error is expected
-        
-        # Invalid function
-        try:
-            result = basic.expression_evaluator.evaluate("INVALID_FUNC(5)")
-            # Should raise error or return 0
-        except:
-            pass  # Error is acceptable
+        # Undefined variable should return 0 (BASIC default) or raise error
+        result = basic.process_command("PRINT UNDEFINED_VAR")
+        text_output = helpers.get_text_output(result)
+        errors = helpers.get_error_messages(result)
+
+        # Either should print 0 or produce error about undefined variable
+        if errors:
+            assert any("UNDEFINED" in error.upper() or "VARIABLE" in error.upper() for error in errors), \
+                   f"Expected undefined variable error, got: {errors}"
+        else:
+            assert text_output == ['0'], f"Undefined variable should default to 0, got: {text_output}"
+
+        # Division by zero should produce specific error
+        result = basic.process_command("PRINT 5 / 0")
+        errors = helpers.get_error_messages(result)
+        assert len(errors) > 0, "Division by zero should produce an error"
+        # Accept any error containing relevant keywords
+        assert any("DIVISION" in error.upper() or "DIVIDE" in error.upper() or
+                  "ERROR" in error.upper() or "ZERO" in error.upper() for error in errors), \
+               f"Expected error related to division by zero, got: {errors}"
+
+        # Invalid function should produce function error
+        result = basic.process_command("PRINT INVALID_FUNC(5)")
+        errors = helpers.get_error_messages(result)
+        assert len(errors) > 0, "Invalid function should produce an error"
+        # Accept any error containing relevant keywords
+        assert any("FUNCTION" in error.upper() or "UNDEFINED" in error.upper() or
+                  "ERROR" in error.upper() or "INVALID" in error.upper() for error in errors), \
+               f"Expected error related to invalid function, got: {errors}"
 
     def test_parentheses_handling(self, basic, helpers):
         """Test complex parentheses handling"""

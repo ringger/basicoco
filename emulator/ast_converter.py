@@ -204,8 +204,8 @@ class ASTStatementConverter(ASTVisitor):
 
         elif isinstance(node, BinaryOpNode):
             # For operands, we need to consider if they need parentheses based on precedence
-            left_str = self._expression_to_string_with_precedence(node.left, node.operator, 'left')
-            right_str = self._expression_to_string_with_precedence(node.right, node.operator, 'right')
+            left_str = self._expression_to_string_with_precedence(node.left, node.operator)
+            right_str = self._expression_to_string_with_precedence(node.right, node.operator)
             op_str = self._operator_to_string(node.operator)
             # Only add parentheses for complex expressions that actually need them
             # Simple comparisons like "A = 1" don't need parentheses
@@ -248,7 +248,7 @@ class ASTStatementConverter(ASTVisitor):
             # For unknown nodes, return empty string
             return ""
 
-    def _expression_to_string_with_precedence(self, node, parent_op, position):
+    def _expression_to_string_with_precedence(self, node, parent_op):
         """Convert expression to string, adding parentheses based on operator precedence"""
         if not hasattr(node, 'operator'):
             # Not a binary operation, just convert normally
@@ -632,11 +632,9 @@ def _parse_single_line_if(statement: str, parser, converter) -> Optional[List[st
     body_parts = _split_respecting_quotes(rest, ':')
 
     # Check for ELSE in the body
-    else_found = False
     for i, part in enumerate(body_parts):
         part_upper = part.strip().upper()
         if part_upper.startswith('ELSE '):
-            else_found = True
             statements.append('ELSE')
             # Rest after ELSE
             else_body = part[5:].strip()  # Skip 'ELSE '

@@ -6,11 +6,8 @@ A standalone terminal interface for the BASIC emulator that connects to the Flas
 
 import socketio
 import readline
-import sys
 import os
 import threading
-import time
-from typing import Dict, Any, List
 
 class TRS80CLI:
     def __init__(self, host='localhost', port=5000):

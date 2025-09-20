@@ -142,7 +142,7 @@ class TestCrossCommandInteraction:
         ]
         
         results = helpers.execute_program(basic, program)
-        errors = self.get_error_messages(results)
+        errors = helpers.get_error_messages(results)
         
         # Should execute without array bounds errors
         assert len(errors) == 0
@@ -167,7 +167,7 @@ class TestCrossCommandInteraction:
         has_input_request = any(item.get('type') == 'input_request' for item in result)
         errors = [item for item in result if item.get('type') == 'error']
         
-        assert has_input_request or len(errors == 0)
+        assert has_input_request or len(errors) == 0
 
     def test_gosub_return_with_array_and_loop_interaction(self, basic, helpers):
         """Test GOSUB/RETURN with arrays and loops"""
@@ -186,7 +186,7 @@ class TestCrossCommandInteraction:
         text_outputs = helpers.get_text_output(results)
         
         # Should complete without errors and show final value
-        errors = self.get_error_messages(results)
+        errors = helpers.get_error_messages(results)
         assert len(errors) == 0
         
         combined = ' '.join(text_outputs)
@@ -196,8 +196,8 @@ class TestCrossCommandInteraction:
         """Test error recovery and state after command errors"""
         # Cause an error
         result1 = basic.process_command('PRINT A(5)')  # Undimensioned array
-        errors1 = self.get_error_messages(result1)
-        assert len(errors1 > 0)
+        errors1 = helpers.get_error_messages(result1)
+        assert len(errors1) > 0
         
         # Subsequent commands should work normally
         basic.process_command('A = 42')
@@ -225,6 +225,6 @@ class TestCrossCommandInteraction:
         # Should produce graphics output, not errors
         errors = []
         for result in [result1, result2, result3]:
-            errors.extend(self.get_error_messages(result))
+            errors.extend(helpers.get_error_messages(result))
         
         assert len(errors) == 0

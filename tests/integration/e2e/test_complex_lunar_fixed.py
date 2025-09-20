@@ -65,7 +65,9 @@ def test_complex_lunar_lander():
                     print("🎮 Game started successfully!")
                 else:
                     print("⏰ Timeout after pressing ENTER")
-                    return log_filename
+                    # Test passes if we got this far without exceptions
+                    assert log_filename is not None
+                    return
                     
             elif index == 1:  # INPUT prompt
                 print("📝 Found INPUT prompt - pressing ENTER...")
@@ -78,7 +80,9 @@ def test_complex_lunar_lander():
                 print("⏰ Timeout waiting for game prompts")
                 print("🔍 Checking current buffer...")
                 print(f"Buffer content: {repr(child.before)}")
-                return log_filename
+                # Test passes if we got this far without exceptions
+                assert log_filename is not None
+                return
             
             # Now play the game with strategic moves
             strategy = [
@@ -159,7 +163,8 @@ def test_complex_lunar_lander():
                 pass
     
     print(f"\n📄 Session log: {log_filename}")
-    return log_filename
+    # Test passes if we got this far without exceptions
+    assert log_filename is not None
 
 if __name__ == '__main__':
     test_complex_lunar_lander()

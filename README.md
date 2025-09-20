@@ -3,8 +3,9 @@
 A comprehensive TRS-80 Color Computer BASIC interpreter with revolutionary dual monitor web interface and standalone CLI client, featuring authentic graphics emulation, real-time streaming output, and modern educational tools.
 
 ![Production Ready](https://img.shields.io/badge/Status-Production%20Ready-brightgreen)
-![Test Coverage](https://img.shields.io/badge/Tests-544%2B%20Total%20Tests-brightgreen)
-![Success Rate](https://img.shields.io/badge/Core%20Tests-100%25%20Success-brightgreen)
+![Test Coverage](https://img.shields.io/badge/Tests-514%20Passing%20%2B%2032%20Skipped-brightgreen)
+![Success Rate](https://img.shields.io/badge/Test%20Success-100%25%20Pass%20Rate-brightgreen)
+![Code Quality](https://img.shields.io/badge/Code%20Quality-Vestigial%20Code%20Removed-blue)
 ![Framework](https://img.shields.io/badge/Test%20Framework-Pytest-blue)
 ![CLI Client](https://img.shields.io/badge/CLI-Real--time%20Streaming-blue)
 ![Python](https://img.shields.io/badge/Python-3.8%2B-blue)
@@ -65,7 +66,7 @@ A comprehensive TRS-80 Color Computer BASIC interpreter with revolutionary dual 
 
 3. **Install dependencies**
    ```bash
-   pip install flask flask-socketio
+   pip install flask flask-socketio pytest pytest-cov
    ```
 
 4. **Run the emulator**
@@ -294,7 +295,34 @@ trs80/
 
 ## 🚀 Recent Enhancements
 
-### Latest Update: Single-Line Control Structure Integration & Complete Pytest Migration (September 2025) 🎯
+### Latest Update: Vestigial Code Cleanup & AST Parser Analysis (September 2025) 🧹
+**🎯 Code Quality Milestone: Perfect test health and clean codebase achieved**
+
+- **🧹 Comprehensive Vestigial Code Cleanup**: Systematic removal of dead code and unused imports
+  - **Unused Imports Removed**: Fixed imports in `app.py`, `test_utilities.py`, and `cli_client.py`
+  - **Dead Code Elimination**: Removed unused global instance, unused parameters, and never-called functions
+  - **Clean Architecture**: Eliminated `parse_function_arguments()` and other obsolete methods
+  - **Perfect Test Health**: 514 tests passing, 32 skipped, 0 failures, 0 warnings
+
+- **📊 Code Coverage Integration**: Added comprehensive testing infrastructure
+  - **pytest-cov Installation**: Code coverage tracking now available with 26% baseline
+  - **Coverage Commands**: `pytest --cov=emulator --cov-report=term-missing` for detailed reports
+  - **Quality Metrics**: Clear visibility into code coverage across all modules
+  - **Test Infrastructure**: All pytest.ini configurations now functional
+
+- **🔍 AST Parser Gap Analysis**: Identified critical architecture improvements needed
+  - **Missing Implementations**: GOSUB/RETURN/INPUT statements defined but not implemented in AST parser
+  - **Dual Parser Architecture**: Legacy parser still handling key control flow statements
+  - **Technical Debt**: Incomplete AST migration limiting benefits of modern architecture
+  - **Roadmap Priority**: AST parser completion now highest development priority
+
+- **🏗️ Architecture Documentation**: Updated development roadmap with clear migration strategy
+  - **Four-Phase Plan**: Complete AST implementation → Assessment → Deprecation → Retirement
+  - **Legacy Parser Retirement**: Strategy to eliminate dual parser complexity
+  - **Risk Mitigation**: Incremental approach with comprehensive testing at each phase
+  - **Performance Benefits**: Unified AST-only architecture for better maintainability
+
+### Previous Update: Single-Line Control Structure Integration & Complete Pytest Migration (September 2025) 🎯
 **🎯 Major Architectural Milestone: Phase 1A Complete - Unified AST-Based Control Structure Processing**
 
 - **🚀 Single-Line Control Structure Revolution**: Complete support for complex single-line BASIC statements
@@ -449,7 +477,7 @@ trs80/
 
 ## 🧪 Testing
 
-The emulator features **comprehensive pytest-based testing** with **544+ total tests** (427 unit + 117 integration) across unit, integration, and architectural test suites achieving **100% success rate** in core functionality.
+The emulator features **comprehensive pytest-based testing** with **514 passing tests + 32 skipped** across unit, integration, and architectural test suites achieving **100% success rate** in core functionality. **Code coverage tracking** is now available with pytest-cov.
 
 ### WebSocket Integration Testing
 ```bash
@@ -483,6 +511,9 @@ python -m pytest tests/integration/test_single_line_control_structures.py -v
 
 # Run all tests with coverage
 python -m pytest tests/ --tb=short
+
+# Run tests with coverage reporting
+python -m pytest tests/ --cov=emulator --cov-report=term-missing
 ```
 
 ### Specific Test Suites
@@ -513,8 +544,11 @@ python -m pytest tests/integration/ -k "control_structures" -v
 - **Centralized Fixtures**: Comprehensive test fixtures and utilities (`conftest.py`)
 - **Mock Systems**: Graphics, sound, and input simulation for isolated testing
 - **Pytest Configuration**: `pytest.ini` with optimized test discovery and reporting
+- **Code Coverage**: pytest-cov integration with 26% baseline coverage tracking
+- **Clean Test Suite**: All vestigial code removed, 514 tests passing with 0 failures
+- **WebSocket Resilience**: 32 tests gracefully skip when server unavailable
 - **Automated Discovery**: Pytest-based test collection and execution
-- **100% Success Rate**: All 544+ tests passing with comprehensive coverage
+- **100% Success Rate**: Perfect test health with comprehensive quality checks
 - **Enhanced GOTO Testing**: Complete test coverage for GOTO statements in single-line control structures
 - **Detailed Reporting**: Success rates, failure analysis, and progress tracking
 

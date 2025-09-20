@@ -143,7 +143,8 @@ def test_complex_lunar_lander():
     print(f"\n📄 Complete complex session log: {log_filename}")
     print(f"📂 View with: cat {log_filename}")
     
-    return log_filename
+    # Test passes if we got this far without exceptions
+    assert log_filename is not None
 
 if __name__ == '__main__':
     log_file = test_complex_lunar_lander()

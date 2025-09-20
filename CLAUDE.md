@@ -2,6 +2,87 @@
 
 *This roadmap focuses exclusively on future enhancements and development priorities. Current capabilities and recent achievements are documented in README.md and git commit history.*
 
+## 🚨 AST PARSER GAPS - HIGHEST PRIORITY 🚨
+
+**Critical Gap**: The AST parser is missing implementations for key BASIC control flow statements. These constants are defined but never implemented:
+- `GOSUB_STATEMENT = "gosub_statement"`
+- `RETURN_STATEMENT = "return_statement"`
+- `INPUT_STATEMENT = "input_statement"`
+- `PROGRAM = "program"`
+
+### **Missing Implementations Required:**
+
+#### **GOSUB/RETURN Statements**
+- **Current State**: Constants defined but no visitor methods implemented
+- **Impact**: GOSUB/RETURN currently handled by old parser, not AST
+- **Required**:
+  - Implement `visit_gosub_statement()` in AST parser
+  - Implement `visit_return_statement()` in AST parser
+  - Add GOSUB/RETURN node classes
+  - Integrate with call stack management
+
+#### **INPUT Statement**
+- **Current State**: Constant defined but no visitor method
+- **Impact**: INPUT handled by old parser, not benefiting from AST improvements
+- **Required**:
+  - Implement `visit_input_statement()` in AST parser
+  - Add INPUT node class with prompt and variable list support
+  - Handle multi-variable INPUT syntax
+
+#### **Test Coverage Requirements**
+- **Unit Tests**: Add test cases for each new visitor method
+- **Integration Tests**: Verify GOSUB/RETURN call stack behavior
+- **Edge Cases**: Test nested GOSUB, RETURN without GOSUB, INPUT with multiple variables
+- **Error Handling**: Test malformed statements and error recovery
+
+### **Legacy Parser Retirement Strategy:**
+
+#### **Phase 1: Complete AST Implementation (Critical)**
+1. **Implement GOSUB/RETURN** - Critical for program flow
+2. **Implement INPUT** - Essential for interactive programs
+3. **Add PROGRAM node** - Top-level AST structure
+4. **Add comprehensive test coverage** - Must achieve >80% coverage
+5. **Update AST converter** - Ensure proper code generation
+
+#### **Phase 2: Dual Parser Migration Assessment**
+- **Audit current parser usage** - Identify all non-AST parsing calls
+- **Map legacy dependencies** - Find code still using `emulator/parser.py`
+- **Create migration timeline** - Prioritize by usage frequency and complexity
+- **Establish compatibility layer** - Ensure smooth transition
+
+#### **Phase 3: Legacy Parser Deprecation**
+- **Mark legacy methods as deprecated** - Add deprecation warnings
+- **Migrate remaining callers** - Convert to AST-based parsing
+- **Remove dual parser complexity** - Eliminate parser.py dependencies
+- **Consolidate parsing logic** - Single source of truth via AST
+
+#### **Phase 4: Complete Retirement**
+- **Remove `emulator/parser.py`** - Delete legacy parsing module
+- **Clean up imports** - Remove all references to old parser
+- **Update architecture docs** - Document unified AST-only approach
+- **Performance optimization** - Leverage AST-only optimizations
+
+### **Benefits of Complete AST Migration:**
+- **🏗️ Unified Architecture** - Single parsing pipeline eliminates complexity
+- **🚀 Performance** - AST optimizations across all statements
+- **🧪 Better Testing** - Comprehensive AST test coverage
+- **🔧 Maintainability** - Single codebase for all parsing logic
+- **📈 Extensibility** - Easy to add new language features via AST
+
+### **Risk Mitigation:**
+- **Incremental migration** - Phase-by-phase rollout minimizes disruption
+- **Comprehensive testing** - Each phase requires full test suite validation
+- **Rollback capability** - Maintain legacy parser until Phase 4 complete
+- **Performance benchmarks** - Ensure AST parsing meets performance requirements
+
+*The dual parser architecture represents significant technical debt that must be eliminated for long-term maintainability and performance.*
+
+## Current Status: Perfect Test Health ✅
+
+**Test Suite**: 514 passing tests + 32 skipped (WebSocket dependencies), 0 failures, 0 warnings.
+**Code Quality**: All vestigial code removed, unused imports cleaned, coverage tracking enabled.
+**Architecture**: Clean, well-established foundation ready for next phase development.
+
 ## Current Architecture Foundation 🏗️
 
 The emulator now has a **clean, well-established architecture** that provides the foundation for future development:

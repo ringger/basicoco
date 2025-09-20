@@ -333,7 +333,7 @@ class TestFunction:
         """Test nested function calls"""
         # Simple nesting
         result = basic.expression_evaluator.evaluate("ABS(INT(-3.7))")
-        assert result == 3  # ABS(INT(-3.7)) = ABS(-4) = 4, but we expect 3 based on test
+        assert result == 3  # ABS(INT(-3.7)) = ABS(-3) = 3 (INT truncates toward zero)
         
         # Complex nesting
         result = basic.expression_evaluator.evaluate("SQR(ABS(-16))")
@@ -365,24 +365,28 @@ class TestFunction:
 
     def test_function_error_cases(self, basic, helpers):
         """Test function error handling"""
-        # SQR with negative number (should raise error or return NaN)
-        try:
-            result = basic.expression_evaluator.evaluate("SQR(-4)")
-            # If it doesn't raise an error, result might be NaN or error handled
-        except:
-            pass  # Expected for negative square root
-        
+        # SQR with negative number (should raise error)
+        result = basic.process_command("PRINT SQR(-4)")
+        errors = helpers.get_error_messages(result)
+        assert len(errors) > 0, "SQR(-4) should produce an error"
+        assert any("ILLEGAL FUNCTION CALL" in error.upper() or "SQR" in error.upper() for error in errors), \
+               f"Expected SQR error, got: {errors}"
+
         # LOG with zero or negative (should raise error)
-        try:
-            result = basic.expression_evaluator.evaluate("LOG(0)")
-        except:
-            pass  # Expected for log of zero
-        
+        result = basic.process_command("PRINT LOG(0)")
+        errors = helpers.get_error_messages(result)
+        assert len(errors) > 0, "LOG(0) should produce an error"
+        assert any("ILLEGAL FUNCTION CALL" in error.upper() or "LOG" in error.upper() for error in errors), \
+               f"Expected LOG error, got: {errors}"
+
         # Division by zero in function context
-        try:
-            result = basic.expression_evaluator.evaluate("INT(5 / 0)")
-        except:
-            pass  # Expected for division by zero
+        result = basic.process_command("PRINT INT(5 / 0)")
+        errors = helpers.get_error_messages(result)
+        assert len(errors) > 0, "Division by zero should produce an error"
+        # Accept any error containing relevant keywords
+        assert any("DIVISION" in error.upper() or "DIVIDE" in error.upper() or
+                  "ERROR" in error.upper() or "ZERO" in error.upper() for error in errors), \
+               f"Expected error related to division by zero, got: {errors}"
 
     def test_function_edge_cases(self, basic, helpers):
         """Test function behavior with edge cases"""

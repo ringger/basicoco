@@ -11,34 +11,34 @@ import time
 import threading
 import tempfile
 import shutil
+import pytest
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..'))
 
 import socketio
-from test_base import BaseTestCase
 
 
 class TestWebSocketCompletionSignals:
     """Test WebSocket completion signal behavior for all command types"""
 
-    def setUp(self):
+    @pytest.fixture(autouse=True)
+    def setup_websocket_test(self):
         """Set up WebSocket client and test environment"""
-        super().setUp()
         self.sio = socketio.Client()
         self.messages = []
         self.completion_received = threading.Event()
-        
+
         # Create temporary directory for file operations
         self.test_dir = tempfile.mkdtemp(prefix='trs80_websocket_test_')
         self.original_cwd = os.getcwd()
         os.chdir(self.test_dir)
         os.makedirs('programs', exist_ok=True)
 
-    def tearDown(self):
-        """Clean up WebSocket and test environment"""
-        super().tearDown()
-        if self.sio.connected:
+        yield  # This is where the test runs
+
+        # Teardown
+        if hasattr(self, 'sio') and self.sio.connected:
             self.sio.disconnect()
-        
+
         # Restore directory and clean up
         os.chdir(self.original_cwd)
         if os.path.exists(self.test_dir):
@@ -48,7 +48,7 @@ class TestWebSocketCompletionSignals:
         """Connect to WebSocket server with message handlers"""
         try:
             self.sio.connect('http://localhost:5000', wait_timeout=5)
-            
+
             @self.sio.event
             def output(data):
                 """Capture all output messages"""
@@ -57,32 +57,34 @@ class TestWebSocketCompletionSignals:
                     self.messages.extend(data)
                 else:
                     self.messages.append(data)
-                
+
                 # Check for completion signal - handle both list and single item
                 items_to_check = data if isinstance(data, list) else [data]
                 has_completion = any(
-                    isinstance(item, dict) and item.get('type') == 'command_complete' 
+                    isinstance(item, dict) and item.get('type') == 'command_complete'
                     for item in items_to_check
                 )
                 if has_completion:
                     self.completion_received.set()
-            
+
             return True
         except Exception as e:
             print(f"Failed to connect to WebSocket server: {e}")
+            pytest.skip(f"WebSocket server not available on localhost:5000: {e}")
             return False
 
     def send_command_and_wait(self, command, timeout=5):
         """Send command and wait for completion signal"""
         # Ensure we're connected
         if not self.sio.connected:
-            self.connect_websocket()
-            
+            if not self.connect_websocket():
+                return False, []  # Connection failed, already skipped
+
         self.messages.clear()
         self.completion_received.clear()
-        
+
         self.sio.emit('execute_command', {'command': command})
-        
+
         # Wait for completion signal
         completed = self.completion_received.wait(timeout=timeout)
         return completed, self.messages.copy()  # Return tuple as expected by existing tests

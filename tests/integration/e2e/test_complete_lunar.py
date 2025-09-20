@@ -130,7 +130,9 @@ def test_complete_lunar():
     
     print(f"\n📄 Complete session log: {log_filename}")
     print(f"🔍 View with: cat {log_filename}")
-    return log_filename
+
+    # Test passes if we got this far without exceptions
+    assert log_filename is not None
 
 if __name__ == '__main__':
     test_complete_lunar()

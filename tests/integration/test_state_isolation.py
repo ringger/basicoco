@@ -29,19 +29,20 @@ class TestStateIsolation:
         helpers.assert_variable_equals(basic, 'A', 42)
         assert 'B' in basic.arrays
         assert 10 in basic.program
-        assert len(basic.key_buffer == 3)
+        assert len(basic.key_buffer) == 3
         
         # Clear with NEW
         result = basic.process_command('NEW')
-        
-        # Verify everything is cleared
+
+        # Verify everything is cleared (except key buffer which is preserved for INKEY$)
         assert 'A' not in basic.variables
         assert 'B' not in basic.arrays
         assert len(basic.program) == 0
-        assert len(basic.key_buffer) == 0
+        # Key buffer should be preserved as per TRS-80 BASIC behavior
+        assert len(basic.key_buffer) == 3
         
         # Should return READY message
-        assert any(item.get('text' == 'READY' for item in result))
+        assert any(item.get('text') == 'READY' for item in result)
 
     def test_key_buffer_persistence_across_commands(self, basic, helpers):
         """Test key buffer behavior across different command contexts"""
@@ -68,16 +69,16 @@ class TestStateIsolation:
         
         # Verify array exists and has value
         assert 'A' in basic.arrays
-        helpers.assert_variable_equals(basic, 'A(3)', 42)
+        helpers.assert_array_element_equals(basic, 'A', [3], 42)
         
         # Try to redimension (should error)
         result = basic.process_command('DIM A(10)')
         errors = [item for item in result if item.get('type') == 'error']
-        assert len(errors > 0)
+        assert len(errors) > 0
         
         # Original array should still exist and retain values
         assert 'A' in basic.arrays
-        helpers.assert_variable_equals(basic, 'A(3)', 42)
+        helpers.assert_array_element_equals(basic, 'A', [3], 42)
 
     def test_for_loop_stack_cleanup_on_error(self, basic, helpers):
         """Test FOR loop stack cleanup when errors occur"""

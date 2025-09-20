@@ -75,20 +75,8 @@ class BasicParser:
         statements.append(current_statement)
         return statements
     
-    @staticmethod
-    def parse_function_arguments(args_str, expected_count):
-        """Parse function arguments from argument string"""
-        if not args_str:
-            return []
-            
-        # Simple comma splitting for now
-        # TODO: Handle nested function calls and expressions
-        args = [arg.strip() for arg in args_str.split(',')]
-        
-        if len(args) != expected_count:
-            raise ValueError(f"Expected {expected_count} arguments, got {len(args)}")
-            
-        return args
+    # Removed unused parse_function_arguments method - function argument parsing
+    # is now handled by the AST parser and expression evaluator
     
     @staticmethod
     def parse_draw_commands(draw_string):

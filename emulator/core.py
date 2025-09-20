@@ -2976,6 +2976,3 @@ class CoCoBasic:
             )
             return [{'type': 'error', 'message': error.format_detailed()}]
 
-# Global BASIC interpreter instance
-basic = CoCoBasic()
-

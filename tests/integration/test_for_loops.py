@@ -22,7 +22,7 @@ class TestForLoop:
         text_outputs = helpers.get_text_output(results)
         
         # Should print 1, 2, 3
-        assert len(text_outputs >= 3)
+        assert len(text_outputs) >= 3
         assert '1' in text_outputs[0]
         assert '2' in text_outputs[1]
         assert '3' in text_outputs[2]
@@ -40,7 +40,7 @@ class TestForLoop:
         
         # Should print 2, 4, 6, 8, 10
         expected_values = ['2', '4', '6', '8', '10']
-        assert len(text_outputs >= len(expected_values))
+        assert len(text_outputs) >= len(expected_values)
         
         for i, expected in enumerate(expected_values):
             if i < len(text_outputs):
@@ -59,7 +59,7 @@ class TestForLoop:
         
         # Should print 10, 8, 6, 4, 2
         expected_values = ['10', '8', '6', '4', '2']
-        assert len(text_outputs >= len(expected_values))
+        assert len(text_outputs) >= len(expected_values)
 
     def test_nested_for_loops(self, basic, helpers):
         """Test nested FOR/NEXT loops"""
@@ -75,7 +75,7 @@ class TestForLoop:
         text_outputs = helpers.get_text_output(results)
         
         # Should have multiple outputs
-        assert len(text_outputs >= 4)
+        assert len(text_outputs) >= 4
 
     def test_for_loop_with_calculations(self, basic, helpers):
         """Test FOR loop with calculations in the loop"""
@@ -134,7 +134,7 @@ class TestForLoop:
         text_outputs = helpers.get_text_output(results)
         
         # Should handle floating point loop variables
-        assert len(text_outputs >= 4)  # 0.5, 1.0, 1.5, 2.0, 2.5
+        assert len(text_outputs) >= 4  # 0.5, 1.0, 1.5, 2.0, 2.5
 
     def test_for_next_variable_mismatch(self, basic, helpers):
         """Test FOR/NEXT with mismatched variables"""
@@ -145,7 +145,7 @@ class TestForLoop:
         ]
         
         results = helpers.execute_program(basic, program)
-        errors = self.get_error_messages(results)
+        errors = helpers.get_error_messages(results)
         
         # Should produce some kind of error or warning
         # Exact behavior depends on implementation
@@ -165,4 +165,4 @@ class TestForLoop:
         text_outputs = helpers.get_text_output(results)
         
         # Should execute both loops
-        assert len(text_outputs >= 4)
+        assert len(text_outputs) >= 4

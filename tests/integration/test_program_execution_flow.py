@@ -138,15 +138,14 @@ class TestProgramExecutionFlow:
     def test_error_handling_across_statements(self, basic, helpers):
         """Test division by zero handling in multi-statement lines"""
         program = [
-            '10 A = 5: B = A / 0: PRINT "AFTER DIVISION: "; B'  # Division by zero returns infinity
+            '10 A = 5: B = A / 0: PRINT "AFTER DIVISION: "; B'  # Division by zero should error
         ]
-        
+
         results = helpers.execute_program(basic, program)
         errors = helpers.get_error_messages(results)
-        
-        # In authentic BASIC, division by zero returns infinity and continues execution
-        assert len(errors) == 0  # No errors should be generated
-        text_outputs = helpers.get_text_output(results)
-        combined = ' '.join(text_outputs)
-        assert 'AFTER DIVISION:' in combined  # Should continue execution
-        assert 'inf' in combined.lower()  # Should show infinity
+
+        # TRS-80 BASIC produces an error for division by zero
+        assert len(errors) > 0  # Should generate error
+        assert any("DIVISION" in error.upper() or "DIVIDE" in error.upper() or
+                  "ERROR" in error.upper() or "ZERO" in error.upper() for error in errors), \
+               f"Expected division by zero error, got: {errors}"

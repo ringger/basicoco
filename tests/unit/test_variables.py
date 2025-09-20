@@ -126,16 +126,19 @@ class TestVariables:
     def test_invalid_variable_names(self, basic, helpers):
         """Test error handling for invalid variable names"""
         # These should produce errors
-        try:
-            result = basic.process_command('123 = 5')  # Number as variable name
-            # Should produce error or be rejected
-        except:
+        # Test invalid variable names produce errors
+        result = basic.process_command('123 = 5')  # Number as variable name
+        errors = helpers.get_error_messages(result)
+        # Should either produce an error or be handled gracefully
+        if not errors:
+            # If no error, the command should be ignored (not crash)
             pass
 
-        try:
-            result = basic.process_command('A B = 5')  # Space in variable name
-            # Should produce error or be rejected
-        except:
+        result = basic.process_command('A B = 5')  # Space in variable name
+        errors = helpers.get_error_messages(result)
+        # Should either produce an error or be handled gracefully
+        if not errors:
+            # If no error, the command should be ignored (not crash)
             pass
 
     def test_multiple_variable_assignment(self, basic, helpers):

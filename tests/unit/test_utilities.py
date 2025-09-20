@@ -8,7 +8,7 @@ Provides mock objects, simulation helpers, and testing utilities.
 import sys
 import os
 from typing import List, Dict, Any, Optional, Tuple
-from unittest.mock import Mock, patch
+# Mock imports removed - using custom mock classes
 import io
 
 # Add current directory to path for imports
@@ -127,7 +127,7 @@ class InputSimulator:
         self.key_buffer.clear()
 
 
-class TestCoCoBasic(CoCoBasic):
+class MockCoCoBasic(CoCoBasic):
     """Extended CoCoBasic class with testing utilities"""
     
     def __init__(self, mock_graphics: bool = True, mock_sound: bool = True):
@@ -334,9 +334,9 @@ class TestDataGenerator:
 
 
 # Convenience functions for common test patterns
-def create_test_basic(mock_graphics: bool = True, mock_sound: bool = True) -> TestCoCoBasic:
-    """Create a TestCoCoBasic instance for testing"""
-    return TestCoCoBasic(mock_graphics=mock_graphics, mock_sound=mock_sound)
+def create_test_basic(mock_graphics: bool = True, mock_sound: bool = True) -> MockCoCoBasic:
+    """Create a MockCoCoBasic instance for testing"""
+    return MockCoCoBasic(mock_graphics=mock_graphics, mock_sound=mock_sound)
 
 def run_test_program(basic_instance: CoCoBasic, program_lines: List[str]) -> List[Dict[str, Any]]:
     """Load and run a test program, returning results"""

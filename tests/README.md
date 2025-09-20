@@ -140,7 +140,7 @@ Recent test run results show excellent coverage:
 - **MockGraphicsOutput**: Captures and validates graphics commands
 - **MockSoundOutput**: Captures sound command execution
 - **InputSimulator**: Simulates user input for INPUT/INKEY$ commands
-- **TestCoCoBasic**: Extended emulator class with testing utilities
+- **MockCoCoBasic**: Extended emulator class with testing utilities
 - **GraphicsTestHelper**: Specialized assertions for graphics testing
 - **ProgramTestHelper**: Utilities for program testing
 - **TestDataGenerator**: Generates common test programs
