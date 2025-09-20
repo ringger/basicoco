@@ -40,6 +40,7 @@ class NodeType(Enum):
     # Control Flow
     BLOCK = "block"
     PROGRAM = "program"
+    EXIT_FOR_STATEMENT = "exit_for_statement"
 
 
 class Operator(Enum):
@@ -193,7 +194,7 @@ class DoLoopStatementNode(ASTNode):
 class ExitForStatementNode(ASTNode):
     """Node for EXIT FOR statements"""
     def __init__(self, location: Optional[SourceLocation] = None):
-        super().__init__(NodeType.GOTO_STATEMENT, location)  # Reuse GOTO type for now
+        super().__init__(NodeType.EXIT_FOR_STATEMENT, location)
 
 
 class EndStatementNode(ASTNode):
@@ -215,6 +216,34 @@ class PrintStatementNode(ASTNode):
         super().__init__(NodeType.PRINT_STATEMENT, location)
         self.expressions = expressions
         self.separators = separators
+
+
+class GosubStatementNode(ASTNode):
+    """Node for GOSUB statements"""
+    def __init__(self, target_line: ASTNode, location: Optional[SourceLocation] = None):
+        super().__init__(NodeType.GOSUB_STATEMENT, location)
+        self.target_line = target_line
+
+
+class ReturnStatementNode(ASTNode):
+    """Node for RETURN statements"""
+    def __init__(self, location: Optional[SourceLocation] = None):
+        super().__init__(NodeType.RETURN_STATEMENT, location)
+
+
+class InputStatementNode(ASTNode):
+    """Node for INPUT statements"""
+    def __init__(self, prompt: Optional[ASTNode], variables: List[ASTNode], location: Optional[SourceLocation] = None):
+        super().__init__(NodeType.INPUT_STATEMENT, location)
+        self.prompt = prompt
+        self.variables = variables
+
+
+class ProgramNode(ASTNode):
+    """Node for complete BASIC programs"""
+    def __init__(self, statements: List[ASTNode], location: Optional[SourceLocation] = None):
+        super().__init__(NodeType.PROGRAM, location)
+        self.statements = statements
 
 
 class BlockNode(ASTNode):
@@ -239,6 +268,25 @@ class ASTParser:
         self.current_line = 1
         self.current_column = 1
     
+    def parse_program(self, program_lines: Dict[int, str]) -> ProgramNode:
+        """Parse a complete BASIC program into a PROGRAM node"""
+        statements = []
+
+        # Sort lines by line number
+        for line_num in sorted(program_lines.keys()):
+            code = program_lines[line_num]
+            if code.strip():  # Skip empty lines
+                try:
+                    # Parse each line as a statement
+                    statement = self.parse_statement(code)
+                    if statement:
+                        statements.append(statement)
+                except Exception:
+                    # If parsing fails, create a literal node for the raw line
+                    statements.append(LiteralNode(code))
+
+        return ProgramNode(statements)
+
     def parse_expression(self, expr_str: str, line: int = 1) -> ASTNode:
         """
         Parse a BASIC expression into an AST.
@@ -476,9 +524,9 @@ class ASTParser:
         return {
             'AND', 'OR', 'NOT', 'MOD',
             'IF', 'THEN', 'ELSE', 'ENDIF',
-            'FOR', 'TO', 'STEP', 'NEXT',
+            'FOR', 'TO', 'STEP', 'NEXT', 'EXIT',
             'WHILE', 'WEND', 'DO', 'LOOP', 'UNTIL',
-            'GOTO', 'GOSUB', 'RETURN',
+            'GOTO', 'GOSUB', 'RETURN', 'ON',
             'PRINT', 'INPUT', 'LET',
             'DIM', 'DATA', 'READ', 'RESTORE',
             'END', 'STOP', 'CONT', 'NEW', 'RUN', 'LIST'
@@ -868,6 +916,18 @@ class ASTParser:
         if self._match('KEYWORD') and token['value'] == 'GOTO':
             return self._parse_goto_statement()
 
+        # GOSUB statement
+        if self._match('KEYWORD') and token['value'] == 'GOSUB':
+            return self._parse_gosub_statement()
+
+        # RETURN statement
+        if self._match('KEYWORD') and token['value'] == 'RETURN':
+            return self._parse_return_statement()
+
+        # INPUT statement
+        if self._match('KEYWORD') and token['value'] == 'INPUT':
+            return self._parse_input_statement()
+
         # More statements can be added here...
 
         # Fallback: treat as expression
@@ -1140,10 +1200,10 @@ class ASTParser:
     def _parse_print_statement(self) -> PrintStatementNode:
         """Parse PRINT statement"""
         print_token = self._advance()  # consume 'PRINT'
-        
+
         expressions = []
         separators = []
-        
+
         # Handle empty PRINT
         if not self._current_token() or self._current_token()['type'] in ['KEYWORD', 'PUNCTUATION']:
             if self._current_token() and self._current_token()['value'] in [';', ',']:
@@ -1158,25 +1218,116 @@ class ASTParser:
                 separators=[],
                 location=self._make_location(print_token)
             )
-        
+
         # Parse expressions and separators
         expressions.append(self._parse_or_expression())
-        
+
         while self._match('PUNCTUATION') and self._current_token()['value'] in [';', ',']:
             sep_token = self._advance()
             separators.append(sep_token['value'])
-            
+
             # Check if there's another expression
-            if (self._current_token() and 
+            if (self._current_token() and
                 self._current_token()['type'] not in ['KEYWORD'] and
-                not (self._current_token()['type'] == 'PUNCTUATION' and 
+                not (self._current_token()['type'] == 'PUNCTUATION' and
                      self._current_token()['value'] in [';', ','])):
                 expressions.append(self._parse_or_expression())
-        
+
         return PrintStatementNode(
             expressions=expressions,
             separators=separators,
             location=self._make_location(print_token)
+        )
+
+    def _parse_gosub_statement(self) -> GosubStatementNode:
+        """Parse GOSUB statement"""
+        gosub_token = self._advance()  # consume 'GOSUB'
+
+        # Parse target line number expression
+        target_line = self._parse_or_expression()
+
+        return GosubStatementNode(target_line, location=self._make_location(gosub_token))
+
+    def _parse_return_statement(self) -> ReturnStatementNode:
+        """Parse RETURN statement"""
+        return_token = self._advance()  # consume 'RETURN'
+        return ReturnStatementNode(location=self._make_location(return_token))
+
+    def _parse_input_statement(self) -> InputStatementNode:
+        """Parse INPUT statement"""
+        input_token = self._advance()  # consume 'INPUT'
+
+        prompt = None
+        variables = []
+
+        # Check for optional prompt string
+        if self._match('STRING'):
+            prompt_token = self._advance()
+            prompt = LiteralNode(
+                value=prompt_token['value'],
+                location=self._make_location(prompt_token)
+            )
+
+            # Expect semicolon or comma after prompt
+            if self._match('PUNCTUATION') and self._current_token()['value'] in [';', ',']:
+                self._advance()  # consume separator
+            else:
+                error = self.error_context.syntax_error(
+                    "Expected ';' or ',' after INPUT prompt",
+                    self.current_line,
+                    suggestions=[
+                        "Use: INPUT \"prompt\"; variable",
+                        "Use: INPUT \"prompt\", variable",
+                        "Use: INPUT variable (without prompt)"
+                    ]
+                )
+                raise ValueError(error.format_message())
+
+        # Parse variable list
+        if not self._match('IDENTIFIER'):
+            error = self.error_context.syntax_error(
+                "Expected variable name after INPUT",
+                self.current_line,
+                suggestions=[
+                    "Use: INPUT variable_name",
+                    "Use: INPUT \"prompt\"; variable_name",
+                    "Multiple variables: INPUT A, B, C"
+                ]
+            )
+            raise ValueError(error.format_message())
+
+        # Parse first variable
+        var_token = self._advance()
+        variables.append(VariableNode(
+            name=var_token['value'],
+            location=self._make_location(var_token)
+        ))
+
+        # Parse additional variables separated by commas
+        while self._match('PUNCTUATION') and self._current_token()['value'] == ',':
+            self._advance()  # consume ','
+
+            if not self._match('IDENTIFIER'):
+                error = self.error_context.syntax_error(
+                    "Expected variable name after comma in INPUT statement",
+                    self.current_line,
+                    suggestions=[
+                        "Use: INPUT A, B, C",
+                        "Remove trailing comma if no more variables"
+                    ]
+                )
+                raise ValueError(error.format_message())
+
+            var_token = self._advance()
+            variables.append(VariableNode(
+                name=var_token['value'],
+                location=self._make_location(var_token)
+            ))
+
+        return InputStatementNode(
+            prompt=prompt,
+            variables=variables,
+            location=self._make_location(input_token)
         )
 
 
@@ -1427,5 +1578,106 @@ class ASTEvaluator(ASTVisitor):
                 for item in (result if isinstance(result, list) else [result]):
                     if isinstance(item, dict) and item.get('type') in ['exit_for', 'jump', 'jump_return']:
                         return results  # Exit block early on control flow
-        
+
         return results
+
+
+
+
+    def visit_program(self, node: ProgramNode) -> Any:
+        """Visit PROGRAM node - execute all statements in sequence"""
+        results = []
+        for statement in node.statements:
+            try:
+                result = self.visit(statement)
+                if isinstance(result, list):
+                    results.extend(result)
+                elif result is not None:
+                    results.append(result)
+
+                # Check for control flow that should exit program
+                for item in (result if isinstance(result, list) else [result]):
+                    if isinstance(item, dict) and item.get('type') in ['jump', 'jump_return', 'end']:
+                        return results  # Exit program on control flow
+            except Exception as e:
+                # Add error to results and continue
+                results.append({'type': 'error', 'message': str(e)})
+
+        return results
+
+    def visit_print_statement(self, node: PrintStatementNode) -> Any:
+        """Visit PRINT statement"""
+        # Build output from expressions and separators
+        output_parts = []
+
+        for i, expr in enumerate(node.expressions):
+            # Evaluate expression
+            value = self.visit(expr)
+            output_parts.append(str(value))
+
+            # Add separator if present
+            if i < len(node.separators):
+                sep = node.separators[i]
+                if sep == ';':
+                    # Semicolon = no space/newline
+                    pass
+                elif sep == ',':
+                    # Comma = tab to next zone
+                    output_parts.append('\t')
+
+        # Join parts and return as text output
+        output_text = ''.join(output_parts)
+        return [{'type': 'text', 'text': output_text}]
+
+    def visit_assignment(self, node: AssignmentNode) -> Any:
+        """Visit assignment statement"""
+        # Evaluate the value
+        value = self.visit(node.value)
+
+        # Get target variable name
+        if hasattr(node.target, 'name'):
+            var_name = node.target.name.upper()
+        else:
+            # For complex targets, convert back to string
+            var_name = str(node.target)
+
+        # Set variable in emulator
+        self.emulator.variables[var_name] = value
+
+        # Return empty result (assignments don't produce output)
+        return []
+
+    def visit_end_statement(self, node: EndStatementNode) -> Any:
+        """Visit END statement"""
+        return [{'type': 'end'}]
+
+    def visit_goto_statement(self, node: GotoStatementNode) -> Any:
+        """Visit GOTO statement"""
+        # Evaluate target line number
+        target_line = self.visit(node.target_line)
+        if not isinstance(target_line, (int, float)):
+            error = self.emulator.expression_evaluator.error_context.type_error(
+                "GOTO line number must be a number",
+                "number",
+                type(target_line).__name__,
+                suggestions=[
+                    "Use: GOTO 1000",
+                    "Check that line number expression evaluates to a number"
+                ]
+            )
+            raise ValueError(error.format_message())
+
+        line_num = int(target_line)
+        # Return same format as legacy execute_goto method
+        return [{'type': 'jump', 'line': line_num}]
+
+    def visit_for_statement(self, node: ForStatementNode) -> Any:
+        """Visit FOR statement"""
+        # FOR loops require complex state management
+        # For now, return a command that indicates FOR loop processing needed
+        var_name = node.variable.name if hasattr(node.variable, 'name') else str(node.variable)
+        start_val = self.visit(node.start_value)
+        end_val = self.visit(node.end_value)
+        step_val = self.visit(node.step_value) if node.step_value else 1
+
+        return [{'type': 'for_loop', 'variable': var_name, 'start': start_val, 'end': end_val, 'step': step_val}]

@@ -9,6 +9,7 @@ from typing import List, Optional, Union
 from .ast_parser import (
     ASTNode, IfStatementNode, ForStatementNode, WhileStatementNode,
     DoLoopStatementNode, ExitForStatementNode, EndStatementNode, GotoStatementNode, PrintStatementNode,
+    GosubStatementNode, ReturnStatementNode, InputStatementNode, ProgramNode,
     AssignmentNode, BlockNode, VariableNode, LiteralNode,
     BinaryOpNode, UnaryOpNode, FunctionCallNode, ArrayAccessNode,
     Operator, NodeType, ASTVisitor
@@ -143,6 +144,42 @@ class ASTStatementConverter(ASTVisitor):
         target_str = self._expression_to_string(node.target_line)
         self.statements.append(f"GOTO {target_str}")
 
+    def visit_gosub_statement(self, node: GosubStatementNode) -> None:
+        """Convert GOSUB statement"""
+        target_str = self._expression_to_string(node.target_line)
+        self.statements.append(f"GOSUB {target_str}")
+
+    def visit_return_statement(self, node: ReturnStatementNode) -> None:
+        """Convert RETURN statement"""
+        self.statements.append("RETURN")
+
+    def visit_input_statement(self, node: InputStatementNode) -> None:
+        """Convert INPUT statement"""
+        if node.prompt:
+            prompt_str = self._expression_to_string(node.prompt)
+            # Determine if we should use semicolon or comma after prompt
+            # For now, use semicolon as it's more common
+            input_str = f"INPUT {prompt_str};"
+        else:
+            input_str = "INPUT"
+
+        # Add variable list
+        var_list = []
+        for var_node in node.variables:
+            if isinstance(var_node, VariableNode):
+                var_list.append(var_node.name)
+            else:
+                # Fallback to expression string
+                var_list.append(self._expression_to_string(var_node))
+
+        if var_list:
+            if node.prompt:
+                input_str += " " + ", ".join(var_list)
+            else:
+                input_str += " " + ", ".join(var_list)
+
+        self.statements.append(input_str)
+
     def visit_print_statement(self, node: PrintStatementNode) -> None:
         """Convert PRINT statement"""
         if not node.expressions:
@@ -183,6 +220,23 @@ class ASTStatementConverter(ASTVisitor):
         """Convert block of statements"""
         for statement in node.statements:
             self.visit(statement)
+
+    def visit_number(self, node: LiteralNode) -> None:
+        """Convert number literal nodes - handle bare numbers as GOTO statements"""
+        # Convert bare numbers to GOTO statements
+        # This handles cases like "IF A = 5 THEN 50" where 50 should be "GOTO 50"
+        self.statements.append(f"GOTO {node.value}")
+
+    def visit_string(self, node: LiteralNode) -> None:
+        """Convert string literal nodes"""
+        self.statements.append(str(node.value))
+
+    def visit_binary_op(self, node: BinaryOpNode) -> None:
+        """Convert binary operation nodes - treat as GOTO expressions when used as statements"""
+        # When a binary operation appears as a statement in THEN branch,
+        # it should be treated as a GOTO target expression
+        expr_str = self._expression_to_string(node)
+        self.statements.append(f"GOTO {expr_str}")
 
     def generic_visit(self, node: ASTNode) -> None:
         """Handle any other statement types by converting to string"""

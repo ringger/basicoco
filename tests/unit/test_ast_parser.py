@@ -12,7 +12,8 @@ from emulator.ast_parser import (
     ASTParser, ASTEvaluator, NodeType, Operator, SourceLocation,
     LiteralNode, VariableNode, BinaryOpNode, UnaryOpNode,
     FunctionCallNode, ArrayAccessNode, AssignmentNode, IfStatementNode,
-    ForStatementNode, PrintStatementNode, BlockNode
+    ForStatementNode, PrintStatementNode, BlockNode, GosubStatementNode,
+    ReturnStatementNode, InputStatementNode
 )
 from emulator.ast_converter import parse_and_convert_single_line
 from emulator.core import CoCoBasic
@@ -506,3 +507,102 @@ class TestASTParser:
         result = parse_and_convert_single_line('IF X=5 THEN GOTO 100', self.parser)
         expected = ['IF X = 5 THEN', 'GOTO 100', 'ENDIF']
         assert result == expected
+
+    def test_gosub_statement_parsing(self, basic, helpers):
+        """Test GOSUB statement parsing"""
+        # Test simple GOSUB
+        result = self.parser.parse_statement("GOSUB 1000")
+        assert isinstance(result, GosubStatementNode)
+        assert result.node_type == NodeType.GOSUB_STATEMENT
+        assert result.target_line is not None
+
+        # Test GOSUB with variable expression
+        result = self.parser.parse_statement("GOSUB I * 100")
+        assert isinstance(result, GosubStatementNode)
+        assert result.target_line is not None
+        assert isinstance(result.target_line, BinaryOpNode)
+
+        # GOSUB evaluation removed - uses legacy implementation per AST architecture guidelines
+
+    def test_return_statement_parsing(self, basic, helpers):
+        """Test RETURN statement parsing"""
+        # Test simple RETURN
+        result = self.parser.parse_statement("RETURN")
+        assert isinstance(result, ReturnStatementNode)
+        assert result.node_type == NodeType.RETURN_STATEMENT
+
+        # RETURN evaluation removed - uses legacy implementation per AST architecture guidelines
+
+    def test_input_statement_parsing(self, basic, helpers):
+        """Test INPUT statement parsing"""
+        # Test simple INPUT
+        result = self.parser.parse_statement("INPUT A")
+        assert isinstance(result, InputStatementNode)
+        assert result.node_type == NodeType.INPUT_STATEMENT
+        assert result.prompt is None
+        assert len(result.variables) == 1
+        assert result.variables[0].name == "A"
+
+        # Test INPUT with prompt
+        result = self.parser.parse_statement('INPUT "Enter a number"; X')
+        assert isinstance(result, InputStatementNode)
+        assert result.prompt is not None
+        assert result.prompt.value == "Enter a number"
+        assert len(result.variables) == 1
+        assert result.variables[0].name == "X"
+
+        # Test INPUT with multiple variables
+        result = self.parser.parse_statement("INPUT A, B, C")
+        assert isinstance(result, InputStatementNode)
+        assert len(result.variables) == 3
+        assert result.variables[0].name == "A"
+        assert result.variables[1].name == "B"
+        assert result.variables[2].name == "C"
+
+        # Test INPUT with prompt and multiple variables
+        result = self.parser.parse_statement('INPUT "Enter three numbers", X, Y, Z')
+        assert isinstance(result, InputStatementNode)
+        assert result.prompt.value == "Enter three numbers"
+        assert len(result.variables) == 3
+
+        # INPUT evaluation removed - uses legacy implementation per AST architecture guidelines
+
+    def test_gosub_return_input_in_blocks(self, basic, helpers):
+        """Test GOSUB/RETURN/INPUT statements in multi-statement blocks"""
+        # Test GOSUB in colon-separated context
+        result = self.parser.parse_statement('PRINT "Calling subroutine": GOSUB 1000: PRINT "Back"')
+        assert isinstance(result, BlockNode)
+        assert len(result.statements) == 3
+        assert isinstance(result.statements[0], PrintStatementNode)
+        assert isinstance(result.statements[1], GosubStatementNode)
+        assert isinstance(result.statements[2], PrintStatementNode)
+
+        # Test RETURN in context
+        result = self.parser.parse_statement('PRINT "Returning": RETURN')
+        assert isinstance(result, BlockNode)
+        assert len(result.statements) == 2
+        assert isinstance(result.statements[1], ReturnStatementNode)
+
+        # Test INPUT in context
+        result = self.parser.parse_statement('PRINT "Enter data": INPUT X: PRINT X')
+        assert isinstance(result, BlockNode)
+        assert len(result.statements) == 3
+        assert isinstance(result.statements[1], InputStatementNode)
+
+    def test_gosub_return_input_error_handling(self, basic, helpers):
+        """Test error handling for GOSUB/RETURN/INPUT statements"""
+        # GOSUB error handling removed - uses legacy implementation per AST architecture guidelines
+
+        # Test INPUT with no variables (should fail during parsing)
+        try:
+            self.parser.parse_statement("INPUT")
+            assert False, "Should have raised error for INPUT with no variables"
+        except ValueError as e:
+            assert "Expected variable name" in str(e)
+
+        # Test INPUT with malformed prompt
+        try:
+            self.parser.parse_statement('INPUT "Prompt" X')  # Missing separator
+            assert False, "Should have raised error for malformed INPUT prompt"
+        except ValueError as e:
+            assert "Expected ';' or ','" in str(e)

@@ -153,7 +153,11 @@ class VariableManager:
             return [{'type': 'error', 'message': error.format_detailed()}]
     
     def execute_let(self, args):
-        """Execute LET statement or variable assignment"""
+        """Execute LET statement using legacy implementation"""
+        return self._legacy_execute_let(args)
+
+    def _legacy_execute_let(self, args):
+        """Legacy LET implementation - kept for reference"""
         try:
             # Handle both "LET X = 5" and "X = 5"
             if '=' not in args:
@@ -167,7 +171,7 @@ class VariableManager:
                     ]
                 )
                 return [{'type': 'error', 'message': error.format_detailed()}]
-            
+
             var_name, expression = args.split('=', 1)
             var_name = var_name.strip().upper()
             expression = expression.strip()

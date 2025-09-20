@@ -631,8 +631,10 @@ class CoCoBasic:
         control_keywords = ['IF', 'FOR', 'WHILE', 'DO']
         has_control = any(keyword in code.upper() for keyword in control_keywords)
         has_colons = ':' in code
+        is_if_statement = code.upper().strip().startswith('IF ')
 
-        if has_control and has_colons:
+        # Use AST conversion for control structures with colons OR IF statements (even without colons)
+        if (has_control and has_colons) or is_if_statement:
             # Try AST conversion for single-line control structures
             try:
                 from .ast_converter import parse_and_convert_single_line
@@ -650,7 +652,28 @@ class CoCoBasic:
 
         # Use BasicParser for normal statements
         return BasicParser.expand_line_to_sublines(line_num, code, self.expanded_program)
-        
+
+    def _run_program_via_ast(self):
+        """Execute program using AST parser and PROGRAM node"""
+        self.running = True
+        self.iteration_count = 0
+
+        # Parse entire program into AST
+        from .ast_parser import ASTEvaluator
+        evaluator = ASTEvaluator(self)
+        program_node = self.expression_evaluator.ast_parser.parse_program(self.program)
+
+        # Execute via AST visitor
+        result = evaluator.visit(program_node)
+
+        # Convert result to expected format
+        if isinstance(result, list):
+            return result
+        elif result is not None:
+            return [result]
+        else:
+            return []
+
     def run_program(self, clear_variables=True):
         if not self.program:
             error = self.error_context.runtime_error(
@@ -662,12 +685,19 @@ class CoCoBasic:
                 ]
             )
             return [{'type': 'error', 'message': error.format_detailed()}]
-        
+
         # Clear variables and arrays but keep program (like authentic BASIC)
         # For temporary execution, we may want to preserve variables
         if clear_variables:
             self.clear_interpreter_state(clear_program=False)
-        
+
+        # Temporarily disabled AST-based execution due to format compatibility issues
+        # try:
+        #     return self._run_program_via_ast()
+        # except Exception:
+        #     # Fall back to legacy line-by-line execution
+        #     pass
+
         output = []
         self.running = True
         self.iteration_count = 0
@@ -1297,13 +1327,18 @@ class CoCoBasic:
             raise ValueError(str(e))
 
     def execute_for(self, args):
+        """Execute FOR statement using legacy implementation"""
+        return self._legacy_execute_for(args)
+
+    def _legacy_execute_for(self, args):
+        """Legacy FOR implementation - kept for reference"""
         # FOR I=1 TO 10 [STEP 1] - handle multi-line FOR loops
         # Single-line FOR loops are now handled by AST converter
         for_part = args.strip()
-        
+
         # Set error context for FOR command
         self.error_context.set_context(self.current_line, f"FOR {for_part}")
-        
+
         # Better pattern that looks for the word TO, not individual letters
         match = re.match(r'(\w+)\s*=\s*(.+?)\s+TO\s+(.+?)(?:\s+STEP\s+(.+?))?$', for_part, re.IGNORECASE)
         if not match:
@@ -1317,9 +1352,9 @@ class CoCoBasic:
                 ]
             )
             return [{'type': 'error', 'message': error.format_detailed()}]
-        
+
         var_name = match.group(1).strip()
-        
+
         # Evaluate expressions with enhanced error handling
         try:
             start_val = self.evaluate_expression(match.group(2).strip(), self.current_line)
@@ -1328,7 +1363,7 @@ class CoCoBasic:
         except ValueError as e:
             # Enhanced error already formatted, just pass it through
             return [{'type': 'error', 'message': str(e)}]
-        
+
         # Ensure numeric values for comparison
         try:
             start_val = float(start_val) if isinstance(start_val, str) else start_val
@@ -1346,15 +1381,15 @@ class CoCoBasic:
                 ]
             )
             return [{'type': 'error', 'message': error.format_detailed()}]
-        
+
         # Check if loop should execute at all
-        if ((step_val > 0 and start_val > end_val) or 
+        if ((step_val > 0 and start_val > end_val) or
             (step_val < 0 and start_val < end_val)):
             # Skip the loop entirely - jump to NEXT and pop it
             self.variables[var_name] = start_val  # Still set the variable
             # Return a jump to find and skip past the matching NEXT
             return [{'type': 'skip_for_loop', 'var': var_name}]
-        
+
         self.variables[var_name] = start_val
         self.for_stack.append({
             'var': var_name,
@@ -1363,7 +1398,7 @@ class CoCoBasic:
             'line': self.current_line,
             'sub_line': self.current_sub_line
         })
-        
+
         return []
     
     # Removed _execute_single_line_for method - now handled by AST converter
@@ -1404,6 +1439,11 @@ class CoCoBasic:
             return []
     
     def execute_if(self, args):
+        """Execute IF statement using legacy implementation"""
+        return self._legacy_execute_if(args)
+
+    def _legacy_execute_if(self, args):
+        """Legacy IF implementation - kept for reference"""
         # IF condition THEN [action | multi-line] - now using AST parser
         if 'THEN' not in args.upper():
             error = self.error_context.syntax_error(
@@ -1416,7 +1456,7 @@ class CoCoBasic:
                 ]
             )
             return [{'type': 'error', 'message': error.format_detailed()}]
-        
+
         # Find THEN (case-insensitive)
         then_pos = args.upper().find('THEN')
         condition = args[:then_pos].strip()
@@ -1524,8 +1564,13 @@ class CoCoBasic:
         return False
     
     def execute_goto(self, args):
+        """Execute GOTO statement using legacy implementation"""
+        return self._legacy_execute_goto(args)
+
+    def _legacy_execute_goto(self, args):
+        """Legacy GOTO implementation - kept for reference"""
         self.error_context.set_context(self.current_line, f"GOTO {args}")
-        
+
         if not args.strip():
             error = self.error_context.syntax_error(
                 "SYNTAX ERROR: Missing line number",
@@ -1537,7 +1582,7 @@ class CoCoBasic:
                 ]
             )
             return [{'type': 'error', 'message': error.format_detailed()}]
-        
+
         try:
             line_num = int(self.evaluate_expression(args.strip(), self.current_line))
             if line_num <= 0:
@@ -1566,10 +1611,30 @@ class CoCoBasic:
                 ]
             )
             return [{'type': 'error', 'message': error.format_detailed()}]
-    
+
+    def _execute_via_ast(self, statement: str):
+        """Execute a statement using AST parser and visitor"""
+        try:
+            # Parse statement using AST parser
+            ast_node = self.expression_evaluator.ast_parser.parse_statement(statement)
+
+            # Evaluate using AST visitor
+            from .ast_parser import ASTEvaluator
+            evaluator = ASTEvaluator(self)
+            return evaluator.visit(ast_node)
+
+        except Exception as e:
+            # Return error if AST execution fails
+            return [{'type': 'error', 'message': str(e)}]
+
     def execute_gosub(self, args):
+        """Execute GOSUB statement using legacy implementation"""
+        return self._legacy_execute_gosub(args)
+
+    def _legacy_execute_gosub(self, args):
+        """Legacy GOSUB implementation - kept for reference"""
         self.error_context.set_context(self.current_line, f"GOSUB {args}")
-        
+
         if not args.strip():
             error = self.error_context.syntax_error(
                 "SYNTAX ERROR: Missing line number",
@@ -1581,7 +1646,7 @@ class CoCoBasic:
                 ]
             )
             return [{'type': 'error', 'message': error.format_detailed()}]
-        
+
         try:
             line_num = int(self.evaluate_expression(args.strip(), self.current_line))
             if line_num <= 0:
@@ -1589,7 +1654,7 @@ class CoCoBasic:
                     f"Invalid subroutine line number {line_num}",
                     self.current_line,
                     suggestions=[
-                        "Line numbers must be positive integers", 
+                        "Line numbers must be positive integers",
                         "Use line numbers that exist in your program",
                         "Subroutine should end with RETURN statement"
                     ]
@@ -1605,7 +1670,7 @@ class CoCoBasic:
                 "SYNTAX ERROR: Invalid GOSUB target",
                 self.current_line,
                 suggestions=[
-                    "Correct syntax: GOSUB line_number", 
+                    "Correct syntax: GOSUB line_number",
                     "Example: GOSUB 1000 or GOSUB SUB_LINE where SUB_LINE is a variable",
                     "Make sure target line contains a subroutine that ends with RETURN"
                 ]
@@ -1613,20 +1678,25 @@ class CoCoBasic:
             return [{'type': 'error', 'message': error.format_detailed()}]
     
     def execute_return(self, args):
+        """Execute RETURN statement using legacy implementation"""
+        return self._legacy_execute_return(args)
+
+    def _legacy_execute_return(self, args):
+        """Legacy RETURN implementation - kept for reference"""
         if not self.call_stack:
             error = self.error_context.runtime_error(
                 "RETURN WITHOUT GOSUB",
                 self.current_line,
                 suggestions=[
-                    "RETURN must be preceded by a GOSUB statement", 
+                    "RETURN must be preceded by a GOSUB statement",
                     "Example: GOSUB 1000: ... : 1000 RETURN",
                     "Check that subroutines are called with GOSUB before RETURN"
                 ]
             )
             return [{'type': 'error', 'message': error.format_detailed()}]
-        
+
         return_line, return_sub_line = self.call_stack.pop()
-        
+
         # Return to the sub-line after the GOSUB call
         return [{'type': 'jump_return', 'line': return_line, 'sub_line': return_sub_line}]
     
@@ -1784,6 +1854,11 @@ class CoCoBasic:
         return [{'type': 'text', 'text': 'READY'}]
     
     def execute_end(self, args):
+        """Execute END statement using legacy implementation"""
+        return self._legacy_execute_end(args)
+
+    def _legacy_execute_end(self, args):
+        """Legacy END implementation - kept for reference"""
         # END command - end program execution silently
         self.running = False
         # Clear stopped position since END terminates completely

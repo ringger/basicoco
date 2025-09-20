@@ -22,7 +22,11 @@ class IOHandler:
         registry.register('PRINT', self.execute_print)
     
     def execute_input(self, args):
-        """Execute INPUT statement for user input"""
+        """Execute INPUT statement using legacy implementation"""
+        return self._legacy_execute_input(args)
+
+    def _legacy_execute_input(self, args):
+        """Legacy INPUT implementation - kept for reference"""
         try:
             # INPUT can have optional prompt: INPUT "Enter value"; variable1, variable2, variable3
             # Or just: INPUT variable1, variable2, variable3
@@ -110,35 +114,39 @@ class IOHandler:
             return [{'type': 'error', 'message': error.format_detailed()}]
     
     def execute_print(self, args):
-        """Execute PRINT statement"""
+        """Execute PRINT statement using legacy implementation"""
+        return self._legacy_execute_print(args)
+
+    def _legacy_execute_print(self, args):
+        """Legacy PRINT implementation - kept for reference"""
         try:
             if not args:
                 # Just print a blank line
                 return [{'type': 'text', 'text': ''}]
-            
+
             # Handle PRINT with arguments
             result_text = ""
-            
+
             # Split by semicolons and commas outside of strings, preserving separator info
             parts_with_separators = self._split_print_arguments_with_separators(args)
-            
+
             for i, (part, separator) in enumerate(parts_with_separators):
                 part = part.strip()
                 if not part:
                     continue
-                
+
                 # Evaluate the expression
                 try:
                     value = self.emulator.evaluate_expression(part)
                     result_text += self._format_print_value(value)
-                    
+
                     # Add spacing based on separator type (if not the last part)
                     if i < len(parts_with_separators) - 1:
                         if separator == ',':
                             # Comma adds tab spacing (typically 14-character columns in BASIC)
                             result_text += "\t"
                         # Semicolon adds no spacing
-                        
+
                 except Exception as e:
                     error = self.emulator.error_context.runtime_error(
                         f"Error evaluating PRINT expression: {part}",
@@ -149,12 +157,12 @@ class IOHandler:
                         ]
                     )
                     return [{'type': 'error', 'message': error.format_detailed()}]
-            
+
             # Check if the last part had a trailing separator (semicolon or comma)
             has_trailing_separator = False
             if parts_with_separators and parts_with_separators[-1][1] is not None:
                 has_trailing_separator = True
-            
+
             # Check if result contains carriage return (CHR$(13)) or has trailing separator
             if '\r' in result_text or has_trailing_separator:
                 # Handle inline output (carriage return or trailing semicolon)

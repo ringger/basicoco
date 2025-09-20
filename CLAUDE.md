@@ -2,90 +2,37 @@
 
 *This roadmap focuses exclusively on future enhancements and development priorities. Current capabilities and recent achievements are documented in README.md and git commit history.*
 
-## 🚨 AST PARSER GAPS - HIGHEST PRIORITY 🚨
+## Forward Development Priorities 🎯
 
-**Critical Gap**: The AST parser is missing implementations for key BASIC control flow statements. These constants are defined but never implemented:
-- `GOSUB_STATEMENT = "gosub_statement"`
-- `RETURN_STATEMENT = "return_statement"`
-- `INPUT_STATEMENT = "input_statement"`
-- `PROGRAM = "program"`
+### Phase 1: State Management Architecture Enhancement 🏗️
 
-### **Missing Implementations Required:**
+**Create specialized state managers for improved maintainability and clear separation of concerns:**
 
-#### **GOSUB/RETURN Statements**
-- **Current State**: Constants defined but no visitor methods implemented
-- **Impact**: GOSUB/RETURN currently handled by old parser, not AST
-- **Required**:
-  - Implement `visit_gosub_statement()` in AST parser
-  - Implement `visit_return_statement()` in AST parser
-  - Add GOSUB/RETURN node classes
-  - Integrate with call stack management
+- **Implement Specialized State Managers**
+  - `VariableStateManager` - variables, arrays, and type management
+  - `ExecutionStateManager` - program counter, call stacks, loops, execution flow
+  - `IOStateManager` - keyboard buffer, input state, cursor management
+  - `GraphicsStateManager` - graphics mode, screen state, cursor positioning
 
-#### **INPUT Statement**
-- **Current State**: Constant defined but no visitor method
-- **Impact**: INPUT handled by old parser, not benefiting from AST improvements
-- **Required**:
-  - Implement `visit_input_statement()` in AST parser
-  - Add INPUT node class with prompt and variable list support
-  - Handle multi-variable INPUT syntax
+- **Refactor State Management Interface**
+  - Refactor `clear_interpreter_state()` to delegate to appropriate managers
+  - Define clear state clearing policies for NEW, LOAD, RUN operations
+  - Establish state isolation boundaries between different concerns
+  - Create state snapshots for debugging and program state inspection
 
-#### **Test Coverage Requirements**
-- **Unit Tests**: Add test cases for each new visitor method
-- **Integration Tests**: Verify GOSUB/RETURN call stack behavior
-- **Edge Cases**: Test nested GOSUB, RETURN without GOSUB, INPUT with multiple variables
-- **Error Handling**: Test malformed statements and error recovery
+- **Architecture Documentation & Testing**
+  - Create architecture decision records (ADRs) for all design choices
+  - Add integration tests specifically for architectural boundaries
+  - Document clear component responsibilities and interfaces
+  - Add static analysis rules to enforce architectural decisions
 
-### **Legacy Parser Retirement Strategy:**
+## Architecture Guidelines 🏗️
+<!-- CRITICAL: DO NOT REMOVE - Essential architectural guidance for all development -->
+<!-- This section contains mandatory patterns and standards for code quality -->
 
-#### **Phase 1: Complete AST Implementation (Critical)**
-1. **Implement GOSUB/RETURN** - Critical for program flow
-2. **Implement INPUT** - Essential for interactive programs
-3. **Add PROGRAM node** - Top-level AST structure
-4. **Add comprehensive test coverage** - Must achieve >80% coverage
-5. **Update AST converter** - Ensure proper code generation
+### Current Architecture Foundation
 
-#### **Phase 2: Dual Parser Migration Assessment**
-- **Audit current parser usage** - Identify all non-AST parsing calls
-- **Map legacy dependencies** - Find code still using `emulator/parser.py`
-- **Create migration timeline** - Prioritize by usage frequency and complexity
-- **Establish compatibility layer** - Ensure smooth transition
-
-#### **Phase 3: Legacy Parser Deprecation**
-- **Mark legacy methods as deprecated** - Add deprecation warnings
-- **Migrate remaining callers** - Convert to AST-based parsing
-- **Remove dual parser complexity** - Eliminate parser.py dependencies
-- **Consolidate parsing logic** - Single source of truth via AST
-
-#### **Phase 4: Complete Retirement**
-- **Remove `emulator/parser.py`** - Delete legacy parsing module
-- **Clean up imports** - Remove all references to old parser
-- **Update architecture docs** - Document unified AST-only approach
-- **Performance optimization** - Leverage AST-only optimizations
-
-### **Benefits of Complete AST Migration:**
-- **🏗️ Unified Architecture** - Single parsing pipeline eliminates complexity
-- **🚀 Performance** - AST optimizations across all statements
-- **🧪 Better Testing** - Comprehensive AST test coverage
-- **🔧 Maintainability** - Single codebase for all parsing logic
-- **📈 Extensibility** - Easy to add new language features via AST
-
-### **Risk Mitigation:**
-- **Incremental migration** - Phase-by-phase rollout minimizes disruption
-- **Comprehensive testing** - Each phase requires full test suite validation
-- **Rollback capability** - Maintain legacy parser until Phase 4 complete
-- **Performance benchmarks** - Ensure AST parsing meets performance requirements
-
-*The dual parser architecture represents significant technical debt that must be eliminated for long-term maintainability and performance.*
-
-## Current Status: Perfect Test Health ✅
-
-**Test Suite**: 514 passing tests + 32 skipped (WebSocket dependencies), 0 failures, 0 warnings.
-**Code Quality**: All vestigial code removed, unused imports cleaned, coverage tracking enabled.
-**Architecture**: Clean, well-established foundation ready for next phase development.
-
-## Current Architecture Foundation 🏗️
-
-The emulator now has a **clean, well-established architecture** that provides the foundation for future development:
+The emulator has a **clean, well-established architecture** that provides the foundation for future development:
 
 - **✅ Unified Error Handling**: 145+ educational error messages across all modules
 - **✅ Clean Method Naming**: `process_*` for internal system vs `execute_*` for user commands
@@ -105,29 +52,133 @@ The emulator now has a **clean, well-established architecture** that provides th
 - Pytest fixtures for consistent test setup and execution
 - Non-brittle AST parsing that handles control structures with or without colons consistently
 
-## Forward Development Priorities 🎯
+### Internal Architecture Patterns
 
-### Phase 1: State Management Architecture Enhancement 🏗️
+#### Method Naming Convention
+**CRITICAL**: Maintain clear separation between internal system methods and user command methods:
 
-**Create specialized state managers for improved maintainability and clear separation of concerns:**
+- **`process_*` methods**: Internal system processing (process_command, process_line, process_statement)
+- **`execute_*` methods**: User BASIC commands (execute_if, execute_goto, execute_print)
+- **Backwards Compatibility**: External API maintains `process_command()` as alias to `process_command()`
 
-- **Implement Specialized State Managers**
-  - `VariableStateManager` - variables, arrays, and type management
-  - `ExecutionStateManager` - program counter, call stacks, loops, execution flow  
-  - `IOStateManager` - keyboard buffer, input state, cursor management
-  - `GraphicsStateManager` - graphics mode, screen state, cursor positioning
-  
-- **Refactor State Management Interface**
-  - Refactor `clear_interpreter_state()` to delegate to appropriate managers
-  - Define clear state clearing policies for NEW, LOAD, RUN operations
-  - Establish state isolation boundaries between different concerns
-  - Create state snapshots for debugging and program state inspection
+#### Command Registry Architecture
+**ESTABLISHED PATTERN**: All BASIC commands use the unified `CommandRegistry` system:
 
-- **Architecture Documentation & Testing**
-  - Create architecture decision records (ADRs) for all design choices
-  - Add integration tests specifically for architectural boundaries
-  - Document clear component responsibilities and interfaces
-  - Add static analysis rules to enforce architectural decisions
+**Adding New Commands:**
+1. ✅ **DO**: Add to appropriate module's `register_commands()` method
+2. ✅ **DO**: Use the established registration pattern with metadata
+3. ❌ **DON'T**: Add hardcoded if/elif chains in `process_statement()`
+4. ❌ **DON'T**: Bypass the command registry system
+
+**Registration Pattern:**
+```python
+def register_commands(self, registry):
+    registry.register('COMMAND_NAME', self.execute_method,
+                     category='appropriate_category',
+                     description="Command description",
+                     syntax="COMMAND syntax",
+                     examples=["COMMAND example"])
+```
+
+**Function Registry Architecture:**
+- All BASIC functions (CHR$, ASC, LEFT$, etc.) are handled by `/emulator/functions.py`
+- Functions are registered at module bottom and called during expression evaluation
+- ❌ **NEVER** duplicate function implementations in other modules
+
+### Error Handling Standards
+**ESTABLISHED PATTERN**: All modules use the Enhanced Error Context system for educational error messages.
+
+**Standard Error Pattern:**
+```python
+error = self.emulator.error_context.syntax_error(
+    "Clear description of what went wrong",
+    self.emulator.current_line,
+    suggestions=[
+        'Specific suggestion for fixing the error',
+        'Example of correct syntax',
+        'Additional helpful guidance'
+    ]
+)
+return [{'type': 'error', 'message': error.format_detailed()}]
+```
+
+**Error Types Available:**
+- `syntax_error()` - For invalid BASIC syntax
+- `runtime_error()` - For execution-time errors
+- `type_error()` - For data type mismatches
+- `arithmetic_error()` - For mathematical domain/range errors
+
+**Error Handling Requirements:**
+1. ✅ **REQUIRED**: Use enhanced error context with 2-3 helpful suggestions
+2. ✅ **REQUIRED**: Provide specific examples of correct syntax
+3. ✅ **REQUIRED**: Return `[{'type': 'error', 'message': formatted_message}]` format
+4. ❌ **FORBIDDEN**: Generic error messages without educational value
+
+### State Management Boundaries
+**Clear Separation of Concerns:**
+- `keyboard_buffer` belongs to execution state, NOT cleared during program RUN
+- Each state manager has clear ownership boundaries
+- `clear_interpreter_state()` only clears program execution state, not input state
+
+### AST vs Direct Execution Guidelines
+<!-- CRITICAL: DO NOT REMOVE - Prevents architectural mistakes that cause test failures -->
+**CRITICAL**: Clear separation between AST parsing and stateful execution:
+
+#### **✅ When to Use AST:**
+- **Expression Evaluation** - Mathematical/logical expressions without side effects
+- **Single-Line Control Structure Expansion** - Transform `IF A THEN B:C:D` to multi-line format
+- **Program Structure Analysis** - Dead code detection, flow analysis, optimization
+- **Stateless Computation** - Pure computation with no emulator state changes
+
+#### **❌ When NOT to Use AST:**
+- **Stateful Command Execution** - Commands that modify program state (GOTO, GOSUB, FOR)
+- **I/O Operations** - INPUT, PRINT with side effects
+- **Stack Management** - Operations requiring for_stack, call_stack, if_stack
+- **Program Counter Control** - Commands that change execution flow
+
+#### **Architectural Rules:**
+1. **AST for Structure, Execute_* for Behavior**
+   - ✅ Use AST to parse and transform program structure
+   - ✅ Use AST to evaluate expressions without side effects
+   - ❌ DON'T use AST visitors to replace stateful command execution
+
+2. **Preserve Return Format Contracts**
+   - `execute_*` methods must return: `[{'type': 'xxx', ...}]` format
+   - AST visitors return raw values or simple structures
+   - Never directly return AST visitor results from `execute_*` methods
+
+3. **Test Before Converting**
+   - Any AST integration MUST pass existing tests before being merged
+   - Run full test suite after each change: `python -m pytest`
+   - Revert immediately if test failures increase
+
+#### **Architecture Diagram:**
+```
+┌─────────────────────────────────────────────────────────────┐
+│                     USER INPUT/PROGRAM                       │
+└─────────────────┬───────────────────────────────────────────┘
+                  │
+                  ▼
+┌─────────────────────────────────────────────────────────────┐
+│              AST CONVERTER (ast_converter.py)                │
+│  Purpose: Transform single-line → multi-line control structs │
+│  Example: IF A THEN B:C:D → IF A THEN / B / C / D / ENDIF  │
+└─────────────────┬───────────────────────────────────────────┘
+                  │
+                  ▼
+┌─────────────────────────────────────────────────────────────┐
+│            COMMAND REGISTRY & EXECUTE_* METHODS              │
+│  Purpose: Stateful execution with stack/counter management   │
+│  Owns: for_stack, call_stack, if_stack, program_counter     │
+└─────────────────┬───────────────────────────────────────────┘
+                  │
+                  ▼
+┌─────────────────────────────────────────────────────────────┐
+│              EXPRESSION EVALUATOR (Uses AST)                 │
+│  Purpose: Evaluate mathematical/logical expressions          │
+│  Stateless: Pure computation, no side effects               │
+└─────────────────────────────────────────────────────────────┘
+```
 
 ### Phase 2: Essential Disk BASIC File Operations
 - **Core File I/O Commands**
