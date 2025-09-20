@@ -15,7 +15,9 @@ class TestProgramExecutionFlow:
         """Test basic program execution"""
         program = ['10 PRINT "TEST"']
         results = helpers.execute_program(basic, program)
-        assert len(results > 0)
+        assert len(results) > 0
+        text_outputs = helpers.get_text_output(results)
+        assert "TEST" in text_outputs
 
     def test_multi_statement_line_execution_order(self, basic, helpers):
         """Test that multi-statement lines execute in correct order"""
@@ -140,7 +142,7 @@ class TestProgramExecutionFlow:
         ]
         
         results = helpers.execute_program(basic, program)
-        errors = self.get_error_messages(results)
+        errors = helpers.get_error_messages(results)
         
         # In authentic BASIC, division by zero returns infinity and continues execution
         assert len(errors) == 0  # No errors should be generated

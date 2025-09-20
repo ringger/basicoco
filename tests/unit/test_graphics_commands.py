@@ -16,6 +16,9 @@ class TestGraphicsCommand:
         """Test basic graphics command functionality"""
         result = basic.process_command('PMODE 4,1')
         assert len(result) >= 0  # Should not error
+        # Should produce graphics output for PMODE command
+        graphics = helpers.get_graphics_output(result)
+        assert any(g['type'] == 'pmode' for g in graphics)
 
     def test_pmode_command(self, basic, helpers):
         """Test PMODE command"""
@@ -122,22 +125,36 @@ class TestGraphicsCommand:
         # Test various DRAW commands - DRAW commands produce line/move graphics
         result = basic.process_command('DRAW "U10"')
         graphics = helpers.get_graphics_output(result)
-        assert len(graphics) > 0  # DRAW produces graphics output
+        assert len(graphics) > 0, "DRAW 'U10' should produce graphics output"
+        assert any(g.get('type') in ['line', 'move'] for g in graphics), \
+               f"DRAW should produce line/move graphics, got types: {[g.get('type') for g in graphics]}"
+
         result = basic.process_command('DRAW "R20D10L20U10"')
         # Complex DRAW should produce multiple graphics commands
-        assert len(result) > 0
-        assert any(item.get('type') in ['line', 'move'] for item in result)
+        assert len(result) > 0, "Complex DRAW command should produce output"
+        graphics = helpers.get_graphics_output(result)
+        assert len(graphics) >= 4, f"Complex DRAW should produce multiple graphics commands, got {len(graphics)}"
+        assert any(item.get('type') in ['line', 'move'] for item in result), \
+               f"DRAW should produce line/move types, got: {[item.get('type') for item in result]}"
 
     def test_graphics_bounds_checking(self, basic, helpers):
         """Test graphics commands with boundary values"""
         basic.process_command('PMODE 4,1')
-        
+
         # Test coordinates at boundaries (PMODE 4 is 256x192)
-        try:
-            basic.process_command('PSET(0,0)')      # Top-left
-            basic.process_command('PSET(255,191)')  # Bottom-right
-        except Exception as e:
-            pytest.fail(f"Valid boundary coordinates should not fail: {e}")
+        # Top-left corner
+        result1 = basic.process_command('PSET(0,0)')
+        errors1 = helpers.get_error_messages(result1)
+        assert len(errors1) == 0, f"PSET(0,0) should be valid for boundary, got errors: {errors1}"
+        graphics1 = helpers.get_graphics_output(result1)
+        assert len(graphics1) > 0, "PSET(0,0) should produce graphics output"
+
+        # Bottom-right corner
+        result2 = basic.process_command('PSET(255,191)')
+        errors2 = helpers.get_error_messages(result2)
+        assert len(errors2) == 0, f"PSET(255,191) should be valid for boundary, got errors: {errors2}"
+        graphics2 = helpers.get_graphics_output(result2)
+        assert len(graphics2) > 0, "PSET(255,191) should produce graphics output"
 
     def test_graphics_without_pmode(self, basic, helpers):
         """Test graphics commands without setting PMODE first"""

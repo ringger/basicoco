@@ -237,13 +237,15 @@ class TestCommandParsing:
         basic.variables['TEST$'] = 'ABCDEFGH'
         
         # Test nested string functions
-        try:
-            result = basic.process_command('PRINT LEFT$(RIGHT$(TEST$,5),3)')
-            # Should handle nested function parsing
-            assert len(result > 0)
-        except:
-            # Some nested functions might not be fully implemented yet
-            pass
+        # Set up test string
+        basic.process_command('TEST$ = "HELLO WORLD"')
+
+        result = basic.process_command('PRINT LEFT$(RIGHT$(TEST$,5),3)')
+        # Should handle nested function parsing and return output
+        assert len(result) > 0
+        text_outputs = helpers.get_text_output(result)
+        # RIGHT$(TEST$,5) = "WORLD", LEFT$("WORLD",3) = "WOR"
+        assert "WOR" in text_outputs
 
     def test_comment_parsing(self, basic, helpers):
         """Test REM comment parsing and handling"""

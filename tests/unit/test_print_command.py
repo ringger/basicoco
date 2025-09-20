@@ -84,7 +84,8 @@ class TestPrintCommand:
         result = basic.process_command('PRINT "A"; "B"; "C"')
         assert len(result) > 0
         assert result[0]['type'] == 'text'
-        # The exact output format may vary, but should contain the concatenated parts
+        # Semicolons should concatenate without spaces
+        assert result[0]['text'] == 'ABC'
 
     def test_print_with_separators(self, basic, helpers):
         """Test PRINT with commas and semicolons"""
@@ -92,11 +93,14 @@ class TestPrintCommand:
         result = basic.process_command('PRINT "A";"B"')
         assert len(result) > 0
         assert result[0]['type'] == 'text'
+        assert result[0]['text'] == 'AB'  # Semicolon concatenates without spaces
 
         # Test comma separator (with spacing)
         result = basic.process_command('PRINT "A","B"')
         assert len(result) > 0
         assert result[0]['type'] == 'text'
+        # Comma should add spacing - exact format depends on implementation
+        assert 'A' in result[0]['text'] and 'B' in result[0]['text']
 
     def test_print_empty(self, basic, helpers):
         """Test PRINT with no arguments (blank line)"""
@@ -123,20 +127,27 @@ class TestPrintCommand:
 
     def test_print_string_functions(self, basic, helpers):
         """Test PRINT with string functions"""
-        # These depend on string function implementations
-        try:
-            result = basic.process_command('PRINT LEN("HELLO")')
+        # Test LEN function if implemented
+        result = basic.process_command('PRINT LEN("HELLO")')
+        errors = helpers.get_error_messages(result)
+        if not errors:  # Function is implemented
             text_output = helpers.get_text_output(result)
-            assert text_output == ['5']
-        except (AssertionError, Exception):
-            pass  # Skip if string functions not implemented
+            assert text_output == ['5'], f"LEN function should return 5, got {text_output}"
+        else:
+            # Function not implemented - verify we get appropriate error
+            assert any('LEN' in error or 'FUNCTION' in error for error in errors), \
+                   f"Should get appropriate error for unimplemented LEN function: {errors}"
 
-        try:
-            result = basic.process_command('PRINT LEFT$("HELLO", 3)')
+        # Test LEFT$ function if implemented
+        result = basic.process_command('PRINT LEFT$("HELLO", 3)')
+        errors = helpers.get_error_messages(result)
+        if not errors:  # Function is implemented
             text_output = helpers.get_text_output(result)
-            assert text_output == ['HEL']
-        except (AssertionError, Exception):
-            pass  # Skip if string functions not implemented
+            assert text_output == ['HEL'], f"LEFT$ function should return 'HEL', got {text_output}"
+        else:
+            # Function not implemented - verify we get appropriate error
+            assert any('LEFT$' in error or 'FUNCTION' in error for error in errors), \
+                   f"Should get appropriate error for unimplemented LEFT$ function: {errors}"
 
     def test_comprehensive_separator_behavior(self, basic, helpers):
         """Test comprehensive PRINT separator behavior with mixed types"""

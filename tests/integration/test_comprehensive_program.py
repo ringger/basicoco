@@ -19,8 +19,11 @@ class TestComprehensiveProgram:
         ]
         
         results = helpers.execute_program(basic, program)
-        # Should complete without errors
-        assert len(results > 0)
+        # Should complete without errors and produce expected output
+        assert len(results) > 0
+        text_outputs = helpers.get_text_output(results)
+        assert "BASIC TEST" in text_outputs
+        assert "5" in text_outputs
 
     def test_math_and_variables_program(self, basic, helpers):
         """Test program with math operations and variables"""
@@ -42,7 +45,7 @@ class TestComprehensiveProgram:
         text_outputs = helpers.get_text_output(results)
         
         # Should produce mathematical results
-        assert len(text_outputs >= 4)
+        assert len(text_outputs) >= 4
         assert any('15' in output for output in text_outputs)  # A + B
         assert any('5' in output for output in text_outputs)   # A - B
         assert any('50' in output for output in text_outputs)  # A * B
@@ -62,7 +65,7 @@ class TestComprehensiveProgram:
         text_outputs = helpers.get_text_output(results)
         
         # Should handle string operations
-        assert len(text_outputs >= 2)
+        assert len(text_outputs) >= 2
         assert any('HELLO' in output and 'WORLD' in output for output in text_outputs)
 
     def test_for_loop_with_calculations(self, basic, helpers):
@@ -81,7 +84,7 @@ class TestComprehensiveProgram:
         text_outputs = helpers.get_text_output(results)
         
         # Should calculate factorial: 5! = 120
-        assert len(text_outputs >= 5)
+        assert len(text_outputs) >= 5
         assert any('120' in output for output in text_outputs)
 
     def test_if_then_logic_program(self, basic, helpers):
@@ -98,7 +101,7 @@ class TestComprehensiveProgram:
         text_outputs = helpers.get_text_output(results)
         
         # Should have outputs for both conditions
-        assert len(text_outputs >= 10)
+        assert len(text_outputs) >= 10
         assert any('SMALL' in output for output in text_outputs)
         assert any('BIG' in output for output in text_outputs)
 
@@ -141,7 +144,7 @@ class TestComprehensiveProgram:
         text_outputs = helpers.get_text_output(results)
         
         # Should produce multiplication table with conditional output
-        assert len(text_outputs >= 9)  # 3x3 = 9 products
+        assert len(text_outputs) >= 9  # 3x3 = 9 products
         assert any('LARGE' in output for output in text_outputs)
 
     def test_data_read_program(self, basic, helpers):
@@ -159,7 +162,7 @@ class TestComprehensiveProgram:
         text_outputs = helpers.get_text_output(results)
         
         # Should process all data items
-        assert len(text_outputs >= 3)
+        assert len(text_outputs) >= 3
         assert any('APPLE' in output for output in text_outputs)
         assert any('BANANA' in output for output in text_outputs)
         assert any('CHERRY' in output for output in text_outputs)
@@ -183,7 +186,7 @@ class TestComprehensiveProgram:
         text_outputs = helpers.get_text_output(results)
         
         # Should calculate circle properties
-        assert len(text_outputs >= 4)
+        assert len(text_outputs) >= 4
         assert any('RADIUS' in output for output in text_outputs)
         assert any('AREA' in output for output in text_outputs)
         assert any('LARGE CIRCLE' in output for output in text_outputs)
