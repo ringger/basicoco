@@ -9,32 +9,37 @@ import sys
 import os
 import tempfile
 import shutil
+import pytest
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..'))
-
-from test_base import BaseTestCase
 
 
 class TestFileCommands:
     """Test cases for file management commands (SAVE, FILES, KILL, CD)"""
 
-    def setUp(self):
+    def assert_output_contains(self, result, text):
+        """Helper method to check if text is in output"""
+        for item in result:
+            if item.get('type') == 'text' and text in item.get('text', ''):
+                return True
+        pytest.fail(f"Text '{text}' not found in output")
+
+    @pytest.fixture
+    def test_dir(self):
         """Set up test environment with temporary directory"""
-        super().setUp()
         # Create a temporary directory for testing
-        self.test_dir = tempfile.mkdtemp(prefix='trs80_test_')
-        self.original_cwd = os.getcwd()
-        os.chdir(self.test_dir)
-        
+        test_directory = tempfile.mkdtemp(prefix='trs80_test_')
+        original_cwd = os.getcwd()
+        os.chdir(test_directory)
+
         # Create programs directory
         os.makedirs('programs', exist_ok=True)
 
-    def tearDown(self):
-        """Clean up test environment"""
-        super().tearDown()
-        # Restore original directory and clean up
-        os.chdir(self.original_cwd)
-        if os.path.exists(self.test_dir):
-            shutil.rmtree(self.test_dir)
+        yield test_directory
+
+        # Clean up after test
+        os.chdir(original_cwd)
+        if os.path.exists(test_directory):
+            shutil.rmtree(test_directory)
 
     def test_basic_functionality(self, basic, helpers):
         """Test basic functionality to ensure test framework works"""
@@ -148,16 +153,16 @@ class TestFileCommands:
         assert 'bytes' in output_text
 
     # CD Command Tests
-    def test_cd_show_current_directory(self, basic, helpers):
+    def test_cd_show_current_directory(self, basic, helpers, test_dir):
         """Test CD command without arguments shows current directory"""
         result = basic.process_command('CD')
         self.assert_output_contains(result, 'CURRENT DIRECTORY:')
-        self.assert_output_contains(result, self.test_dir)
+        self.assert_output_contains(result, test_dir)
 
-    def test_cd_change_directory(self, basic, helpers):
+    def test_cd_change_directory(self, basic, helpers, test_dir):
         """Test CD command changes directory"""
         # Create a subdirectory
-        subdir = os.path.join(self.test_dir, 'subdir')
+        subdir = os.path.join(test_dir, 'subdir')
         os.makedirs(subdir)
         
         # Change to subdirectory
@@ -168,21 +173,21 @@ class TestFileCommands:
         # Verify we're in the new directory
         assert os.getcwd() == subdir
 
-    def test_cd_with_shortcuts(self, basic, helpers):
+    def test_cd_with_shortcuts(self, basic, helpers, test_dir):
         """Test CD command with path shortcuts"""
         # Create subdirectory and change to it
-        subdir = os.path.join(self.test_dir, 'test_subdir')
+        subdir = os.path.join(test_dir, 'test_subdir')
         os.makedirs(subdir)
         os.chdir(subdir)
         
         # Test .. (parent directory)
         result = basic.process_command('CD ".."')
         self.assert_output_contains(result, 'CHANGED FROM')
-        assert os.getcwd() == self.test_dir
+        assert os.getcwd() == test_dir
 
-    def test_cd_quoted_paths(self, basic, helpers):
+    def test_cd_quoted_paths(self, basic, helpers, test_dir):
         """Test CD command with quoted paths"""
-        subdir = os.path.join(self.test_dir, 'quoted test')
+        subdir = os.path.join(test_dir, 'quoted test')
         os.makedirs(subdir)
         
         # Test with double quotes
@@ -191,7 +196,7 @@ class TestFileCommands:
         assert os.getcwd() == subdir
         
         # Go back to test single quotes
-        os.chdir(self.test_dir)
+        os.chdir(test_dir)
         result = basic.process_command(f"CD '{subdir}'")
         self.assert_output_contains(result, 'CHANGED FROM')
 
@@ -232,12 +237,12 @@ class TestFileCommands:
         # Test cancellation
         result = basic.process_kill_confirmation('N', filepath)
         self.assert_output_contains(result, 'DELETE CANCELLED')
-        assert os.path.exists(filepath, "File should still exist after cancel")
+        assert os.path.exists(filepath), "File should still exist after cancel"
         
         # Test deletion confirmation
         result = basic.process_kill_confirmation('Y', filepath)
         self.assert_output_contains(result, 'DELETED confirm_test.bas')
-        assert not os.path.exists(filepath, "File should be deleted after confirmation")
+        assert not os.path.exists(filepath), "File should be deleted after confirmation"
 
     def test_kill_nonexistent_file(self, basic, helpers):
         """Test KILL command with non-existent file"""

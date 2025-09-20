@@ -202,6 +202,13 @@ class EndStatementNode(ASTNode):
         super().__init__(NodeType.END_STATEMENT, location)
 
 
+class GotoStatementNode(ASTNode):
+    """Node for GOTO statements"""
+    def __init__(self, target_line: ASTNode, location: Optional[SourceLocation] = None):
+        super().__init__(NodeType.GOTO_STATEMENT, location)
+        self.target_line = target_line
+
+
 class PrintStatementNode(ASTNode):
     """Node for PRINT statements"""
     def __init__(self, expressions: List[ASTNode], separators: List[str], location: Optional[SourceLocation] = None):
@@ -288,8 +295,38 @@ class ASTParser:
             )
             raise ValueError(error.format_message())
         
-        return self._parse_statement()
-    
+        return self._parse_statement_sequence()
+
+    def _parse_statement_sequence(self) -> ASTNode:
+        """
+        Parse a sequence of statements separated by colons.
+        Returns a single statement or a BlockNode for multiple statements.
+        """
+        statements = []
+
+        while self.current < len(self.tokens):
+            # Parse a single statement
+            stmt = self._parse_statement()
+            statements.append(stmt)
+
+            # Check for colon separator
+            if (self.current < len(self.tokens) and
+                self._match('PUNCTUATION') and
+                self._current_token().get('value') == ':'):
+                self._advance()  # consume ':'
+            else:
+                # No more colons, we're done
+                break
+
+        # Return single statement or block
+        if len(statements) == 1:
+            return statements[0]
+        else:
+            return BlockNode(
+                statements=statements,
+                location=statements[0].location if statements else None
+            )
+
     def _tokenize(self, text: str) -> List[Dict[str, Any]]:
         """
         Tokenize BASIC code into a list of tokens.
@@ -827,6 +864,10 @@ class ASTParser:
         if self._match('KEYWORD') and token['value'] == 'END':
             return self._parse_end_statement()
 
+        # GOTO statement
+        if self._match('KEYWORD') and token['value'] == 'GOTO':
+            return self._parse_goto_statement()
+
         # More statements can be added here...
 
         # Fallback: treat as expression
@@ -965,8 +1006,45 @@ class ASTParser:
             self._advance()  # consume 'STEP'
             step_value = self._parse_or_expression()
         
-        # For now, body is empty - will be filled by statement grouping
-        body = BlockNode(statements=[], location=self._make_location(for_token))
+        # Parse body statements if there are colons (single-line FOR loop)
+        body_statements = []
+
+        # Check if there's a colon indicating body statements
+        if self._match('PUNCTUATION') and self._current_token().get('value') == ':':
+            self._advance()  # consume ':'
+
+            # Parse statements until we hit NEXT or end of tokens
+            while self.current < len(self.tokens):
+                current_token = self._current_token()
+
+                # Stop if we hit NEXT (end of FOR body)
+                if (current_token and current_token.get('type') == 'KEYWORD'
+                    and current_token.get('value', '').upper() == 'NEXT'):
+                    break
+
+                # Stop if we hit another colon followed by NEXT
+                if (current_token and current_token.get('type') == 'PUNCTUATION'
+                    and current_token.get('value') == ':'
+                    and self.current + 1 < len(self.tokens)):
+                    next_token = self.tokens[self.current + 1]
+                    if (next_token.get('type') == 'KEYWORD'
+                        and next_token.get('value', '').upper() == 'NEXT'):
+                        break
+
+                # Parse the statement
+                try:
+                    stmt = self._parse_statement()
+                    body_statements.append(stmt)
+
+                    # Consume optional colon separator
+                    if (self._match('PUNCTUATION') and
+                        self._current_token().get('value') == ':'):
+                        self._advance()
+                except Exception:
+                    # If we can't parse a statement, break
+                    break
+
+        body = BlockNode(statements=body_statements, location=self._make_location(for_token))
         
         return ForStatementNode(
             variable=variable,
@@ -1049,6 +1127,15 @@ class ASTParser:
         """Parse END statement"""
         end_token = self._advance()  # consume 'END'
         return EndStatementNode(location=self._make_location(end_token))
+
+    def _parse_goto_statement(self) -> GotoStatementNode:
+        """Parse GOTO statement"""
+        goto_token = self._advance()  # consume 'GOTO'
+
+        # Parse target line number expression
+        target_line = self._parse_or_expression()
+
+        return GotoStatementNode(target_line, location=self._make_location(goto_token))
 
     def _parse_print_statement(self) -> PrintStatementNode:
         """Parse PRINT statement"""

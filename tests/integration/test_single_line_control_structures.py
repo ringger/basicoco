@@ -187,6 +187,59 @@ class TestSingleLineControlStructures:
         # I should be 3 (the value when EXIT FOR was executed)
         helpers.assert_variable_equals(basic, 'I', 3)
 
+    def test_single_line_if_then_goto(self, basic, helpers):
+        """Test single-line IF THEN with GOTO statements"""
+        program = [
+            '10 IF 1=1 THEN PRINT "BEFORE": GOTO 30',
+            '20 PRINT "SKIPPED"',
+            '30 PRINT "AFTER"'
+        ]
+
+        results = helpers.execute_program(basic, program)
+        text_outputs = helpers.get_text_output(results)
+
+        assert 'BEFORE' in text_outputs
+        assert 'AFTER' in text_outputs
+        assert 'SKIPPED' not in text_outputs
+
+    def test_single_line_for_with_goto(self, basic, helpers):
+        """Test FOR loop with IF THEN GOTO in single line - the exact bug pattern that was fixed"""
+        program = [
+            '10 FOR I=1 TO 3',
+            '20 IF I=2 THEN PRINT "MIDDLE": GOTO 40',
+            '30 PRINT "VALUE:"; I',
+            '40 NEXT I',
+            '50 PRINT "DONE"'
+        ]
+
+        results = helpers.execute_program(basic, program)
+        text_outputs = helpers.get_text_output(results)
+
+        # Should see: VALUE:1, MIDDLE, VALUE:3, DONE
+        # Should NOT see: VALUE:2 (skipped due to GOTO)
+        combined_output = ' '.join(text_outputs)
+        assert 'VALUE:1' in combined_output
+        assert 'MIDDLE' in combined_output
+        assert 'VALUE:3' in combined_output
+        assert 'DONE' in combined_output
+        assert 'VALUE:2' not in combined_output
+
+    def test_single_line_goto_with_expressions(self, basic, helpers):
+        """Test GOTO with variable expressions in single-line contexts"""
+        program = [
+            '10 TARGET = 40',
+            '20 IF 1=1 THEN PRINT "JUMP": GOTO TARGET',
+            '30 PRINT "MISSED"',
+            '40 PRINT "LANDED"'
+        ]
+
+        results = helpers.execute_program(basic, program)
+        text_outputs = helpers.get_text_output(results)
+
+        assert 'JUMP' in text_outputs
+        assert 'LANDED' in text_outputs
+        assert 'MISSED' not in text_outputs
+
     def test_performance_single_line_structures(self, basic, helpers):
         """Test performance of single-line structure normalization"""
         import time

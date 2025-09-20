@@ -13,6 +13,7 @@ The emulator now has a **clean, well-established architecture** that provides th
 - **✅ Modular Design**: Clear separation of concerns across specialized modules
 - **✅ AST-Based Control Structures**: Complete single-line control structure normalization with unified execution model
 - **✅ Pytest Framework**: Modern test infrastructure with fixtures and comprehensive coverage
+- **✅ Robust GOTO Support**: Non-brittle AST parsing handles both simple and complex control structures
 
 **Architecture Patterns to Maintain:**
 - Command registration via `register_commands()` in each module
@@ -21,48 +22,11 @@ The emulator now has a **clean, well-established architecture** that provides th
 - Function ownership by `functions.py` module only
 - AST-based control structure processing for complex single-line statements
 - Pytest fixtures for consistent test setup and execution
+- Non-brittle AST parsing that handles control structures with or without colons consistently
 
 ## Forward Development Priorities 🎯
 
-### Phase 1: Complete Pytest Migration Cleanup (CURRENT TOP PRIORITY) 🧪
-
-**Systematically resolve remaining unit test migration issues to achieve comprehensive test coverage:**
-
-#### Phase 1A: Remaining Unit Test Framework Issues (2-3 hours)
-- **Fix unittest artifacts in remaining test files**
-  - Address syntax errors in assertion patterns (`assert len(result > 0)` → `assert len(result) > 0`)
-  - Convert remaining unittest-style setUp methods to pytest fixtures
-  - Replace missing helper methods with available conftest.py utilities
-  - Fix unittest-style assertions (`self.assertIsNotNone()` → `assert result is not None`)
-
-- **Systematic file-by-file migration**
-  - Graphics commands tests - fix missing helper methods and setup issues
-  - File command tests - resolve confirmation processing and path handling tests
-  - Input/output tests - fix multi-variable input and keyboard buffer tests
-  - Error handling tests - update error message validation patterns
-  - Program management tests - resolve save/load workflow testing
-
-- **Test infrastructure modernization**
-  - Ensure all test files use pytest fixtures consistently
-  - Validate helper method usage across all test categories
-  - Remove any remaining unittest base class dependencies
-  - Standardize test organization and naming conventions
-
-#### Phase 1B: Test Coverage Validation (1-2 hours)
-- **Achieve 95%+ unit test success rate**
-  - Run comprehensive test suite validation
-  - Identify and resolve any remaining framework conflicts
-  - Ensure consistent pytest fixture behavior across all test categories
-  - Validate test isolation and state management
-
-- **Integration test framework consistency**
-  - Ensure integration tests follow same pytest patterns
-  - Validate complex test scenarios work with pytest fixtures
-  - Test WebSocket integration tests for framework compatibility
-
-**Expected Outcome**: Complete pytest migration with 95%+ unit test success rate, eliminating all unittest framework dependencies and achieving modern, maintainable test infrastructure.
-
-### Phase 2: State Management Architecture Enhancement 🏗️
+### Phase 1: State Management Architecture Enhancement 🏗️
 
 **Create specialized state managers for improved maintainability and clear separation of concerns:**
 

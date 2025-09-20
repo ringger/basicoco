@@ -272,8 +272,8 @@ class TestIfThenComprehensive:
         
         # THEN with line number 0 (should error)
         result = basic.process_command('A = 1: IF A = 1 THEN 0')
-        errors = self.get_error_messages(result)
-        assert len(errors > 0)  # Should produce error
+        errors = helpers.get_error_messages(result)
+        assert len(errors) > 0  # Should produce error
         
         # THEN with negative line number (should error or handle gracefully)
         result = basic.process_command('A = 1: IF A = 1 THEN -10')

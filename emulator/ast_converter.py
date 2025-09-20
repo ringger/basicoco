@@ -8,7 +8,7 @@ multi-line equivalents using the AST parser infrastructure.
 from typing import List, Optional, Union
 from .ast_parser import (
     ASTNode, IfStatementNode, ForStatementNode, WhileStatementNode,
-    DoLoopStatementNode, ExitForStatementNode, EndStatementNode, PrintStatementNode,
+    DoLoopStatementNode, ExitForStatementNode, EndStatementNode, GotoStatementNode, PrintStatementNode,
     AssignmentNode, BlockNode, VariableNode, LiteralNode,
     BinaryOpNode, UnaryOpNode, FunctionCallNode, ArrayAccessNode,
     Operator, NodeType, ASTVisitor
@@ -137,6 +137,11 @@ class ASTStatementConverter(ASTVisitor):
     def visit_end_statement(self, node: EndStatementNode) -> None:
         """Convert END statement"""
         self.statements.append("END")
+
+    def visit_goto_statement(self, node: GotoStatementNode) -> None:
+        """Convert GOTO statement"""
+        target_str = self._expression_to_string(node.target_line)
+        self.statements.append(f"GOTO {target_str}")
 
     def visit_print_statement(self, node: PrintStatementNode) -> None:
         """Convert PRINT statement"""
@@ -325,8 +330,16 @@ def parse_and_convert_single_line(statement: str, parser) -> Optional[List[str]]
     # Check if statement contains colons (multi-statement indicator)
     has_colons = ':' in statement
 
-    if not starts_with_control or not has_colons:
-        # Not a single-line control structure
+    if not starts_with_control:
+        # Not a control structure at all
+        return None
+
+    # For IF statements, we should process them even without colons
+    # since simple IF THEN GOTO is a valid single-line structure
+    is_if_statement = statement_upper.startswith('IF ')
+
+    if not has_colons and not is_if_statement:
+        # Other control structures require colons to be considered single-line
         return None
 
     try:
@@ -388,21 +401,42 @@ def _parse_ast_if_statement(statement: str, parser, converter) -> Optional[List[
         # Split by colons but respect quotes and nested structures
         body_parts = _split_respecting_quotes_and_structures(body_part, ':')
 
-        # Look for ELSE in the body parts
-        in_else = False
-        for part in body_parts:
-            part_stripped = part.strip()
-            if part_stripped.upper().startswith('ELSE '):
-                in_else = True
-                else_part = part_stripped[5:].strip()  # Skip 'ELSE '
-                if else_part:
-                    else_statements.append(_parse_body_statement(else_part, parser))
-            elif part_stripped.upper() == 'ELSE':
-                in_else = True
-            elif in_else:
-                else_statements.append(_parse_body_statement(part_stripped, parser))
-            else:
-                body_statements.append(_parse_body_statement(part_stripped, parser))
+        # Parse the entire THEN body as structured statements using AST parser
+        # Split by ELSE first to separate THEN and ELSE parts
+        else_pos = body_part.upper().find(' ELSE ')
+        if else_pos >= 0:
+            then_body = body_part[:else_pos].strip()
+            else_body = body_part[else_pos + 6:].strip()  # Skip ' ELSE '
+        else:
+            then_body = body_part
+            else_body = None
+
+        # Parse THEN body using proper AST parsing
+        if then_body:
+            # For single-line control structures with colons, parse as complete statement
+            try:
+                then_ast = parser.parse_statement(then_body)
+                body_statements = [then_ast]
+            except Exception:
+                # Fallback to colon splitting for complex cases
+                then_parts = _split_respecting_quotes_and_structures(then_body, ':')
+                for part in then_parts:
+                    part_stripped = part.strip()
+                    if part_stripped:
+                        body_statements.append(_parse_body_statement(part_stripped, parser))
+
+        # Parse ELSE body similarly
+        if else_body:
+            try:
+                else_ast = parser.parse_statement(else_body)
+                else_statements = [else_ast]
+            except Exception:
+                # Fallback to colon splitting for complex cases
+                else_parts = _split_respecting_quotes_and_structures(else_body, ':')
+                for part in else_parts:
+                    part_stripped = part.strip()
+                    if part_stripped:
+                        else_statements.append(_parse_body_statement(part_stripped, parser))
 
         # Create IF statement AST node
         then_branch = BlockNode(body_statements) if len(body_statements) > 1 else (body_statements[0] if body_statements else None)

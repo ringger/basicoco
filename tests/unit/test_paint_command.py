@@ -18,7 +18,10 @@ class TestPaintCommand:
         basic.process_command('SCREEN 1,1')
         
         # Test basic PAINT command
-        self.assert_graphics_output('PAINT(64,48),3', 'paint')
+        result = basic.process_command('PAINT(64,48),3')
+        graphics = helpers.get_graphics_output(result)
+        assert len(graphics) == 1
+        assert graphics[0]['type'] == 'paint'
 
     def test_paint_in_text_mode_error(self, basic, helpers):
         """Test PAINT command fails in text mode"""
@@ -35,7 +38,7 @@ class TestPaintCommand:
         basic.process_command('SCREEN 1,1')
         
         result = basic.process_command('PAINT(100,80),2,1')
-        assert any(item.get('type' == 'paint' for item in result))
+        assert any(item.get('type') == 'paint' for item in result)
         
         paint_item = next(item for item in result if item.get('type') == 'paint')
         assert paint_item['x'] == 100
@@ -53,7 +56,7 @@ class TestPaintCommand:
         basic.variables['C'] = 4
         
         result = basic.process_command('PAINT(X,Y),C')
-        assert any(item.get('type' == 'paint' for item in result))
+        assert any(item.get('type') == 'paint' for item in result)
         
         paint_item = next(item for item in result if item.get('type') == 'paint')
         assert paint_item['x'] == 50
@@ -67,7 +70,7 @@ class TestPaintCommand:
         basic.process_command('SCREEN 1,1')
         
         result = basic.process_command('PAINT(10+5,20*2),2+1')
-        assert any(item.get('type' == 'paint' for item in result))
+        assert any(item.get('type') == 'paint' for item in result)
         
         paint_item = next(item for item in result if item.get('type') == 'paint')
         assert paint_item['x'] == 15
@@ -81,7 +84,7 @@ class TestPaintCommand:
         basic.process_command('SCREEN 1,1')
         
         result = basic.process_command('PAINT(25.7,30.3),2')
-        assert any(item.get('type' == 'paint' for item in result))
+        assert any(item.get('type') == 'paint' for item in result)
         
         paint_item = next(item for item in result if item.get('type') == 'paint')
         assert paint_item['x'] == 25  # Should be converted to int
@@ -167,8 +170,8 @@ class TestPaintCommand:
         
         for x, y in test_coords:
             result = basic.process_command(f'PAINT({x},{y}),1')
-            assert any(item.get('type' == 'paint' for item in result),
-                          f"PAINT should work at ({x},{y})")
+            assert any(item.get('type') == 'paint' for item in result), \
+                          f"PAINT should work at ({x},{y})"
 
     def test_paint_zero_color(self, basic, helpers):
         """Test PAINT command with color 0 (background)"""
@@ -177,7 +180,7 @@ class TestPaintCommand:
         basic.process_command('SCREEN 1,1')
         
         result = basic.process_command('PAINT(64,48),0')
-        assert any(item.get('type' == 'paint' for item in result))
+        assert any(item.get('type') == 'paint' for item in result)
         
         paint_item = next(item for item in result if item.get('type') == 'paint')
         assert paint_item['fill_color'] == 0

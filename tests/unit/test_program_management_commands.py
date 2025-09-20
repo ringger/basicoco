@@ -142,7 +142,7 @@ class TestProgramManagementCommand:
         result = basic.process_command('SAVE "empty"')
         assert any('NO PROGRAM TO SAVE' in str(r.get('message', '')) for r in result)
 
-    def test_save_command_auto_extension(self, basic, helpers):
+    def test_save_command_auto_extension(self, basic, helpers, temp_setup):
         """Test SAVE command automatically adds .bas extension"""
         # Create a test program
         basic.process_command('10 PRINT "EXTENSION TEST"')
@@ -154,7 +154,7 @@ class TestProgramManagementCommand:
         saved_file = os.path.join(temp_setup, 'autoext.bas')
         assert os.path.exists(saved_file)
 
-    def test_cload_command_alias(self, basic, helpers):
+    def test_cload_command_alias(self, basic, helpers, temp_setup):
         """Test CLOAD command works as LOAD alias"""
         # Create a test file first
         test_file = os.path.join(temp_setup, 'cloadtest.bas')
@@ -168,14 +168,14 @@ class TestProgramManagementCommand:
         result = basic.process_command('CLOAD "cloadtest"')
         
         # Should show loaded message
-        assert any('LOADED' in str(r.get('text', '') for r in result))
+        assert any('LOADED' in str(r.get('text', '')) for r in result)
         
         # Verify program was loaded by listing it
         list_result = basic.process_command('LIST')
         list_output = ' '.join(str(r.get('text', '')) for r in list_result)
         assert 'PRINT "CLOAD TEST"' in list_output
 
-    def test_csave_command_alias(self, basic, helpers):
+    def test_csave_command_alias(self, basic, helpers, temp_setup):
         """Test CSAVE command works as SAVE alias"""
         # Create a test program
         basic.process_command('10 PRINT "CSAVE TEST"')
@@ -246,7 +246,7 @@ class TestProgramManagementCommand:
         assert 'TOTAL:' in dir_output 
         assert 'FILE(S)' in dir_output
 
-    def test_save_with_path(self, basic, helpers):
+    def test_save_with_path(self, basic, helpers, temp_setup):
         """Test SAVE command with directory path"""
         # Create a test program
         basic.process_command('10 PRINT "PATH TEST"')

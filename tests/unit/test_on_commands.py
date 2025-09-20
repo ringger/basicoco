@@ -190,11 +190,11 @@ class TestOnCommand:
         """Test ON command syntax error handling"""
         # Test ON without GOTO or GOSUB
         result = basic.process_command('ON X PRINT "INVALID"')
-        assert any('SYNTAX ERROR' in str(r.get('message', '') for r in result))
+        assert any('SYNTAX ERROR' in str(r.get('message', '')) for r in result)
         
         # Test ON without expression
         result = basic.process_command('ON GOTO 100,200')
-        assert any('SYNTAX ERROR' in str(r.get('message', '') for r in result))
+        assert any('SYNTAX ERROR' in str(r.get('message', '')) for r in result)
 
     def test_on_commands_undefined_variable(self, basic, helpers):
         """Test ON commands with undefined variable (defaults to 0)"""
@@ -219,8 +219,8 @@ class TestOnCommand:
         
         # Test with truly non-numeric line numbers (string literals)
         result = basic.process_command('ON X GOTO "ABC","DEF"')
-        assert any('SYNTAX ERROR' in str(r.get('message', '') or 'INVALID' in str(r.get('message', '')) or 'Invalid' in str(r.get('message', ''))
-                          for r in result if r.get('type') == 'error'))
+        assert any('SYNTAX ERROR' in str(r.get('message', '')) or 'INVALID' in str(r.get('message', '')) or 'Invalid' in str(r.get('message', ''))
+                          for r in result if r.get('type') == 'error')
 
     def test_on_goto_with_string_result(self, basic, helpers):
         """Test ON GOTO with expression that results in string (should cause error)"""
@@ -229,7 +229,7 @@ class TestOnCommand:
         
         # Should get error about invalid expression
         error_messages = [str(r.get('message', '')) for r in result if r.get('type') == 'error']
-        assert len(error_messages > 0)
+        assert len(error_messages) > 0
 
     def test_on_goto_expression_evaluation(self, basic, helpers):
         """Test ON GOTO with various expression types"""
@@ -304,4 +304,4 @@ class TestOnCommand:
         # Should execute the target line
         output_text = ' '.join(str(r.get('text', '')) for r in result if r.get('type') == 'text')
         # Note: Direct execution behavior may vary, so we mainly check for no syntax errors
-        assert not any('SYNTAX ERROR' in str(r.get('message', '') for r in result))
+        assert not any('SYNTAX ERROR' in str(r.get('message', '')) for r in result)

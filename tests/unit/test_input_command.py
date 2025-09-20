@@ -15,7 +15,7 @@ class TestInputCommand:
         """Test basic INPUT command functionality"""
         # Test simple INPUT command
         result = basic.process_command('INPUT X')
-        assert any(item.get('type' == 'input_request' for item in result))
+        assert any(item.get('type') == 'input_request' for item in result)
 
     def test_input_simple_variable(self, basic, helpers):
         """Test INPUT with simple variable"""
@@ -60,7 +60,7 @@ class TestInputCommand:
         result = basic.process_command('INPUT A, B, C$')
         
         # Should handle multiple variables (implementation dependent)
-        assert any(item.get('type' == 'input_request' for item in result))
+        assert any(item.get('type') == 'input_request' for item in result)
 
     def test_input_in_program(self, basic, helpers):
         """Test INPUT command within a program"""
@@ -73,7 +73,7 @@ class TestInputCommand:
         
         # Should produce input request
         input_requests = [item for item in results if item.get('type') == 'input_request']
-        assert len(input_requests > 0, "Program should produce input request")
+        assert len(input_requests) > 0, "Program should produce input request"
         
         # Check the input request details
         assert input_requests[0]['prompt'] == 'WHAT IS YOUR AGE'
@@ -88,7 +88,7 @@ class TestInputCommand:
         # With comma (adds question mark - if implemented)
         result2 = basic.process_command('INPUT "NAME", N$')
         # Implementation may vary - just check it produces input request
-        assert any(item.get('type' == 'input_request' for item in result2))
+        assert any(item.get('type') == 'input_request' for item in result2)
 
     def test_input_syntax_variations(self, basic, helpers):
         """Test various INPUT command syntax variations"""
@@ -103,7 +103,7 @@ class TestInputCommand:
         # With quoted prompt and comma (if supported)
         try:
             result3 = basic.process_command('INPUT "ENTER VALUE", X')
-            assert any(item.get('type' == 'input_request' for item in result3))
+            assert any(item.get('type') == 'input_request' for item in result3)
         except:
             pass  # May not be implemented
 
@@ -113,7 +113,7 @@ class TestInputCommand:
         try:
             result = basic.process_command('INPUT')
             if result:
-                assert any(item.get('type' == 'error' for item in result))
+                assert any(item.get('type') == 'error' for item in result)
         except:
             pass  # May throw exception instead
 
@@ -132,7 +132,7 @@ class TestInputCommand:
             basic.process_command('DIM A(5)')
             result3 = basic.process_command('INPUT A(3)')
             if result3 and not any(item.get('type') == 'error' for item in result3):
-                assert any(item.get('type' == 'input_request' for item in result3))
+                assert any(item.get('type') == 'input_request' for item in result3)
         except:
             pass  # May not be fully implemented
 
@@ -166,8 +166,8 @@ class TestInputCommand:
         text_outputs = [item for item in results if item.get('type') == 'text']
         input_requests = [item for item in results if item.get('type') == 'input_request']
         
-        assert len(text_outputs > 0, "Should have text output")
-        assert len(input_requests > 0, "Should have input requests")
+        assert len(text_outputs) > 0, "Should have text output"
+        assert len(input_requests) > 0, "Should have input requests"
         
         # Check first input request
         if input_requests:
@@ -188,7 +188,7 @@ class TestInputCommand:
         
         # Should get input request
         input_requests = [item for item in result if item.get('type') == 'input_request']
-        assert len(input_requests > 0)
+        assert len(input_requests) > 0
         
         # Simulate input response (this tests the mechanism exists)
         # Note: Full testing would require WebSocket simulation

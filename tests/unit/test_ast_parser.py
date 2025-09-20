@@ -460,3 +460,49 @@ class TestASTParser:
         expected = ['FOR I=ABS(START) TO LEN(S$) STEP 2', 'PRINT I', 'NEXT I']
         assert result is not None
         assert len(result) == len(expected)
+
+    def test_goto_statement_parsing(self, basic, helpers):
+        """Test GOTO statement parsing in AST parser"""
+        # Test simple GOTO
+        result = self.parser.parse_statement("GOTO 100")
+        assert result.node_type.value == 'goto_statement'
+        assert result.target_line is not None
+
+        # Test GOTO with variable expression
+        result = self.parser.parse_statement("GOTO I + 10")
+        assert result.node_type.value == 'goto_statement'
+        assert result.target_line is not None
+
+        # Test GOTO in colon-separated context
+        result = self.parser.parse_statement('PRINT "TEST": GOTO 50')
+        assert result.node_type.value == 'block'
+        assert len(result.statements) == 2
+        assert result.statements[0].node_type.value == 'print_statement'
+        assert result.statements[1].node_type.value == 'goto_statement'
+
+    def test_ast_converter_goto_statements(self, basic, helpers):
+        """Test AST converter handling of GOTO statements in control structures"""
+        # Test GOTO in IF THEN context - the exact bug pattern that was fixed
+        result = parse_and_convert_single_line('IF X=1 THEN PRINT "HI": GOTO 50', self.parser)
+        expected = ['IF X = 1 THEN', 'PRINT "HI"', 'GOTO 50', 'ENDIF']
+        assert result == expected
+
+        # Test GOTO with complex expression in IF THEN - now works with simple statements!
+        result = parse_and_convert_single_line('IF A>0 THEN GOTO A*10+5', self.parser)
+        expected = ['IF A > 0 THEN', 'GOTO (A * 10 + 5)', 'ENDIF']  # AST converter adds parentheses for complex expressions
+        assert result == expected
+
+        # Test multiple statements with GOTO in IF THEN
+        result = parse_and_convert_single_line('IF FLAG=1 THEN PRINT "JUMPING": COUNT=COUNT+1: GOTO DEST', self.parser)
+        expected = ['IF FLAG = 1 THEN', 'PRINT "JUMPING"', 'LET COUNT = COUNT + 1', 'GOTO DEST', 'ENDIF']  # AST converter adds LET for assignments
+        assert result == expected
+
+        # Test GOTO in FOR loop context
+        result = parse_and_convert_single_line('FOR I=1 TO 5: IF I=3 THEN GOTO 100: NEXT I', self.parser)
+        expected = ['FOR I = 1 TO 5', 'IF I = 3 THEN', 'GOTO 100', 'ENDIF', 'NEXT I']
+        assert result == expected
+
+        # Test simple GOTO in IF THEN (no colons)
+        result = parse_and_convert_single_line('IF X=5 THEN GOTO 100', self.parser)
+        expected = ['IF X = 5 THEN', 'GOTO 100', 'ENDIF']
+        assert result == expected
