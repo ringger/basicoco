@@ -1655,22 +1655,33 @@ class ASTEvaluator(ASTVisitor):
 
     def visit_goto_statement(self, node: GotoStatementNode) -> Any:
         """Visit GOTO statement"""
-        # Evaluate target line number
-        target_line = self.visit(node.target_line)
-        if not isinstance(target_line, (int, float)):
-            error = self.emulator.expression_evaluator.error_context.type_error(
-                "GOTO line number must be a number",
-                "number",
-                type(target_line).__name__,
+        try:
+            target_line = self.visit(node.target_line)
+            line_num = int(target_line)
+        except (ValueError, TypeError) as e:
+            error = self.emulator.error_context.syntax_error(
+                "SYNTAX ERROR: Invalid GOTO target",
+                self.emulator.current_line,
                 suggestions=[
-                    "Use: GOTO 1000",
-                    "Check that line number expression evaluates to a number"
+                    "Correct syntax: GOTO line_number",
+                    "Example: GOTO 100 or GOTO L where L is a numeric variable",
+                    "Line number must be a positive integer"
                 ]
             )
-            raise ValueError(error.format_message())
+            return [{'type': 'error', 'message': error.format_detailed()}]
 
-        line_num = int(target_line)
-        # Return same format as legacy execute_goto method
+        if line_num <= 0:
+            error = self.emulator.error_context.runtime_error(
+                f"Invalid line number {line_num}",
+                self.emulator.current_line,
+                suggestions=[
+                    "Line numbers must be positive integers",
+                    "Use line numbers that exist in your program",
+                    "Check with LIST command to see available lines"
+                ]
+            )
+            return [{'type': 'error', 'message': error.format_detailed()}]
+
         return [{'type': 'jump', 'line': line_num}]
 
     def visit_for_statement(self, node: ForStatementNode) -> Any:

@@ -79,3 +79,48 @@ class TestEndMigration:
         """After END via AST, the evaluator should be initialized"""
         basic._try_ast_execute('END')
         assert basic._ast_evaluator is not None
+
+
+class TestGotoMigration:
+    """Phase 2: GOTO command via AST execution"""
+
+    def test_goto_is_migrated(self, basic):
+        """GOTO should be in the migrated commands set"""
+        assert 'GOTO' in basic._ast_migrated_commands
+
+    def test_goto_via_ast_returns_jump(self, basic):
+        """GOTO should return a jump signal"""
+        result = basic._try_ast_execute('GOTO 100')
+        assert result == [{'type': 'jump', 'line': 100}]
+
+    def test_goto_via_ast_with_expression(self, basic):
+        """GOTO with expression should evaluate and jump"""
+        basic.variables['L'] = 50
+        result = basic._try_ast_execute('GOTO L')
+        assert result == [{'type': 'jump', 'line': 50}]
+
+    def test_goto_in_program(self, basic, helpers):
+        """GOTO in a program should skip lines"""
+        program = [
+            '10 GOTO 30',
+            '20 PRINT "SKIPPED"',
+            '30 PRINT "TARGET"',
+        ]
+        results = helpers.execute_program(basic, program)
+        output = helpers.get_text_output(results)
+        assert any('TARGET' in t for t in output)
+        assert not any('SKIPPED' in t for t in output)
+
+    def test_goto_invalid_target_error(self, basic):
+        """GOTO with invalid target should return error"""
+        basic.variables['A$'] = "HELLO"
+        result = basic._try_ast_execute('GOTO A$')
+        # Should either return error or fall back to registry
+        if result is not None:
+            assert any(item.get('type') == 'error' for item in result)
+
+    def test_goto_negative_line_error(self, basic):
+        """GOTO with negative line number should return error"""
+        result = basic._try_ast_execute('GOTO -5')
+        if result is not None:
+            assert any(item.get('type') == 'error' for item in result)
