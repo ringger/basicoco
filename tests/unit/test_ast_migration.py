@@ -530,3 +530,43 @@ class TestIfMigration:
         output = helpers.get_text_output(results)
         assert any('BIG' in t for t in output)
         assert not any('SMALL' in t for t in output)
+
+
+class TestInputMigration:
+    """Phase 12: INPUT command via AST execution"""
+
+    def test_input_is_migrated(self, basic):
+        """INPUT should be in the migrated commands set"""
+        assert 'INPUT' in basic._ast_migrated_commands
+
+    def test_input_with_prompt(self, basic):
+        """INPUT with prompt should return input_request"""
+        result = basic._try_ast_execute('INPUT "Enter value"; X')
+        assert result is not None
+        assert len(result) == 1
+        assert result[0]['type'] == 'input_request'
+        assert result[0]['prompt'] == 'Enter value'
+        assert result[0]['variable'] == 'X'
+
+    def test_input_without_prompt(self, basic):
+        """INPUT without prompt should use default '? '"""
+        result = basic._try_ast_execute('INPUT X')
+        assert result is not None
+        assert len(result) == 1
+        assert result[0]['type'] == 'input_request'
+        assert result[0]['variable'] == 'X'
+
+    def test_input_sets_waiting_flag(self, basic):
+        """INPUT should set waiting_for_input flag"""
+        basic._try_ast_execute('INPUT X')
+        assert basic.waiting_for_input is True
+
+    def test_input_stores_variables(self, basic):
+        """INPUT should store input variables list"""
+        basic._try_ast_execute('INPUT "Name"; N$')
+        assert 'N$' in basic.input_variables
+
+    def test_input_via_process_command(self, basic, helpers):
+        """INPUT through process_command should work"""
+        result = basic.process_command('INPUT "Enter"; X')
+        assert any(item.get('type') == 'input_request' for item in result)

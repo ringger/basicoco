@@ -1708,6 +1708,47 @@ class ASTEvaluator(ASTVisitor):
 
         return []
 
+    def visit_input_statement(self, node: InputStatementNode) -> Any:
+        """Visit INPUT statement - request input from user"""
+        # Extract prompt
+        if node.prompt:
+            prompt_text = self.visit(node.prompt)
+            if not isinstance(prompt_text, str):
+                prompt_text = str(prompt_text)
+        else:
+            prompt_text = "? "
+
+        # Extract variable names
+        variables = []
+        for var_node in node.variables:
+            if hasattr(var_node, 'name'):
+                variables.append(var_node.name.upper())
+            else:
+                variables.append(str(var_node).upper())
+
+        if not variables:
+            error = self.emulator.error_context.syntax_error(
+                "No variables specified in INPUT statement",
+                self.emulator.current_line,
+                suggestions=[
+                    'Correct syntax: INPUT variable1, variable2, ...',
+                    'Example: INPUT X, Y, NAME$',
+                    'Specify at least one variable to input'
+                ]
+            )
+            return [{'type': 'error', 'message': error.format_detailed()}]
+
+        # Store multi-variable INPUT state
+        self.emulator.input_variables = variables
+        self.emulator.input_prompt = prompt_text
+        self.emulator.current_input_index = 0
+
+        # Set flags and request input
+        self.emulator.waiting_for_input = True
+        self.emulator.program_counter = (self.emulator.current_line, self.emulator.current_sub_line)
+
+        return [{'type': 'input_request', 'prompt': prompt_text, 'variable': variables[0]}]
+
     def visit_end_statement(self, node: EndStatementNode) -> Any:
         """Visit END statement - stop program execution"""
         self.emulator.running = False
