@@ -20,10 +20,12 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
 class TestProgramManagementCommand:
     """Test program management commands"""
     
-    @pytest.fixture
+    @pytest.fixture(autouse=True)
     def temp_setup(self):
-        """Set up test environment with temporary directory"""
-        # Create a temporary directory for test files
+        """Set up test environment with temporary directory for all tests.
+
+        Autouse ensures file operations never pollute the real programs/ directory.
+        """
         temp_dir = tempfile.mkdtemp()
         original_cwd = os.getcwd()
 

@@ -23,10 +23,12 @@ class TestFileCommands:
                 return True
         pytest.fail(f"Text '{text}' not found in output")
 
-    @pytest.fixture
+    @pytest.fixture(autouse=True)
     def test_dir(self):
-        """Set up test environment with temporary directory"""
-        # Create a temporary directory for testing
+        """Set up test environment with temporary directory for all tests.
+
+        Autouse ensures file operations never pollute the real programs/ directory.
+        """
         test_directory = tempfile.mkdtemp(prefix='trs80_test_')
         original_cwd = os.getcwd()
         os.chdir(test_directory)
@@ -352,52 +354,3 @@ class TestFileCommands:
         for i, quoted_name in enumerate(quote_tests):
             result = basic.process_command(f'SAVE {quoted_name}')
             self.assert_output_contains(result, 'SAVED 1 LINES TO')
-
-    # Helper Methods  
-    def assert_output_contains(self, result, expected_text):
-        """Assert that command result contains expected text"""
-        output_text = ' '.join([item.get('text', item.get('message', '')) 
-                               for item in result])
-        if expected_text not in output_text:
-            raise AssertionError(f"Expected '{expected_text}' in output: {output_text}")
-    
-    def assertTrue(self, condition, message=""):
-        """Basic assertion helper"""
-        if not condition:
-            raise AssertionError(message or "Assertion failed")
-    
-    def assertFalse(self, condition, message=""):
-        """Basic assertion helper"""
-        if condition:
-            raise AssertionError(message or "Assertion failed")
-    
-    def assertEqual(self, first, second, message=""):
-        """Basic assertion helper"""
-        if first != second:
-            raise AssertionError(message or f"Expected {first} == {second}")
-    
-    def assertIn(self, member, container, message=""):
-        """Basic assertion helper"""
-        if member not in container:
-            raise AssertionError(message or f"Expected '{member}' in '{container}'")
-
-
-if __name__ == '__main__':
-    # Run the tests if this file is executed directly
-    test_suite = FileCommandsTest()
-    results = test_suite.run_all_tests()
-    
-    print(f"Test Results for {results.name}:")
-    print(f"  Total: {results.total_count}")
-    print(f"  Passed: {results.passed_count}")
-    print(f"  Failed: {results.failed_count}")
-    
-    if results.failed_count > 0:
-        print("\nFailed Tests:")
-        for result in results.results:
-            if not result.passed:
-                print(f"  ❌ {result.name}: {result.message}")
-                if result.traceback:
-                    print(f"     {result.traceback}")
-    
-    print(f"\nSuccess rate: {results.success_rate:.1%}")

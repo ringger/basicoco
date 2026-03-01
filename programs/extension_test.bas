@@ -1,1 +1,0 @@
-10 PRINT "EXT TEST"
