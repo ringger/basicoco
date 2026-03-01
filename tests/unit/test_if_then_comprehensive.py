@@ -11,7 +11,6 @@ import os
 # Add project root to path for imports
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
 
-from test_base import BaseTestCase
 
 
 class TestIfThenComprehensive:

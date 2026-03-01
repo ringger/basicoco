@@ -13,7 +13,6 @@ import time
 import pytest
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..'))
 
-from test_base import BaseTestCase
 from emulator.output_manager import (
     StreamingOutputManager, OutputMessage, OutputType, OutputPriority,
     TypeFilter, PriorityFilter, DebugFilter, LegacyOutputAdapter
