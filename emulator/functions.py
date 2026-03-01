@@ -727,8 +727,8 @@ def fn_inkey(evaluator, args: List[Any]) -> str:
         raise ValueError("INKEY$ takes no arguments")
     
     # Get key from emulator's keyboard buffer
-    if evaluator.emulator.keyboard_buffer:
-        return evaluator.emulator.keyboard_buffer.pop(0)
+    if evaluator.keyboard_buffer:
+        return evaluator.keyboard_buffer.pop(0)
     return ""
 
 # ============================================================================

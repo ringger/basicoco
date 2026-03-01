@@ -76,9 +76,8 @@ class TestEndMigration:
         assert basic.running is False
 
     def test_end_ast_uses_evaluator(self, basic):
-        """After END via AST, the evaluator should be initialized"""
-        basic._try_ast_execute('END')
-        assert basic._ast_evaluator is not None
+        """The AST evaluator should be initialized at construction"""
+        assert basic.ast_evaluator is not None
 
 
 class TestGotoMigration:
@@ -564,7 +563,7 @@ class TestInputMigration:
     def test_input_stores_variables(self, basic):
         """INPUT should store input variables list"""
         basic._try_ast_execute('INPUT "Name"; N$')
-        assert 'N$' in basic.input_variables
+        assert any(v['name'] == 'N$' for v in basic.input_variables)
 
     def test_input_via_process_command(self, basic, helpers):
         """INPUT through process_command should work"""

@@ -240,3 +240,21 @@ class TestPrintCommand:
         result = basic.process_command('PRINT "";"";"CONTENT";""')
         assert len(result) > 0 and result[0]['type'] == 'text'
         assert 'CONTENT' in result[0]['text']
+
+
+class TestPrintOkNotSuppressed:
+    """Regression: PRINT "OK" in a program must not be filtered out."""
+
+    def test_print_ok_in_program(self, basic, helpers):
+        program = [
+            '10 PRINT "OK"',
+            '20 END',
+        ]
+        results = helpers.execute_program(basic, program)
+        text = helpers.get_text_output(results)
+        assert 'OK' in text
+
+    def test_print_ok_immediate(self, basic, helpers):
+        result = basic.process_command('PRINT "OK"')
+        text = helpers.get_text_output(result)
+        assert 'OK' in text

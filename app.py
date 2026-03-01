@@ -103,7 +103,7 @@ def handle_command(data):
             for key in keys_to_remove:
                 del basic.expanded_program[key]
         
-        emit('output', [{'type': 'text', 'text': 'OK'}])
+        emit('output', basic._system_ok())
         emit('output', [{'type': 'command_complete'}])
     else:
         # Execute immediate command
@@ -157,30 +157,26 @@ def handle_input_response(data):
     
     # Process the input value and continue program execution
     try:
-        # Store the input value in the variable
-        if variable.endswith('$'):
-            # String variable
-            basic.variables[variable] = str(value)
+        # Find the current variable descriptor from input_variables
+        if hasattr(basic, 'input_variables') and basic.input_variables:
+            var_desc = basic.input_variables[basic.current_input_index]
         else:
-            # Numeric variable - try to convert to number
-            try:
-                if '.' in value or 'E' in value.upper():
-                    basic.variables[variable] = float(value)
-                else:
-                    basic.variables[variable] = int(value)
-            except ValueError:
-                # If conversion fails, treat as 0
-                basic.variables[variable] = 0
-        
+            var_desc = variable  # plain string fallback
+        basic.store_input_value(var_desc, value)
+
         # Check if we're in multi-variable INPUT mode
         if hasattr(basic, 'input_variables') and basic.input_variables:
             basic.current_input_index += 1
-            
+
             # Check if there are more variables to input
             if basic.current_input_index < len(basic.input_variables):
                 # Request input for the next variable
-                next_variable = basic.input_variables[basic.current_input_index]
-                output = [{'type': 'input_request', 'prompt': basic.input_prompt, 'variable': next_variable}]
+                next_var = basic.input_variables[basic.current_input_index]
+                if isinstance(next_var, dict):
+                    next_name = next_var['name']
+                else:
+                    next_name = next_var
+                output = [{'type': 'input_request', 'prompt': basic.input_prompt, 'variable': next_name}]
                 emit('output', output)
                 return
             else:

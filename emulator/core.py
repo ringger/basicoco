@@ -10,7 +10,9 @@ from .parser import BasicParser
 from .graphics import BasicGraphics
 from .variables import VariableManager
 from .commands import CommandRegistry
-from .expressions import ExpressionEvaluator
+from .expressions import FunctionRegistry
+from .functions import register_all_functions
+from .ast_parser import ASTParser, ASTEvaluator
 from .output_manager import StreamingOutputManager, LegacyOutputAdapter, OutputType
 from .error_context import ErrorContextManager
 
@@ -68,12 +70,14 @@ class CoCoBasic:
         self.graphics = BasicGraphics(self)
         self.variable_manager = VariableManager(self)
         
-        # Initialize expression evaluator
-        self.expression_evaluator = ExpressionEvaluator(self)
+        # Initialize AST parser/evaluator and function registry
+        self.function_registry = FunctionRegistry()
+        register_all_functions(self.function_registry)
+        self.ast_parser = ASTParser()
+        self.ast_evaluator = ASTEvaluator(self)
 
         # AST-based execution: commands in this set use AST parse+visit instead of registry
         self._ast_migrated_commands = {'END', 'GOTO', 'LET', 'PRINT', 'GOSUB', 'RETURN', 'FOR', 'EXIT', 'WHILE', 'DO', 'IF', 'INPUT'}
-        self._ast_evaluator = None  # Lazy-initialized ASTEvaluator
 
         # Initialize command registry
         self.command_registry = CommandRegistry()
@@ -108,7 +112,21 @@ class CoCoBasic:
     def key_buffer(self, value):
         """Compatibility property for tests"""
         self.keyboard_buffer = value
-        
+
+    @property
+    def expression_evaluator(self):
+        """Compatibility property — expression evaluation now lives on CoCoBasic directly."""
+        return self
+
+    def evaluate(self, expr, line=1):
+        """Alias for evaluate_expression (compatibility with old ExpressionEvaluator API)."""
+        return self.evaluate_expression(expr, line)
+
+    @staticmethod
+    def _system_ok():
+        """Return a system OK acknowledgment (not user-generated output)."""
+        return [{'type': 'text', 'text': 'OK', 'source': 'system'}]
+
     def get_reserved_function_names(self):
         """Return list of reserved function names that cannot be used as variable/array names"""
         return ['LEFT$', 'RIGHT$', 'MID$', 'LEN', 'ABS', 'INT', 'RND', 'SQR', 
@@ -138,8 +156,8 @@ class CoCoBasic:
                 keys_to_remove = [key for key in self.expanded_program.keys() if key[0] == line_num]
                 for key in keys_to_remove:
                     del self.expanded_program[key]
-            return [{'type': 'text', 'text': 'OK'}]
-        
+            return self._system_ok()
+
         # Try command registry first (plugin-like architecture)
         result = self.command_registry.execute(command)
         if result is not None:
@@ -158,7 +176,7 @@ class CoCoBasic:
         self.program.clear()
         self.expanded_program.clear()
         self.variable_manager.clear_variables()
-        return [{'type': 'text', 'text': 'OK'}]
+        return self._system_ok()
     
     def clear_variables(self, args):
         """BASIC CLEAR command - clears variables, optionally sets string space"""
@@ -185,7 +203,7 @@ class CoCoBasic:
         else:
             # CLEAR with no arguments - just clear variables
             self.variable_manager.clear_variables()
-            return [{'type': 'text', 'text': 'OK'}]
+            return self._system_ok()
     
     def load_program(self, filename):
         """Load a BASIC program from a file"""
@@ -459,8 +477,8 @@ class CoCoBasic:
         
         # Parse arguments if provided (e.g., FILES 4 or FILES 8,256)
         # but ignore them since we don't need to reserve buffers
-        
-        return [{'type': 'text', 'text': 'OK'}]
+
+        return self._system_ok()
     
     def drive_command(self, args=None):
         """DRIVE command - Set default drive (no-op in modern implementation)"""
@@ -470,8 +488,8 @@ class CoCoBasic:
         
         # Parse drive number if provided (e.g., DRIVE 0)
         # but ignore it since we use filesystem paths directly
-        
-        return [{'type': 'text', 'text': 'OK'}]
+
+        return self._system_ok()
     
     def kill_file(self, filename):
         """Delete a BASIC program file with confirmation"""
@@ -643,7 +661,7 @@ class CoCoBasic:
             # Try AST conversion for single-line control structures
             try:
                 from .ast_converter import parse_and_convert_single_line
-                converted = parse_and_convert_single_line(code, self.expression_evaluator.ast_parser)
+                converted = parse_and_convert_single_line(code, self.ast_parser)
 
                 if converted:
                     # Add converted statements as sublines
@@ -657,6 +675,246 @@ class CoCoBasic:
 
         # Use BasicParser for normal statements
         return BasicParser.expand_line_to_sublines(line_num, code, self.expanded_program)
+
+    # ------------------------------------------------------------------
+    # Shared execution engine
+    # ------------------------------------------------------------------
+
+    def _save_resume_point(self, current_pos_index, all_positions):
+        """Save the program counter to the next position for later resumption."""
+        if current_pos_index + 1 < len(all_positions):
+            self.program_counter = all_positions[current_pos_index + 1]
+        else:
+            self.program_counter = None
+
+    def _find_line_position(self, target_line, all_positions):
+        """Find the first sub-line position for a given line number.
+
+        Returns the index into *all_positions*, or ``None`` if not found.
+        """
+        for i, (ln, _si) in enumerate(all_positions):
+            if ln == target_line:
+                return i
+        return None
+
+    def _skip_to_keyword(self, keyword, current_pos_index, all_positions):
+        """Search forward for a statement starting with *keyword*.
+
+        Returns the index of the matching position, or ``None``.
+        """
+        keyword_upper = keyword.upper()
+        for pos_idx in range(current_pos_index + 1, len(all_positions)):
+            stmt = self.expanded_program.get(all_positions[pos_idx], '')
+            if stmt.strip().upper().startswith(keyword_upper):
+                return pos_idx
+        return None
+
+    def _skip_to_next(self, var_name, current_pos_index, all_positions):
+        """Search forward for a matching NEXT statement.
+
+        Returns the index of the matching NEXT, or ``None``.
+        """
+        for pos_idx in range(current_pos_index + 1, len(all_positions)):
+            stmt = self.expanded_program.get(all_positions[pos_idx], '').strip()
+            if stmt.startswith('NEXT'):
+                parts = stmt.split()
+                if len(parts) == 1 or (len(parts) > 1 and parts[1] == var_name):
+                    return pos_idx
+        return None
+
+    def _skip_if_or_else_block(self, current_pos_index, all_positions, stop_at_else):
+        """Skip forward through nested IF blocks.
+
+        If *stop_at_else* is True, stop at a matching ELSE or ENDIF.
+        If False, stop only at a matching ENDIF.
+
+        Returns (new_pos_index, jumped).
+        """
+        nest_level = 0
+        for pos_idx in range(current_pos_index + 1, len(all_positions)):
+            stmt = self.expanded_program.get(all_positions[pos_idx], '').strip().upper()
+            if 'IF' in stmt and 'THEN' in stmt:
+                nest_level += 1
+            elif stop_at_else and stmt.startswith('ELSE') and nest_level == 0:
+                return pos_idx, True
+            elif stmt.startswith('ENDIF'):
+                if nest_level == 0:
+                    if stop_at_else:
+                        return pos_idx + 1, True
+                    else:
+                        return pos_idx, True
+                else:
+                    nest_level -= 1
+        return current_pos_index, False
+
+    def _handle_flow_control(self, result, current_pos_index, all_positions, output):
+        """Process flow-control items from a statement result.
+
+        Returns ``(new_pos_index, action)`` where *action* is:
+        - ``'next'``   – advance to *new_pos_index* normally
+        - ``'jumped'`` – jump to *new_pos_index* (don't increment)
+        - ``'return'`` – return *output* immediately (INPUT / PAUSE pause)
+        - ``'stop'``   – stop execution
+        """
+        # --- INPUT / PAUSE: return immediately so caller can yield control ---
+        for item in result:
+            if item.get('type') == 'input_request':
+                self._save_resume_point(current_pos_index, all_positions)
+                self.waiting_for_input = True
+                self.running = False
+                output.append(item)
+                return current_pos_index, 'return'
+            if item.get('type') == 'pause':
+                self._save_resume_point(current_pos_index, all_positions)
+                self.waiting_for_pause_continuation = True
+                self.running = False
+                output.append(item)
+                return current_pos_index, 'return'
+
+        # --- Jump / flow-control directives ---
+        for item in result:
+            item_type = item.get('type')
+
+            if item_type == 'jump':
+                idx = self._find_line_position(item['line'], all_positions)
+                if idx is not None:
+                    return idx, 'jumped'
+                output.append({'type': 'error', 'message': f"UNDEFINED LINE {item['line']}"})
+                return current_pos_index, 'stop'
+
+            elif item_type == 'jump_after_for':
+                for_pos = (item['for_line'], item.get('for_sub_line', 0))
+                if for_pos in all_positions:
+                    return all_positions.index(for_pos) + 1, 'jumped'
+                output.append({'type': 'error', 'message': f"UNDEFINED FOR LINE {item['for_line']}"})
+                return current_pos_index, 'stop'
+
+            elif item_type == 'jump_return':
+                return_line = item['line']
+                return_sub_line = item['sub_line']
+                # Find first sub-line after the GOSUB call
+                for i, (ln, si) in enumerate(all_positions):
+                    if ln == return_line and si > return_sub_line:
+                        return i, 'jumped'
+                # Try next line
+                for i, (ln, _si) in enumerate(all_positions):
+                    if ln > return_line:
+                        return i, 'jumped'
+                return current_pos_index + 1, 'jumped'
+
+            elif item_type == 'skip_for_loop':
+                idx = self._skip_to_next(item['var'], current_pos_index, all_positions)
+                if idx is not None:
+                    return idx + 1, 'jumped'
+                output.append({'type': 'error', 'message': 'FOR WITHOUT NEXT'})
+                return current_pos_index, 'stop'
+
+            elif item_type == 'skip_while_loop':
+                idx = self._skip_to_keyword('WEND', current_pos_index, all_positions)
+                if idx is not None:
+                    return idx + 1, 'jumped'
+                output.append({'type': 'error', 'message': 'WHILE WITHOUT WEND'})
+                return current_pos_index, 'stop'
+
+            elif item_type == 'jump_after_while':
+                pos = (item['while_line'], item['while_sub_line'])
+                if pos in all_positions:
+                    return all_positions.index(pos) + 1, 'jumped'
+                return current_pos_index + 1, 'next'
+
+            elif item_type == 'skip_do_loop':
+                idx = self._skip_to_keyword('LOOP', current_pos_index, all_positions)
+                if idx is not None:
+                    return idx + 1, 'jumped'
+                output.append({'type': 'error', 'message': 'DO WITHOUT LOOP'})
+                return current_pos_index, 'stop'
+
+            elif item_type == 'jump_after_do':
+                pos = (item['do_line'], item['do_sub_line'])
+                if pos in all_positions:
+                    return all_positions.index(pos) + 1, 'jumped'
+                return current_pos_index + 1, 'next'
+
+            elif item_type == 'exit_for_loop':
+                if self.for_stack:
+                    var_name = self.for_stack[-1]['var']
+                    self.for_stack.pop()
+                    idx = self._skip_to_next(var_name, current_pos_index, all_positions)
+                    if idx is not None:
+                        return idx + 1, 'jumped'
+                return current_pos_index + 1, 'jumped'
+
+            elif item_type == 'skip_if_block':
+                new_idx, found = self._skip_if_or_else_block(
+                    current_pos_index, all_positions, stop_at_else=True)
+                if found:
+                    return new_idx, 'jumped'
+                output.append({'type': 'error', 'message': 'IF WITHOUT ENDIF'})
+                return current_pos_index, 'stop'
+
+            elif item_type == 'skip_else_block':
+                new_idx, found = self._skip_if_or_else_block(
+                    current_pos_index, all_positions, stop_at_else=False)
+                if found:
+                    return new_idx, 'jumped'
+                output.append({'type': 'error', 'message': 'ELSE WITHOUT ENDIF'})
+                return current_pos_index, 'stop'
+
+            elif item_type != 'input_request':
+                # Regular output — filter system OK messages
+                if not item.get('source') == 'system':
+                    output.append(item)
+                    self.emit_output([item])
+                if item.get('type') == 'error':
+                    self.running = False
+                    self.call_stack.clear()
+                    self.for_stack.clear()
+                    return current_pos_index, 'stop'
+
+        return current_pos_index + 1, 'next'
+
+    def _execute_statements_loop(self, all_positions, start_index):
+        """Shared execution loop used by run_program, continue_program_execution,
+        and execute_cont.  Returns the accumulated output list."""
+        output = []
+        current_pos_index = start_index
+
+        while current_pos_index < len(all_positions) and self.running:
+            # Safety check
+            if self.safety_enabled:
+                self.iteration_count += 1
+                if self.iteration_count > self.max_iterations:
+                    output.append({'type': 'error', 'message': 'PROGRAM STOPPED - TOO MANY ITERATIONS'})
+                    self.running = False
+                    break
+
+            line_num, sub_index = all_positions[current_pos_index]
+            self.current_line = line_num
+            self.current_sub_line = sub_index
+            statement = self.expanded_program[(line_num, sub_index)]
+
+            result = self.process_statement(statement)
+
+            if result:
+                new_pos, action = self._handle_flow_control(
+                    result, current_pos_index, all_positions, output)
+                if action == 'return':
+                    return output
+                elif action == 'stop':
+                    self.running = False
+                    break
+                elif action == 'jumped':
+                    current_pos_index = new_pos
+                else:  # 'next'
+                    current_pos_index = new_pos
+            else:
+                current_pos_index += 1
+
+        return output
+
+    # ------------------------------------------------------------------
+    # Public execution entry points
+    # ------------------------------------------------------------------
 
     def run_program(self, clear_variables=True):
         if not self.program:
@@ -691,265 +949,10 @@ class CoCoBasic:
                 self.execute_data(data_args)
         self.running = preprocessing_running  # Restore running flag
         
-        # Get all sub-line positions sorted by (line_num, sub_index)
         all_positions = sorted(self.expanded_program.keys())
-        current_pos_index = 0
-        
-        while current_pos_index < len(all_positions) and self.running:
-            # Safety check for infinite loops
-            if self.safety_enabled:
-                self.iteration_count += 1
-                if self.iteration_count > self.max_iterations:
-                    output.append({'type': 'error', 'message': 'PROGRAM STOPPED - TOO MANY ITERATIONS'})
-                    self.running = False
-                    break
-            
-            # Get current position and statement
-            line_num, sub_index = all_positions[current_pos_index]
-            self.current_line = line_num
-            self.current_sub_line = sub_index
-            statement = self.expanded_program[(line_num, sub_index)]
-            
-            # Execute the single statement (not multi-statement since we've already expanded)
-            result = self.process_statement(statement)
-            
-            if result:
-                # Check for INPUT and PAUSE requests first
-                for item in result:
-                    if item.get('type') == 'input_request':
-                        # Save our position so we can resume
-                        if current_pos_index + 1 < len(all_positions):
-                            self.program_counter = all_positions[current_pos_index + 1]
-                        else:
-                            self.program_counter = None
-                        self.waiting_for_input = True
-                        self.running = False  # Pause execution
-                        output.append(item)
-                        return output  # Return immediately with input request
-                    elif item.get('type') == 'pause':
-                        # Save our position so we can resume after pause
-                        if current_pos_index + 1 < len(all_positions):
-                            self.program_counter = all_positions[current_pos_index + 1]
-                        else:
-                            self.program_counter = None
-                        self.waiting_for_pause_continuation = True
-                        self.running = False  # Pause execution
-                        output.append(item)
-                        return output  # Return immediately with pause request
-                
-                # Handle jump commands
-                jumped = False
-                for item in result:
-                    if item.get('type') == 'jump':
-                        target_line = item['line']
-                        # Find the first sub-line of the target line
-                        target_positions = [(ln, si) for ln, si in all_positions if ln == target_line]
-                        if target_positions:
-                            current_pos_index = all_positions.index(target_positions[0])
-                            jumped = True
-                            break
-                        else:
-                            output.append({'type': 'error', 'message': f'UNDEFINED LINE {target_line}'})
-                            self.running = False
-                            break
-                    elif item.get('type') == 'jump_after_for':
-                        # Jump to the sub-line after the FOR sub-line
-                        for_line = item['for_line']
-                        for_sub_line = item.get('for_sub_line', 0)
-                        
-                        # Find the exact FOR position using both line and sub_line
-                        for_position = (for_line, for_sub_line)
-                        if for_position in all_positions:
-                            for_index = all_positions.index(for_position)
-                            # Jump to the next sub-line (after the FOR)
-                            current_pos_index = for_index + 1
-                            jumped = True
-                            break
-                        else:
-                            output.append({'type': 'error', 'message': f'UNDEFINED FOR LINE {for_line}'})
-                            self.running = False
-                            break
-                    elif item.get('type') == 'jump_return':
-                        # RETURN from GOSUB - jump to specific sub-line position
-                        return_line = item['line']
-                        return_sub_line = item['sub_line']
-                        
-                        # Find the position after the GOSUB call
-                        return_positions = [(ln, si) for ln, si in all_positions if ln == return_line]
-                        if return_positions:
-                            # Find the sub-line that matches or is after the return_sub_line
-                            for pos in return_positions:
-                                if pos[1] > return_sub_line:
-                                    current_pos_index = all_positions.index(pos)
-                                    jumped = True
-                                    break
-                            else:
-                                # If no later sub-line found, jump to next line
-                                next_line_positions = [(ln, si) for ln, si in all_positions if ln > return_line]
-                                if next_line_positions:
-                                    current_pos_index = all_positions.index(next_line_positions[0])
-                                    jumped = True
-                        
-                        if not jumped:
-                            # If can't find return position, just continue
-                            current_pos_index += 1
-                            jumped = True
-                        break
-                    elif item.get('type') == 'skip_for_loop':
-                        # Skip to after the matching NEXT for this variable
-                        var_name = item['var']
-                        # Find the matching NEXT statement
-                        for pos_idx in range(current_pos_index + 1, len(all_positions)):
-                            check_line, check_sub = all_positions[pos_idx]
-                            check_statement = self.expanded_program.get((check_line, check_sub), '')
-                            if check_statement.strip().startswith('NEXT'):
-                                # Check if it's the matching NEXT (same variable or no variable)
-                                next_parts = check_statement.strip().split()
-                                if len(next_parts) == 1 or next_parts[1] == var_name:
-                                    # Jump to the position after this NEXT
-                                    current_pos_index = pos_idx + 1
-                                    jumped = True
-                                    break
-                        if not jumped:
-                            output.append({'type': 'error', 'message': f'FOR WITHOUT NEXT'})
-                            self.running = False
-                            break
-                        break
-                    elif item.get('type') == 'skip_while_loop':
-                        # Skip to matching WEND
-                        for pos_idx in range(current_pos_index + 1, len(all_positions)):
-                            check_line, check_sub = all_positions[pos_idx]
-                            check_statement = self.expanded_program.get((check_line, check_sub), '')
-                            if check_statement.strip().upper().startswith('WEND'):
-                                current_pos_index = pos_idx + 1
-                                jumped = True
-                                break
-                        if not jumped:
-                            output.append({'type': 'error', 'message': 'WHILE WITHOUT WEND'})
-                            self.running = False
-                            break
-                        break
-                    elif item.get('type') == 'jump_after_while':
-                        # Jump back to after WHILE statement
-                        while_line = item['while_line']
-                        while_sub_line = item['while_sub_line']
-                        while_position = (while_line, while_sub_line)
-                        if while_position in all_positions:
-                            while_index = all_positions.index(while_position)
-                            current_pos_index = while_index + 1
-                            jumped = True
-                        break
-                    elif item.get('type') == 'skip_do_loop':
-                        # Skip to matching LOOP
-                        for pos_idx in range(current_pos_index + 1, len(all_positions)):
-                            check_line, check_sub = all_positions[pos_idx]
-                            check_statement = self.expanded_program.get((check_line, check_sub), '')
-                            if check_statement.strip().upper().startswith('LOOP'):
-                                current_pos_index = pos_idx + 1
-                                jumped = True
-                                break
-                        if not jumped:
-                            output.append({'type': 'error', 'message': 'DO WITHOUT LOOP'})
-                            self.running = False
-                            break
-                        break
-                    elif item.get('type') == 'jump_after_do':
-                        # Jump back to after DO statement
-                        do_line = item['do_line']
-                        do_sub_line = item['do_sub_line']
-                        do_position = (do_line, do_sub_line)
-                        if do_position in all_positions:
-                            do_index = all_positions.index(do_position)
-                            current_pos_index = do_index + 1
-                            jumped = True
-                        break
-                    elif item.get('type') == 'exit_for_loop':
-                        # Exit FOR loop - skip to after matching NEXT
-                        if self.for_stack:
-                            var_name = self.for_stack[-1]['var']
-                            # First pop the for_stack since we're exiting
-                            self.for_stack.pop()
-                            for pos_idx in range(current_pos_index + 1, len(all_positions)):
-                                check_line, check_sub = all_positions[pos_idx]
-                                check_statement = self.expanded_program.get((check_line, check_sub), '')
-                                if check_statement.strip().startswith('NEXT'):
-                                    next_parts = check_statement.strip().split()
-                                    if len(next_parts) == 1 or (len(next_parts) > 1 and next_parts[1] == var_name):
-                                        current_pos_index = pos_idx + 1
-                                        jumped = True
-                                        break
-                            if not jumped:
-                                # Continue execution after current position
-                                current_pos_index += 1
-                                jumped = True
-                        break
-                    elif item.get('type') == 'skip_if_block':
-                        # Skip to matching ELSE or ENDIF (handle nesting)
-                        nest_level = 0
-                        for pos_idx in range(current_pos_index + 1, len(all_positions)):
-                            check_line, check_sub = all_positions[pos_idx]
-                            check_statement = self.expanded_program.get((check_line, check_sub), '')
-                            statement_upper = check_statement.strip().upper()
-                            
-                            if 'IF' in statement_upper and 'THEN' in statement_upper:
-                                nest_level += 1
-                            elif statement_upper.startswith('ELSE') and nest_level == 0:
-                                current_pos_index = pos_idx
-                                jumped = True
-                                break
-                            elif statement_upper.startswith('ENDIF'):
-                                if nest_level == 0:
-                                    current_pos_index = pos_idx + 1
-                                    jumped = True
-                                    break
-                                else:
-                                    nest_level -= 1
-                        if not jumped:
-                            output.append({'type': 'error', 'message': 'IF WITHOUT ENDIF'})
-                            self.running = False
-                            break
-                        break
-                    elif item.get('type') == 'skip_else_block':
-                        # Skip to matching ENDIF (handle nesting)
-                        nest_level = 0
-                        for pos_idx in range(current_pos_index + 1, len(all_positions)):
-                            check_line, check_sub = all_positions[pos_idx]
-                            check_statement = self.expanded_program.get((check_line, check_sub), '')
-                            statement_upper = check_statement.strip().upper()
-                            
-                            if 'IF' in statement_upper and 'THEN' in statement_upper:
-                                nest_level += 1
-                            elif statement_upper.startswith('ENDIF'):
-                                if nest_level == 0:
-                                    current_pos_index = pos_idx
-                                    jumped = True
-                                    break
-                                else:
-                                    nest_level -= 1
-                        if not jumped:
-                            output.append({'type': 'error', 'message': 'ELSE WITHOUT ENDIF'})
-                            self.running = False
-                            break
-                        break
-                    elif item.get('type') != 'input_request':  # Skip input_request as we handled it above
-                        # During program execution, filter out "OK" messages
-                        if not (item.get('type') == 'text' and item.get('text') == 'OK'):
-                            output.append(item)
-                            # Emit output immediately for real-time streaming
-                            self.emit_output([item])
-                        # Check if this is an error that should halt execution
-                        if item.get('type') == 'error':
-                            self.running = False
-                            self.call_stack.clear()  # Clear call stack on error
-                            self.for_stack.clear()   # Clear FOR stack on error
-                            break
-                
-                if not jumped:
-                    current_pos_index += 1
-            else:
-                current_pos_index += 1
-        
-        self.running = False
+        output = self._execute_statements_loop(all_positions, 0)
+        if not self.waiting_for_input and not self.waiting_for_pause_continuation:
+            self.running = False
         return output
     
     def continue_program_execution(self):
@@ -969,138 +972,22 @@ class CoCoBasic:
         if hasattr(self, 'waiting_for_pause_continuation') and self.waiting_for_pause_continuation:
             self.waiting_for_pause_continuation = False
         
-        output = []
         self.running = True
-        
-        # Get all sub-line positions sorted by (line_num, sub_index)
         all_positions = sorted(self.expanded_program.keys())
-        
-        # Find the index of the current program counter position
+
         try:
-            current_pos_index = all_positions.index(self.program_counter)
+            start_index = all_positions.index(self.program_counter)
         except ValueError:
-            # Current position not found, end program
             self.running = False
             self.program_counter = None
             return []
-        
-        while current_pos_index < len(all_positions) and self.running:
-            # Safety check for infinite loops
-            if self.safety_enabled:
-                self.iteration_count += 1
-                if self.iteration_count > self.max_iterations:
-                    output.append({'type': 'error', 'message': 'PROGRAM STOPPED - TOO MANY ITERATIONS'})
-                    self.running = False
-                    break
-            
-            # Get current position and statement
-            line_num, sub_index = all_positions[current_pos_index]
-            self.current_line = line_num
-            self.current_sub_line = sub_index
-            statement = self.expanded_program[(line_num, sub_index)]
-            
-            # Execute the single statement
-            result = self.process_statement(statement)
-            
-            if result:
-                # Check for INPUT and PAUSE requests first
-                for item in result:
-                    if item.get('type') == 'input_request':
-                        # Save our position so we can resume
-                        if current_pos_index + 1 < len(all_positions):
-                            self.program_counter = all_positions[current_pos_index + 1]
-                        else:
-                            self.program_counter = None
-                        self.waiting_for_input = True
-                        self.running = False  # Pause execution
-                        output.append(item)
-                        return output  # Return immediately with input request
-                    elif item.get('type') == 'pause':
-                        # Save our position so we can resume after pause
-                        if current_pos_index + 1 < len(all_positions):
-                            self.program_counter = all_positions[current_pos_index + 1]
-                        else:
-                            self.program_counter = None
-                        self.waiting_for_pause_continuation = True
-                        self.running = False  # Pause execution
-                        output.append(item)
-                        return output  # Return immediately with pause request
-                
-                # Handle jump commands (same logic as run_program)
-                jumped = False
-                for item in result:
-                    if item.get('type') == 'jump':
-                        target_line = item['line']
-                        target_positions = [(ln, si) for ln, si in all_positions if ln == target_line]
-                        if target_positions:
-                            current_pos_index = all_positions.index(target_positions[0])
-                            jumped = True
-                            break
-                        else:
-                            output.append({'type': 'error', 'message': f'UNDEFINED LINE {target_line}'})
-                            self.running = False
-                            break
-                    elif item.get('type') == 'jump_after_for':
-                        for_line = item['for_line']
-                        for_positions = [(ln, si) for ln, si in all_positions if ln == for_line]
-                        if for_positions:
-                            for_pos = for_positions[0]
-                            for_index = all_positions.index(for_pos)
-                            current_pos_index = for_index + 1
-                            jumped = True
-                            break
-                        else:
-                            output.append({'type': 'error', 'message': f'UNDEFINED FOR LINE {for_line}'})
-                            self.running = False
-                            break
-                    elif item.get('type') == 'jump_return':
-                        # RETURN from GOSUB - jump to specific sub-line position
-                        return_line = item['line']
-                        return_sub_line = item['sub_line']
-                        
-                        # Find the position after the GOSUB call
-                        return_positions = [(ln, si) for ln, si in all_positions if ln == return_line]
-                        if return_positions:
-                            # Find the sub-line that matches or is after the return_sub_line
-                            for pos in return_positions:
-                                if pos[1] > return_sub_line:
-                                    current_pos_index = all_positions.index(pos)
-                                    jumped = True
-                                    break
-                            else:
-                                # If no later sub-line found, jump to next line
-                                next_line_positions = [(ln, si) for ln, si in all_positions if ln > return_line]
-                                if next_line_positions:
-                                    current_pos_index = all_positions.index(next_line_positions[0])
-                                    jumped = True
-                        
-                        if not jumped:
-                            # If can't find return position, just continue
-                            current_pos_index += 1
-                            jumped = True
-                        break
-                    elif item.get('type') != 'input_request':
-                        # During program execution, filter out "OK" messages
-                        if not (item.get('type') == 'text' and item.get('text') == 'OK'):
-                            output.append(item)
-                            # Emit output immediately for real-time streaming
-                            self.emit_output([item])
-                        # Check if this is an error that should halt execution
-                        if item.get('type') == 'error':
-                            self.running = False
-                            self.call_stack.clear()  # Clear call stack on error
-                            self.for_stack.clear()   # Clear FOR stack on error
-                            break
-                
-                if not jumped:
-                    current_pos_index += 1
-            else:
-                current_pos_index += 1
-        
-        self.running = False
-        self.program_counter = None
+
+        output = self._execute_statements_loop(all_positions, start_index)
+        if not self.waiting_for_input and not self.waiting_for_pause_continuation:
+            self.running = False
+            self.program_counter = None
         return output
-    
+
     def split_statements(self, code):
         """Split a line into statements on colons, but respect quoted strings"""
         statements = []
@@ -1143,7 +1030,7 @@ class CoCoBasic:
             # Try to convert single-line control structure to multi-line using AST parser
             try:
                 from .ast_converter import parse_and_convert_single_line
-                converted = parse_and_convert_single_line(code, self.expression_evaluator.ast_parser)
+                converted = parse_and_convert_single_line(code, self.ast_parser)
 
                 if converted:
                     # For immediate mode, create a temporary program entry and reuse run_program logic
@@ -1210,12 +1097,12 @@ class CoCoBasic:
             # Don't clear variables since we want to preserve the current variable state
             results = self.run_program(clear_variables=False)
 
-            # Filter out any "OK" messages and other program-mode artifacts
+            # Filter out system OK messages and other program-mode artifacts
             filtered_results = []
             for item in results:
                 if isinstance(item, dict):
-                    if item.get('type') == 'text' and item.get('text') == 'OK':
-                        continue  # Skip OK messages
+                    if item.get('source') == 'system':
+                        continue  # Skip system messages
                     elif item.get('type') in ['program_end', 'program_start']:
                         continue  # Skip program control messages
 
@@ -1277,11 +1164,8 @@ class CoCoBasic:
             return [{'type': 'error', 'message': error.format_detailed()}]
 
         try:
-            ast_node = self.expression_evaluator.ast_parser.parse_statement(code_stripped)
-            if self._ast_evaluator is None:
-                from .ast_parser import ASTEvaluator
-                self._ast_evaluator = ASTEvaluator(self)
-            result = self._ast_evaluator.visit(ast_node)
+            ast_node = self.ast_parser.parse_statement(code_stripped)
+            result = self.ast_evaluator.visit(ast_node)
             # Ensure result is a list (statement results must be List[Dict])
             if not isinstance(result, list):
                 return None  # Not a valid statement result, fall back
@@ -1361,14 +1245,17 @@ class CoCoBasic:
             return [{'type': 'error', 'message': error.format_detailed()}]
 
     def evaluate_expression(self, expr, line=None):
-        """Delegate expression evaluation to the ExpressionEvaluator"""
+        """Evaluate a BASIC expression string using the AST parser."""
+        expr = expr.strip()
+        if not expr:
+            error = self.error_context.syntax_error("Empty expression", line or self.current_line)
+            raise ValueError(error.format_message())
         try:
-            return self.expression_evaluator.evaluate(expr, line or self.current_line)
-        except ValueError as e:
-            # Preserve enhanced error messages by re-raising as-is
-            raise e
+            ast_node = self.ast_parser.parse_expression(expr, line or self.current_line)
+            return self.ast_evaluator.visit(ast_node)
+        except ValueError:
+            raise
         except Exception as e:
-            # For other exceptions, convert to ValueError for backward compatibility
             raise ValueError(str(e))
 
     def execute_next(self, args):
@@ -1406,29 +1293,48 @@ class CoCoBasic:
             self.for_stack.pop()
             return []
     
+    def _evaluate_array_access(self, array_name, indices_str):
+        """Evaluate array element access."""
+        if array_name not in self.arrays:
+            error = self.error_context.reference_error(
+                array_name,
+                "UNDIM'D ARRAY",
+                suggestions=[
+                    f"Declare the array first: DIM {array_name}(size)",
+                    "Check the array name spelling"
+                ]
+            )
+            raise ValueError(error.format_message())
+
+        indices = []
+        try:
+            for idx in indices_str.split(','):
+                indices.append(int(self.evaluate_expression(idx.strip())))
+        except ValueError as e:
+            error = self.error_context.type_error(
+                "Invalid array index",
+                "integer",
+                "non-numeric expression"
+            )
+            raise ValueError(error.format_message()) from e
+
+        value, error_msg = self.variable_manager.get_array_element(array_name, indices)
+        if error_msg:
+            error = self.error_context.runtime_error(
+                error_msg,
+                suggestions=["Check that array indices are within bounds"]
+            )
+            raise ValueError(error.format_message())
+
+        return value
+
     def evaluate_condition(self, condition):
-        # Simple condition evaluation
-        operators = ['>=', '<=', '<>', '=', '>', '<']
-        for op in operators:
-            if op in condition:
-                left, right = condition.split(op, 1)
-                left_val = self.evaluate_expression(left.strip())
-                right_val = self.evaluate_expression(right.strip())
-                
-                if op == '=':
-                    return left_val == right_val
-                elif op == '<>':
-                    return left_val != right_val
-                elif op == '<':
-                    return left_val < right_val
-                elif op == '>':
-                    return left_val > right_val
-                elif op == '<=':
-                    return left_val <= right_val
-                elif op == '>=':
-                    return left_val >= right_val
-        
-        return False
+        """Evaluate a condition string using the AST parser."""
+        try:
+            ast_node = self.ast_parser.parse_expression(condition, self.current_line)
+            return bool(self.ast_evaluator.visit(ast_node))
+        except Exception:
+            return False
     
     def execute_sound(self, args):
         # SOUND frequency,duration
@@ -1536,6 +1442,39 @@ class CoCoBasic:
             # Return proper error without masking the exception
             return [{'type': 'error', 'message': f'PAUSE command error: {type(e).__name__}: {e}'}]
     
+    def store_input_value(self, var_desc, value):
+        """Store a user-entered value into the appropriate variable or array element.
+
+        var_desc is a dict with 'name', 'array', and optionally 'indices'.
+        For backwards compatibility, var_desc may also be a plain string (variable name).
+        """
+        if isinstance(var_desc, str):
+            # Legacy: plain variable name string
+            var_name = var_desc
+            is_array = False
+            indices = None
+        else:
+            var_name = var_desc['name']
+            is_array = var_desc.get('array', False)
+            indices = var_desc.get('indices')
+
+        # Convert value to appropriate type
+        if var_name.endswith('$'):
+            typed_value = str(value)
+        else:
+            try:
+                if '.' in str(value) or 'E' in str(value).upper():
+                    typed_value = float(value)
+                else:
+                    typed_value = int(value)
+            except (ValueError, TypeError):
+                typed_value = 0
+
+        if is_array and indices is not None:
+            self.variable_manager.set_array_element(var_name, indices, typed_value)
+        else:
+            self.variables[var_name] = typed_value
+
     def clear_interpreter_state(self, clear_program=True):
         """Clear interpreter state - shared function for NEW, LOAD, and other commands"""
         if clear_program:
@@ -1593,132 +1532,25 @@ class CoCoBasic:
             )
             return [{'type': 'error', 'message': error.format_detailed()}]
         
-        # Resume from the line after where we stopped
-        self.stopped_line, self.stopped_sub_line = self.stopped_position
-        
-        # Reset state for continuation
+        stopped_line, stopped_sub_line = self.stopped_position
+
         self.running = True
-        output = []
-        
-        # Get all sub-line positions sorted by (line_num, sub_index)
         all_positions = sorted(self.expanded_program.keys())
-        
+
         # Find the position after where we stopped
         continue_pos = None
-        for i, (line_num, sub_index) in enumerate(all_positions):
-            if line_num == self.stopped_line and sub_index > self.stopped_sub_line:
+        for i, (ln, si) in enumerate(all_positions):
+            if (ln == stopped_line and si > stopped_sub_line) or ln > stopped_line:
                 continue_pos = i
                 break
-            elif line_num > self.stopped_line:
-                continue_pos = i
-                break
-        
+
         if continue_pos is None:
-            # No more lines to execute
             self.running = False
             return [{'type': 'text', 'text': 'READY'}]
-        
-        # Continue execution from the found position
-        current_pos_index = continue_pos
-        
-        while current_pos_index < len(all_positions) and self.running:
-            # Safety check for infinite loops
-            if self.safety_enabled:
-                self.iteration_count += 1
-                if self.iteration_count > self.max_iterations:
-                    output.append({'type': 'error', 'message': 'PROGRAM STOPPED - TOO MANY ITERATIONS'})
-                    self.running = False
-                    break
-            
-            # Get current position and statement
-            line_num, sub_index = all_positions[current_pos_index]
-            self.current_line = line_num
-            self.current_sub_line = sub_index
-            statement = self.expanded_program[(line_num, sub_index)]
-            
-            # Execute the single statement
-            result = self.process_statement(statement)
-            
-            if result:
-                # Handle input requests
-                for item in result:
-                    if item.get('type') == 'input_request':
-                        if current_pos_index + 1 < len(all_positions):
-                            self.program_counter = all_positions[current_pos_index + 1]
-                        else:
-                            self.program_counter = None
-                        self.waiting_for_input = True
-                        self.running = False
-                        output.append(item)
-                        return output
-                
-                # Handle jump commands
-                jumped = False
-                for item in result:
-                    if item.get('type') == 'jump':
-                        target_line = item['line']
-                        target_positions = [(ln, si) for ln, si in all_positions if ln == target_line]
-                        if target_positions:
-                            current_pos_index = all_positions.index(target_positions[0])
-                            jumped = True
-                            break
-                        else:
-                            output.append({'type': 'error', 'message': f'UNDEFINED LINE {target_line}'})
-                            self.running = False
-                            break
-                    elif item.get('type') == 'jump_after_for':
-                        for_line = item['for_line']
-                        for_positions = [(ln, si) for ln, si in all_positions if ln == for_line]
-                        if for_positions:
-                            for_pos = for_positions[0]
-                            for_index = all_positions.index(for_pos)
-                            current_pos_index = for_index + 1
-                            jumped = True
-                            break
-                        else:
-                            output.append({'type': 'error', 'message': f'UNDEFINED FOR LINE {for_line}'})
-                            self.running = False
-                            break
-                    elif item.get('type') == 'jump_return':
-                        return_line = item['line']
-                        return_sub_line = item['sub_line']
-                        return_positions = [(ln, si) for ln, si in all_positions if ln == return_line]
-                        if return_positions:
-                            for pos in return_positions:
-                                if pos[1] > return_sub_line:
-                                    current_pos_index = all_positions.index(pos)
-                                    jumped = True
-                                    break
-                            else:
-                                next_line_positions = [(ln, si) for ln, si in all_positions if ln > return_line]
-                                if next_line_positions:
-                                    current_pos_index = all_positions.index(next_line_positions[0])
-                                    jumped = True
-                        
-                        if not jumped:
-                            current_pos_index += 1
-                            jumped = True
-                        break
-                    elif item.get('type') != 'input_request':
-                        # During program execution, filter out "OK" messages
-                        if not (item.get('type') == 'text' and item.get('text') == 'OK'):
-                            output.append(item)
-                            # Emit output immediately for real-time streaming
-                            self.emit_output([item])
-                        # Check if this is an error that should halt execution
-                        if item.get('type') == 'error':
-                            self.running = False
-                            self.call_stack.clear()  # Clear call stack on error
-                            self.for_stack.clear()   # Clear FOR stack on error
-                            break
-                
-                if not jumped:
-                    current_pos_index += 1
-            else:
-                current_pos_index += 1
-        
+
+        output = self._execute_statements_loop(all_positions, continue_pos)
         self.running = False
-        self.stopped_position = None  # Clear stopped position after successful continuation
+        self.stopped_position = None
         return output
     
     def execute_data(self, args):
@@ -2231,10 +2063,7 @@ class CoCoBasic:
         while_info = self.while_stack[-1]
 
         # Re-evaluate the condition using stored AST node
-        if self._ast_evaluator is None:
-            from .ast_parser import ASTEvaluator
-            self._ast_evaluator = ASTEvaluator(self)
-        result = self._ast_evaluator.visit(while_info['condition_ast'])
+        result = self.ast_evaluator.visit(while_info['condition_ast'])
         condition_true = bool(result) if isinstance(result, (int, float)) else result != 0
         if condition_true:
             # Continue loop - jump back to after the WHILE statement
@@ -2283,10 +2112,7 @@ class CoCoBasic:
         should_continue = False
         if condition_ast is not None:
             # AST-based condition evaluation (condition from DO statement)
-            if self._ast_evaluator is None:
-                from .ast_parser import ASTEvaluator
-                self._ast_evaluator = ASTEvaluator(self)
-            result = self._ast_evaluator.visit(condition_ast)
+            result = self.ast_evaluator.visit(condition_ast)
             condition_true = bool(result) if isinstance(result, (int, float)) else result != 0
             if condition_type == 'WHILE':
                 should_continue = condition_true

@@ -1296,12 +1296,9 @@ class ASTParser:
             )
             raise ValueError(error.format_message())
 
-        # Parse first variable
-        var_token = self._advance()
-        variables.append(VariableNode(
-            name=var_token['value'],
-            location=self._make_location(var_token)
-        ))
+        # Parse first variable (may be simple variable or array element)
+        var_node = self._parse_input_variable()
+        variables.append(var_node)
 
         # Parse additional variables separated by commas
         while self._match('PUNCTUATION') and self._current_token()['value'] == ',':
@@ -1318,17 +1315,37 @@ class ASTParser:
                 )
                 raise ValueError(error.format_message())
 
-            var_token = self._advance()
-            variables.append(VariableNode(
-                name=var_token['value'],
-                location=self._make_location(var_token)
-            ))
+            var_node = self._parse_input_variable()
+            variables.append(var_node)
 
         return InputStatementNode(
             prompt=prompt,
             variables=variables,
             location=self._make_location(input_token)
         )
+
+    def _parse_input_variable(self):
+        """Parse a variable target for INPUT (simple variable or array element)."""
+        var_token = self._advance()
+        var_location = self._make_location(var_token)
+
+        # Check for array subscript: L$(I)
+        if self._match('PUNCTUATION') and self._current_token()['value'] == '(':
+            self._advance()  # consume '('
+            indices = []
+            if not (self._match('PUNCTUATION') and self._current_token()['value'] == ')'):
+                indices.append(self._parse_or_expression())
+                while self._match('PUNCTUATION') and self._current_token()['value'] == ',':
+                    self._advance()  # consume ','
+                    indices.append(self._parse_or_expression())
+            self._consume('PUNCTUATION', "Expected ')' after array indices")
+            return ArrayAccessNode(
+                array_name=var_token['value'],
+                indices=indices,
+                location=var_location
+            )
+
+        return VariableNode(name=var_token['value'], location=var_location)
 
 
 class ASTVisitor:
@@ -1416,7 +1433,7 @@ class ASTEvaluator(ASTVisitor):
                 raise ZeroDivisionError("Modulo by zero")
             return left_val % right_val
         else:
-            error = self.emulator.expression_evaluator.error_context.runtime_error(
+            error = self.emulator.error_context.runtime_error(
                 f"Unknown binary operator: {node.operator}",
                 suggestions=[
                     "Supported operators: +, -, *, /, ^, MOD, =, <>, <, >, <=, >=, AND, OR",
@@ -1436,7 +1453,7 @@ class ASTEvaluator(ASTVisitor):
         elif node.operator == Operator.NOT:
             return not bool(operand_val)
         else:
-            error = self.emulator.expression_evaluator.error_context.runtime_error(
+            error = self.emulator.error_context.runtime_error(
                 f"Unknown unary operator: {node.operator}",
                 suggestions=[
                     "Supported unary operators: -, +, NOT",
@@ -1456,20 +1473,20 @@ class ASTEvaluator(ASTVisitor):
             arg_values.append(self.visit(arg))
         
         # Check if it's a function first
-        handler = self.emulator.expression_evaluator.function_registry.get_handler(func_name)
+        handler = self.emulator.function_registry.get_handler(func_name)
         if handler:
-            return handler(self.emulator.expression_evaluator, arg_values)
+            return handler(self.emulator, arg_values)
         
         # If not a function, check if it's an array access (dimensioned or not)
         # We need to treat anything with parentheses that's not a function as potential array access
         if len(arg_values) > 0:  # Has arguments, likely array access
             # Convert arguments to indices and delegate to array access
             indices = [int(val) for val in arg_values]
-            return self.emulator.expression_evaluator._evaluate_array_access(func_name, ','.join(map(str, indices)))
+            return self.emulator._evaluate_array_access(func_name, ','.join(map(str, indices)))
         
         # Neither function nor array access
-        available_functions = list(self.emulator.expression_evaluator.function_registry.list_functions()[:10])
-        error = self.emulator.expression_evaluator.error_context.reference_error(
+        available_functions = list(self.emulator.function_registry.list_functions()[:10])
+        error = self.emulator.error_context.reference_error(
             func_name,
             "UNDEFINED FUNCTION",
             suggestions=[
@@ -1729,13 +1746,27 @@ class ASTEvaluator(ASTVisitor):
         else:
             prompt_text = "? "
 
-        # Extract variable names
+        # Build variable descriptors (handle both simple variables and array elements)
         variables = []
         for var_node in node.variables:
-            if hasattr(var_node, 'name'):
-                variables.append(var_node.name.upper())
+            if isinstance(var_node, ArrayAccessNode):
+                indices = [int(self.visit(idx)) for idx in var_node.indices]
+                var_name = var_node.array_name.upper()
+                variables.append({
+                    'name': var_name,
+                    'array': True,
+                    'indices': indices
+                })
+            elif hasattr(var_node, 'name'):
+                variables.append({
+                    'name': var_node.name.upper(),
+                    'array': False
+                })
             else:
-                variables.append(str(var_node).upper())
+                variables.append({
+                    'name': str(var_node).upper(),
+                    'array': False
+                })
 
         if not variables:
             error = self.emulator.error_context.syntax_error(
@@ -1758,7 +1789,9 @@ class ASTEvaluator(ASTVisitor):
         self.emulator.waiting_for_input = True
         self.emulator.program_counter = (self.emulator.current_line, self.emulator.current_sub_line)
 
-        return [{'type': 'input_request', 'prompt': prompt_text, 'variable': variables[0]}]
+        first_var = variables[0]
+        return [{'type': 'input_request', 'prompt': prompt_text, 'variable': first_var['name'],
+                 'array': first_var['array'], 'indices': first_var.get('indices')}]
 
     def visit_end_statement(self, node: EndStatementNode) -> Any:
         """Visit END statement - stop program execution"""
