@@ -1,64 +1,80 @@
 # TRS-80 Color Computer BASIC Emulator - Development Guidelines
 
-## Architecture Guidelines
+## Command Execution: Two-Tier Dispatch
 
-### Current Architecture Foundation
+All BASIC statements flow through `process_statement()` in `core.py`:
 
-The emulator has a clean, well-established architecture:
+```
+process_statement(code)
+  1. Multi-line IF handler  ← bare "IF cond THEN" (no action after THEN)
+  2. _try_ast_execute()     ← AST-first for migrated commands
+  3. CommandRegistry         ← fallback for non-migrated commands
+  4. Syntax error            ← nothing matched
+```
 
-- Unified Error Handling: 145+ educational error messages across all modules
-- Clean Method Naming: `process_*` for internal system vs `execute_*` for user commands
-- Command Registry: Unified plugin-based command dispatch system
-- Function Registry: Single source of truth for all BASIC functions
-- Modular Design: Clear separation of concerns across specialized modules
-- AST-Based Control Structures: Complete single-line control structure normalization with unified execution model
-- Pytest Framework: Modern test infrastructure with fixtures and comprehensive coverage
-- Robust GOTO Support: Non-brittle AST parsing handles both simple and complex control structures
+**Why multi-line IF is first:** The AST parser cannot parse bare `IF condition THEN` (no clause after THEN). It throws an "Empty statement" error. The multi-line IF handler catches this pattern before AST execution and pushes to `if_stack` directly.
 
-### Architecture Patterns to Maintain
+### AST-Migrated Commands (`_ast_migrated_commands` set)
 
-- Command registration via `register_commands()` in each module
-- Enhanced error context with educational suggestions
-- Clear internal/external API boundaries
-- Function ownership by `functions.py` module only
-- AST-based control structure processing for complex single-line statements
-- Pytest fixtures for consistent test setup and execution
-- Non-brittle AST parsing that handles control structures with or without colons consistently
+Executed by `ASTEvaluator.visit_*()` methods in `ast_parser.py`:
 
-### Method Naming Convention
+END, GOTO, LET, PRINT, GOSUB, RETURN, FOR, EXIT FOR, WHILE, DO, IF, INPUT
 
-**CRITICAL**: Maintain clear separation between internal system methods and user command methods:
+Also handles implicit assignment (`X = 5` without LET keyword).
 
-- **`process_*` methods**: Internal system processing (process_command, process_line, process_statement)
-- **`execute_*` methods**: Non-migrated BASIC commands in registry (execute_next, execute_wend, execute_loop, etc.)
-- **`visit_*` methods**: AST-based execution for migrated commands (visit_for_statement, visit_goto_statement, etc.)
+### Registry Commands
 
-### Command Execution Architecture
+Executed by `execute_*()` methods, registered via `CommandRegistry`:
 
-BASIC commands use a two-tier dispatch system:
+NEXT, WEND, LOOP, ELSE, ENDIF, DIM, ON, STOP, CONT, DATA, READ, RESTORE, SOUND, PAUSE, NEW, DELETE, RENUM, HELP, SAFETY, and file/graphics commands.
 
-1. **AST-first execution** via `_try_ast_execute()` → `ASTEvaluator.visit_*()` methods
-   - Handles: END, GOTO, LET, PRINT, GOSUB, RETURN, FOR, EXIT FOR, WHILE, DO, IF, INPUT
-   - Also handles implicit assignment (`X = 5` without LET)
-   - Controlled by `_ast_migrated_commands` set
+### Where to Add New Commands
 
-2. **Command Registry fallback** via `CommandRegistry.execute()`
-   - Handles: NEXT, WEND, LOOP, ELSE, ENDIF, DIM, ON, STOP, CONT, DATA, READ, etc.
-   - Registration pattern:
-     ```python
-     def register_commands(self, registry):
-         registry.register('COMMAND_NAME', self.execute_method,
-                          category='appropriate_category',
-                          description="Command description",
-                          syntax="COMMAND syntax",
-                          examples=["COMMAND example"])
-     ```
+- **Control flow or core operations** → AST visitor in `ast_parser.py`
+- **Utility/system commands** → Registry via `execute_*` method
+- **BASIC functions** (CHR$, SIN, etc.) → `functions.py` only, never elsewhere
 
-For new commands: add an AST visitor in `ast_parser.py` if the command involves control flow or core operations; use the registry for utility/system commands.
+## Signal Types
 
-**Function Registry**: All BASIC functions (CHR$, ASC, LEFT$, etc.) are handled by `/emulator/functions.py`. Never duplicate function implementations in other modules.
+All `visit_*` and `execute_*` methods return `List[Dict[str, Any]]`. The run loop in `run_program()` processes these signal types:
 
-### Error Handling Standards
+| Signal | Source | Meaning |
+|--------|--------|---------|
+| `{'type': 'text', 'text': ...}` | PRINT, LIST, etc. | Output text to user |
+| `{'type': 'error', 'message': ...}` | Any | Error output |
+| `{'type': 'input_request', 'prompt': ..., 'variable': ...}` | INPUT, KILL | Request user input |
+| `{'type': 'jump', 'line': n}` | GOTO, IF THEN n | Jump to line n |
+| `{'type': 'jump_return', 'line': n, 'sub_line': m}` | RETURN | Return from GOSUB |
+| `{'type': 'jump_after_for'}` | FOR | Jump past matching NEXT |
+| `{'type': 'skip_for_loop', 'var': ...}` | FOR (start > end) | Skip loop body entirely |
+| `{'type': 'exit_for_loop'}` | EXIT FOR | Break out of current FOR |
+| `{'type': 'skip_while_loop'}` | WHILE (false) | Skip to after WEND |
+| `{'type': 'jump_after_while'}` | WEND | Loop back to WHILE |
+| `{'type': 'skip_do_loop'}` | DO (WHILE false / UNTIL true) | Skip to after LOOP |
+| `{'type': 'jump_after_do'}` | LOOP | Loop back to DO |
+| `{'type': 'skip_if_block'}` | IF (false) | Skip to ELSE/ENDIF |
+
+**END and STOP** don't use signals — they set `self.running = False` directly.
+
+## Stack Ownership
+
+AST visitors push; registry closing commands pop:
+
+| Stack | Pushed by (AST) | Popped by (Registry) | Contents |
+|-------|-----------------|---------------------|----------|
+| `for_stack` | `visit_for_statement` | `execute_next` | var, start, end, step, line, sub_line |
+| `call_stack` | `visit_gosub_statement` | via `visit_return_statement` (AST) | return line + sub_line |
+| `while_stack` | `visit_while_statement` | `execute_wend` | condition_ast, line, sub_line |
+| `do_stack` | `visit_do_statement` | `execute_loop` | condition_ast, condition_type, line, sub_line |
+| `if_stack` | `visit_if_statement` / multi-line IF handler | `execute_else`, `execute_endif` | condition_met, in_else, line |
+
+## Method Naming Convention
+
+- **`process_*`**: Internal system methods — `process_command`, `process_line`, `process_statement`
+- **`execute_*`**: Registry-dispatched BASIC commands — `execute_next`, `execute_wend`, etc.
+- **`visit_*`**: AST-based execution — `visit_for_statement`, `visit_goto_statement`, etc.
+
+## Error Handling
 
 All modules use the Enhanced Error Context system:
 
@@ -77,72 +93,55 @@ return [{'type': 'error', 'message': error.format_detailed()}]
 
 Error types: `syntax_error()`, `runtime_error()`, `type_error()`, `arithmetic_error()`
 
-Requirements:
-- Use enhanced error context with 2-3 helpful suggestions
-- Provide specific examples of correct syntax
-- Return `[{'type': 'error', 'message': formatted_message}]` format
-- No generic error messages without educational value
+## Module Placement Guide
 
-### State Management Boundaries
+| What | Where | Notes |
+|------|-------|-------|
+| BASIC functions (CHR$, SIN, LEFT$...) | `functions.py` | Single source of truth; never duplicate elsewhere |
+| Graphics commands (PSET, LINE, CIRCLE...) | `graphics.py` | Also handles PMODE, SCREEN, PCLS |
+| DIM and array access | `variables.py` | `VariableManager` class |
+| Expression evaluation | `expressions.py` | `evaluate_expression()`, `evaluate_condition()` — used by both AST visitors and execute_* methods |
+| AST parsing + execution | `ast_parser.py` | Parser, node types, and `ASTEvaluator` all in one file |
+| Single-line → multi-line conversion | `ast_converter.py` | Converts `IF A THEN B: C` → multi-line before execution |
+| Print formatting | `io.py` | Only `_format_print_value()` remains; the module is nearly empty |
 
-- `keyboard_buffer` belongs to execution state, NOT cleared during program RUN
-- Each state manager has clear ownership boundaries
-- `clear_interpreter_state()` only clears program execution state, not input state
+## Testing Patterns
 
-### AST Execution Architecture
+```python
+class TestMyFeature:
+    def test_immediate_mode(self, basic, helpers):
+        """Test command in immediate mode"""
+        result = basic.process_command('PRINT "HELLO"')
+        text_outputs = helpers.get_text_output(result)
+        assert 'HELLO' in ' '.join(text_outputs)
 
-The emulator uses AST-first execution for migrated commands. Stateful AST visitors in `ASTEvaluator` directly manage emulator state (stacks, variables) and return signal-based `List[Dict]` results.
+    def test_program_mode(self, basic, helpers):
+        """Test command in program context"""
+        program = ['10 PRINT "HELLO"', '20 END']
+        results = helpers.execute_program(basic, program)
+        text_outputs = helpers.get_text_output(results)
+        assert 'HELLO' in ' '.join(text_outputs)
 
-**AST visitors handle:**
-- Control flow: GOTO, GOSUB, RETURN, FOR, EXIT FOR, WHILE, DO, IF, END
-- I/O: INPUT, PRINT
-- Assignment: LET (explicit and implicit)
-
-**Registry handles (non-migrated):**
-- Closing commands: NEXT, WEND, LOOP, ELSE, ENDIF
-- Utility: DIM, ON, STOP, CONT, DATA, READ, SOUND, etc.
-
-Rules:
-1. Both `visit_*` and `execute_*` methods return `[{'type': 'xxx', ...}]` format
-2. AST visitors manage state directly (for_stack, call_stack, while_stack, etc.)
-3. Closing commands in registry reference stack state pushed by AST visitors
-4. Any changes must pass existing tests before merging
-
-### Architecture Diagram
+    def test_error_case(self, basic, helpers):
+        """Test error handling"""
+        helpers.assert_error_output(basic, 'GOTO', 'SYNTAX ERROR')
 ```
-USER INPUT/PROGRAM
-        |
-        v
-AST CONVERTER (ast_converter.py)
-  Expand single-line → multi-line control structures
-        |
-        v
-process_statement()
-  ├─ Multi-line IF handler (bare "IF cond THEN")
-  ├─ _try_ast_execute() → ASTEvaluator.visit_*()
-  │     Migrated commands: stateful AST execution
-  ├─ CommandRegistry.execute()
-  │     Non-migrated commands: execute_* methods
-  └─ Syntax error
-        |
-        v
-EXPRESSION EVALUATOR (Uses AST internally)
-  Called by both visitors and execute_* methods
-```
+
+Fixtures (from `conftest.py`):
+- `basic` — fresh `CoCoBasic` instance per test
+- `helpers` — `TestHelpers` class with `get_text_output()`, `get_error_messages()`, `execute_program()`, `assert_error_output()`, etc.
+
+**File command tests must use temp directories.** Both `test_file_commands.py` and `test_program_management_commands.py` have `autouse` fixtures that `chdir` to a temp directory. Never write tests that create `.bas` files in the real `programs/` directory.
+
+## State Management
+
+- `keyboard_buffer` is execution state — NOT cleared during RUN
+- `clear_interpreter_state()` clears program execution state only, not input state
+- Variables persist across immediate-mode commands; cleared by NEW and RUN
 
 ## Development Notes
 
-- Always activate the virtual environment before running Python: `source venv/bin/activate`
+- Always activate the virtual environment: `source venv/bin/activate`
 - When running tests, let them run to completion instead of timing out
-- Backend server can be started with comprehensive logging using `./start_server_with_logging.sh`
-- Use `./monitor_server_logs.sh` in a separate terminal to monitor server output in real-time
-
-## Architecture Issue Priority
-
-When encountering architectural inconsistencies, treat them as immediate blockers:
-- Duplicate function implementations across modules
-- Missing method dependencies or dead code references
-- Bypassing established command registry patterns
-- Inconsistent error handling patterns
-- State management boundary violations
-- Method naming convention violations (`process_*` vs `execute_*`)
+- Run all tests: `python -m pytest --ignore=tests/integration/test_websocket_completion_signals.py`
+- Full suite including WebSocket: `python -m pytest` (619 passed, 32 skipped)

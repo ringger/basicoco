@@ -1,6 +1,6 @@
 # TRS-80 Color Computer BASIC Emulator
 
-A TRS-80 Color Computer BASIC interpreter with a dual monitor web interface, standalone CLI client, authentic MC6847 VDG graphics emulation, and 145+ educational error messages.
+A TRS-80 Color Computer BASIC interpreter targeting Extended Color BASIC (CoCo 1/2), with a dual monitor web interface, standalone CLI client, MC6847 VDG-inspired graphics, and 145+ educational error messages.
 
 ![Python](https://img.shields.io/badge/Python-3.8%2B-blue)
 ![License](https://img.shields.io/badge/License-MIT-blue)
@@ -10,20 +10,26 @@ A TRS-80 Color Computer BASIC interpreter with a dual monitor web interface, sta
 ### BASIC Language Support
 - **Core Commands**: NEW, RUN, LIST, END, STOP, CONT, CLEAR, LOAD, SAVE, FILES, KILL
 - **I/O**: PRINT (with separators), INPUT (with prompts, multi-variable), CLS, INKEY$
-- **Variables and Math**: Numeric and string variables, all operators (+, -, *, /, ^, MOD, comparisons)
-- **Control Flow**: FOR/NEXT (with STEP), IF/THEN, GOTO, GOSUB/RETURN, ON GOTO/GOSUB, EXIT FOR, WHILE/WEND, DO/LOOP
-- **Single-Line Control Structures**: Complex statements like `IF A=1 THEN FOR I=1 TO 3: PRINT I: NEXT I` automatically converted via AST
+- **Variables and Math**: Numeric and string variables, operators (+, -, *, /, ^, comparisons)
+- **Control Flow**: FOR/NEXT (with STEP), IF/THEN/ELSE/ENDIF, GOTO, GOSUB/RETURN, ON GOTO/GOSUB
 - **Data Processing**: DATA/READ/RESTORE
 - **Math Functions**: ABS, INT, SQR, SIN, COS, TAN, ATN, EXP, LOG, RND
-- **String Functions**: LEN, LEFT$, RIGHT$, MID$, CHR$, ASC, STR$, VAL
-- **Arrays**: DIM with multi-dimensional support and authentic TRS-80 bounds behavior
-- **Timing**: PAUSE command for animations and real-time programs
+- **String Functions**: LEN, LEFT$, RIGHT$, MID$, CHR$, ASC, STR$, VAL, STRING$, INSTR, SGN
+- **Arrays**: DIM with multi-dimensional support (DIM A(10) creates indices 0-10, as on the real CoCo)
+- **Single-Line Statements**: Complex single-line forms like `IF A=1 THEN FOR I=1 TO 3: PRINT I: NEXT I`
+
+#### Modern Extensions (not in original Extended Color BASIC)
+- **MOD** operator for modular arithmetic
+- **EXIT FOR** to break out of FOR/NEXT loops early
+- **WHILE/WEND** and **DO/LOOP** (with WHILE/UNTIL) structured loop constructs
+- **PAUSE** *n* — delay execution for *n* seconds (real CoCo used busy loops or TIMER)
 
 ### Graphics and Sound
-- **Graphics Modes**: PMODE 0-4 with authentic MC6847 VDG emulation
+- **Graphics Modes**: PMODE 0-4 with MC6847 VDG-inspired rendering
 - **Drawing**: PSET, PRESET, LINE, CIRCLE, PAINT (flood fill), GET/PUT (sprites), DRAW (turtle graphics)
-- **Color**: Authentic 9-color Color Computer palette
-- **Sound**: SOUND command with Web Audio API and position-based frequency modulation
+- **Color**: 8-color CoCo palette (green, yellow, blue, red, buff, cyan, magenta, orange) plus black background
+- **Sound**: SOUND command with Web Audio API tone generation
+- **Display**: SCREEN, PCLS, color set selection
 
 ### Interfaces
 - **Dual Monitor Web UI**: Split-screen with persistent REPL (left) and dedicated graphics display (right), resizable panels, multi-tab support with independent sessions
@@ -79,7 +85,7 @@ RUN
 ```basic
 10 PMODE 4,1: SCREEN 1,1: PCLS
 20 FOR A = 0 TO 360 STEP 10
-30 X = 160 + 100 * COS(A * 3.14159 / 180)
+30 X = 128 + 100 * COS(A * 3.14159 / 180)
 40 Y = 96 + 60 * SIN(A * 3.14159 / 180)
 50 C = INT(A / 45) MOD 8 + 1
 60 PSET(X,Y),C
@@ -117,7 +123,7 @@ trs80/
 │   ├── output_manager.py   # Output streaming
 │   ├── graphics.py         # Graphics commands and MC6847 VDG emulation
 │   ├── variables.py        # Variable/array management (DIM, array access)
-│   └── io.py               # I/O helpers (print formatting, argument splitting)
+│   └── io.py               # I/O helpers (print formatting)
 ├── programs/               # BASIC program files (.bas)
 ├── templates/              # HTML templates (dual monitor interface)
 ├── static/                 # CSS, JavaScript, audio support
@@ -145,33 +151,36 @@ python -m pytest tests/unit/ -v
 python dev_tests/smoke_test.py --quick
 ```
 
-## Authentic TRS-80 Behavior
+## Authenticity Notes
 
-- `DIM A(10)` creates 11 elements (indices 0-10)
-- Authentic error messages (SYNTAX ERROR, OUT OF DATA, etc.)
-- Accurate MC6847 VDG graphics modes and resolutions
-- Correct PRINT semicolon and comma separator behavior
-- Authentic string function behavior
+This emulator targets **Extended Color BASIC** as shipped with the TRS-80 Color Computer 1 and 2, with some simplifications and modern extensions:
+
+- `DIM A(10)` creates 11 elements (indices 0-10), matching real CoCo behavior
+- Authentic error message style (SYNTAX ERROR, OUT OF DATA, etc.) enhanced with educational suggestions
+- MC6847 VDG-inspired graphics modes and color palette
+- PRINT comma and semicolon separators (comma advances output position; semicolon concatenates)
+
+**Known differences from hardware:**
+- SOUND accepts frequency in Hz (1-4095) rather than the CoCo's 1-255 pitch table values
+- Graphics color selection is simplified from the MC6847's CSS-based 4-color set switching
+- PMODE 0 and PMODE 2 resolutions are approximate
+- Modern extensions (MOD, EXIT FOR, WHILE/WEND, DO/LOOP, PAUSE) are additions beyond the original ROM
 
 ## Roadmap
 
-### Phase 1: State Management Architecture Enhancement
-- Specialized state managers for variables, execution, I/O, and graphics
-- Refactored state clearing policies for NEW, LOAD, RUN
-
-### Phase 2: Disk BASIC File Operations
+### Disk BASIC File Operations
 - OPEN/CLOSE for sequential and random access files
 - FIELD, GET, PUT for random file access
 
-### Phase 3: System Functions and Memory Simulation
+### System Functions and Memory Simulation
 - PEEK/POKE with simulated TRS-80 memory map
 - VARPTR, MEM, TIMER, FRE(0), RANDOMIZE
 - Machine language: EXEC, USR, LOADM, SAVEM
 
-### Phase 4: Enhanced Disk BASIC Commands
+### Enhanced Disk BASIC Commands
 - MERGE, RENAME, COPY, CLOADM/CSAVEM
 
-### Phase 5: Error Handling and Recovery
+### Error Handling and Recovery
 - ON ERROR GOTO / RESUME, ERR, ERL
 
 ### Not Yet Implemented
