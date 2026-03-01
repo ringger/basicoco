@@ -380,3 +380,90 @@ class TestForExitForMigration:
         result = basic._try_ast_execute('EXIT FOR')
         assert result is not None
         assert any(item.get('type') == 'error' for item in result)
+
+
+class TestWhileDoMigration:
+    """Phase 9-10: WHILE and DO commands via AST execution"""
+
+    def test_while_is_migrated(self, basic):
+        """WHILE should be in the migrated commands set"""
+        assert 'WHILE' in basic._ast_migrated_commands
+
+    def test_do_is_migrated(self, basic):
+        """DO should be in the migrated commands set"""
+        assert 'DO' in basic._ast_migrated_commands
+
+    def test_while_true_pushes_stack(self, basic):
+        """WHILE with true condition should push to while_stack"""
+        basic.current_line = 10
+        basic.current_sub_line = 0
+        basic.variables['X'] = 5
+        result = basic._try_ast_execute('WHILE X > 0')
+        assert result == []
+        assert len(basic.while_stack) == 1
+        assert 'condition_ast' in basic.while_stack[0]
+
+    def test_while_false_skips(self, basic):
+        """WHILE with false condition should return skip signal"""
+        basic.variables['X'] = 0
+        result = basic._try_ast_execute('WHILE X > 0')
+        assert result == [{'type': 'skip_while_loop'}]
+        assert len(basic.while_stack) == 0
+
+    def test_while_in_program(self, basic, helpers):
+        """WHILE/WEND loop in program should execute correctly"""
+        program = [
+            '10 X = 1',
+            '20 WHILE X <= 3',
+            '30 PRINT X',
+            '40 X = X + 1',
+            '50 WEND',
+        ]
+        results = helpers.execute_program(basic, program)
+        output = helpers.get_text_output(results)
+        assert any('1' in t for t in output)
+        assert any('3' in t for t in output)
+
+    def test_do_pushes_stack(self, basic):
+        """DO should push to do_stack"""
+        basic.current_line = 10
+        basic.current_sub_line = 0
+        result = basic._try_ast_execute('DO')
+        assert result == []
+        assert len(basic.do_stack) == 1
+
+    def test_do_while_true_pushes(self, basic):
+        """DO WHILE with true condition should push to stack"""
+        basic.current_line = 10
+        basic.current_sub_line = 0
+        basic.variables['X'] = 5
+        result = basic._try_ast_execute('DO WHILE X > 0')
+        assert result == []
+        assert len(basic.do_stack) == 1
+
+    def test_do_while_false_skips(self, basic):
+        """DO WHILE with false condition should skip"""
+        basic.variables['X'] = 0
+        result = basic._try_ast_execute('DO WHILE X > 0')
+        assert result == [{'type': 'skip_do_loop'}]
+        assert len(basic.do_stack) == 0
+
+    def test_do_until_true_skips(self, basic):
+        """DO UNTIL with true condition should skip"""
+        basic.variables['X'] = 5
+        result = basic._try_ast_execute('DO UNTIL X > 0')
+        assert result == [{'type': 'skip_do_loop'}]
+
+    def test_do_loop_in_program(self, basic, helpers):
+        """DO/LOOP in program should execute correctly"""
+        program = [
+            '10 X = 1',
+            '20 DO',
+            '30 PRINT X',
+            '40 X = X + 1',
+            '50 LOOP WHILE X <= 3',
+        ]
+        results = helpers.execute_program(basic, program)
+        output = helpers.get_text_output(results)
+        assert any('1' in t for t in output)
+        assert any('3' in t for t in output)

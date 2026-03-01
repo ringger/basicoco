@@ -87,49 +87,48 @@ class ASTStatementConverter(ASTVisitor):
         # Add NEXT
         self.statements.append(f"NEXT {var_name}")
 
-    def visit_while_statement(self, node: Union[WhileStatementNode, DoLoopStatementNode]) -> None:
-        """Convert WHILE or DO/LOOP statement node to multi-line format"""
-        # Handle DO/LOOP statements
-        if isinstance(node, DoLoopStatementNode):
-            if node.condition_position == 'TOP':
-                # DO WHILE/UNTIL condition
-                condition_str = self._expression_to_string(node.condition) if node.condition else ""
-                if node.condition_type == 'WHILE':
-                    self.statements.append(f"DO WHILE {condition_str}")
-                else:
-                    self.statements.append(f"DO UNTIL {condition_str}")
-            else:
-                # Plain DO or LOOP WHILE/UNTIL
-                self.statements.append("DO")
+    def visit_while_statement(self, node: WhileStatementNode) -> None:
+        """Convert WHILE/WEND statement node to multi-line format"""
+        condition_str = self._expression_to_string(node.condition)
+        self.statements.append(f"WHILE {condition_str}")
 
-            # Process loop body
-            if node.body:
-                self.indent_level += 1
-                self.visit(node.body)
-                self.indent_level -= 1
+        # Process loop body
+        if node.body:
+            self.indent_level += 1
+            self.visit(node.body)
+            self.indent_level -= 1
 
-            # Add LOOP with condition if at bottom
-            if node.condition_position == 'BOTTOM' and node.condition:
-                condition_str = self._expression_to_string(node.condition)
-                if node.condition_type == 'WHILE':
-                    self.statements.append(f"LOOP WHILE {condition_str}")
-                else:
-                    self.statements.append(f"LOOP UNTIL {condition_str}")
+        # Add WEND
+        self.statements.append("WEND")
+
+    def visit_do_loop_statement(self, node: DoLoopStatementNode) -> None:
+        """Convert DO/LOOP statement node to multi-line format"""
+        if node.condition_position == 'TOP':
+            # DO WHILE/UNTIL condition
+            condition_str = self._expression_to_string(node.condition) if node.condition else ""
+            if node.condition_type == 'WHILE':
+                self.statements.append(f"DO WHILE {condition_str}")
             else:
-                self.statements.append("LOOP")
+                self.statements.append(f"DO UNTIL {condition_str}")
         else:
-            # Regular WHILE/WEND
+            # Plain DO or LOOP WHILE/UNTIL
+            self.statements.append("DO")
+
+        # Process loop body
+        if node.body:
+            self.indent_level += 1
+            self.visit(node.body)
+            self.indent_level -= 1
+
+        # Add LOOP with condition if at bottom
+        if node.condition_position == 'BOTTOM' and node.condition:
             condition_str = self._expression_to_string(node.condition)
-            self.statements.append(f"WHILE {condition_str}")
-
-            # Process loop body
-            if node.body:
-                self.indent_level += 1
-                self.visit(node.body)
-                self.indent_level -= 1
-
-            # Add WEND
-            self.statements.append("WEND")
+            if node.condition_type == 'WHILE':
+                self.statements.append(f"LOOP WHILE {condition_str}")
+            else:
+                self.statements.append(f"LOOP UNTIL {condition_str}")
+        else:
+            self.statements.append("LOOP")
 
     def visit_exit_for_statement(self, node: ExitForStatementNode) -> None:
         """Convert EXIT FOR statement"""

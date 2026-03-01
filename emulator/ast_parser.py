@@ -37,6 +37,8 @@ class NodeType(Enum):
     INPUT_STATEMENT = "input_statement"
     END_STATEMENT = "end_statement"
     
+    DO_LOOP_STATEMENT = "do_loop_statement"
+
     # Control Flow
     BLOCK = "block"
     PROGRAM = "program"
@@ -184,7 +186,7 @@ class WhileStatementNode(ASTNode):
 class DoLoopStatementNode(ASTNode):
     """Node for DO/LOOP constructs"""
     def __init__(self, body: ASTNode, condition: Optional[ASTNode] = None, condition_type: str = 'WHILE', condition_position: str = 'BOTTOM', location: Optional[SourceLocation] = None):
-        super().__init__(NodeType.WHILE_STATEMENT, location)  # Reuse WHILE_STATEMENT type for now
+        super().__init__(NodeType.DO_LOOP_STATEMENT, location)
         self.body = body
         self.condition = condition
         self.condition_type = condition_type  # 'WHILE' or 'UNTIL' 
@@ -1484,40 +1486,38 @@ class ASTEvaluator(ASTVisitor):
         return value
     
     def visit_while_statement(self, node: WhileStatementNode) -> Any:
-        """Visit WHILE statement - execute loop while condition is true"""
-        results = []
-        max_iterations = self.emulator.max_iterations
-        iteration_count = 0
-        
-        while iteration_count < max_iterations:
-            # Evaluate condition
+        """Visit WHILE statement - evaluate condition, push to stack or skip"""
+        condition_result = self.visit(node.condition)
+        condition_true = bool(condition_result) if isinstance(condition_result, (int, float)) else condition_result != 0
+
+        if condition_true:
+            self.emulator.while_stack.append({
+                'condition_ast': node.condition,
+                'line': self.emulator.current_line,
+                'sub_line': self.emulator.current_sub_line
+            })
+            return []
+        else:
+            return [{'type': 'skip_while_loop'}]
+
+    def visit_do_loop_statement(self, node: DoLoopStatementNode) -> Any:
+        """Visit DO statement - evaluate top condition if present, push to stack"""
+        if node.condition and node.condition_position == 'TOP':
             condition_result = self.visit(node.condition)
-            
-            # Convert to boolean (BASIC truth rules)
             condition_true = bool(condition_result) if isinstance(condition_result, (int, float)) else condition_result != 0
-            
-            if not condition_true:
-                break
-                
-            # Execute body
-            body_result = self.visit(node.body)
-            if body_result:
-                results.extend(body_result if isinstance(body_result, list) else [body_result])
-            
-            iteration_count += 1
-        
-        if iteration_count >= max_iterations:
-            error = self.emulator.expression_evaluator.error_context.runtime_error(
-                f"WHILE loop exceeded maximum iterations ({max_iterations})",
-                suggestions=[
-                    "Check loop condition to ensure it will eventually become false",
-                    "Add a counter variable or break condition",
-                    "Verify loop logic to prevent infinite loops"
-                ]
-            )
-            raise ValueError(error.format_message())
-        
-        return results
+
+            if node.condition_type == 'WHILE' and not condition_true:
+                return [{'type': 'skip_do_loop'}]
+            elif node.condition_type == 'UNTIL' and condition_true:
+                return [{'type': 'skip_do_loop'}]
+
+        self.emulator.do_stack.append({
+            'condition_ast': node.condition,
+            'condition_type': node.condition_type,
+            'line': self.emulator.current_line,
+            'sub_line': self.emulator.current_sub_line
+        })
+        return []
     
     def visit_exit_for_statement(self, node: ExitForStatementNode) -> Any:
         """Visit EXIT FOR statement - signal to exit current FOR loop"""

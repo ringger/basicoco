@@ -74,7 +74,7 @@ class CoCoBasic:
         self.expression_evaluator = ExpressionEvaluator(self)
 
         # AST-based execution: commands in this set use AST parse+visit instead of registry
-        self._ast_migrated_commands = {'END', 'GOTO', 'LET', 'PRINT', 'GOSUB', 'RETURN', 'FOR', 'EXIT'}
+        self._ast_migrated_commands = {'END', 'GOTO', 'LET', 'PRINT', 'GOSUB', 'RETURN', 'FOR', 'EXIT', 'WHILE', 'DO'}
         self._ast_evaluator = None  # Lazy-initialized ASTEvaluator
 
         # Initialize command registry
@@ -2574,9 +2574,17 @@ class CoCoBasic:
         
         # Get the current WHILE loop
         while_info = self.while_stack[-1]
-        
-        # Re-evaluate the condition
-        if self.evaluate_condition(while_info['condition']):
+
+        # Re-evaluate the condition (AST node or string)
+        if 'condition_ast' in while_info:
+            if self._ast_evaluator is None:
+                from .ast_parser import ASTEvaluator
+                self._ast_evaluator = ASTEvaluator(self)
+            result = self._ast_evaluator.visit(while_info['condition_ast'])
+            condition_true = bool(result) if isinstance(result, (int, float)) else result != 0
+        else:
+            condition_true = self.evaluate_condition(while_info['condition'])
+        if condition_true:
             # Continue loop - jump back to after the WHILE statement
             return [{'type': 'jump_after_while', 
                     'while_line': while_info['line'],
@@ -2662,23 +2670,37 @@ class CoCoBasic:
         
         # Get current DO loop
         do_info = self.do_stack[-1]
-        
+
         # Parse LOOP [WHILE condition | UNTIL condition]
         args = args.strip()
-        condition = do_info['condition']
-        condition_type = do_info['condition_type']
-        
-        # Check for condition at LOOP
+        condition = do_info.get('condition')
+        condition_ast = do_info.get('condition_ast')
+        condition_type = do_info.get('condition_type')
+
+        # Check for condition at LOOP (overrides DO condition)
         if args.upper().startswith('WHILE '):
             condition = args[6:].strip()
+            condition_ast = None  # LOOP-level condition is always a string
             condition_type = 'WHILE'
         elif args.upper().startswith('UNTIL '):
             condition = args[6:].strip()
+            condition_ast = None
             condition_type = 'UNTIL'
-        
+
         # Evaluate loop continuation
         should_continue = False
-        if condition:
+        if condition_ast is not None:
+            # AST-based condition evaluation
+            if self._ast_evaluator is None:
+                from .ast_parser import ASTEvaluator
+                self._ast_evaluator = ASTEvaluator(self)
+            result = self._ast_evaluator.visit(condition_ast)
+            condition_true = bool(result) if isinstance(result, (int, float)) else result != 0
+            if condition_type == 'WHILE':
+                should_continue = condition_true
+            elif condition_type == 'UNTIL':
+                should_continue = not condition_true
+        elif condition:
             if condition_type == 'WHILE':
                 should_continue = self.evaluate_condition(condition)
             elif condition_type == 'UNTIL':
