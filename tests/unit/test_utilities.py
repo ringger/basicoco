@@ -14,7 +14,7 @@ import io
 # Add current directory to path for imports
 sys.path.append(os.path.dirname(__file__))
 
-from app import CoCoBasic
+from emulator.core import CoCoBasic
 
 
 class MockGraphicsOutput:

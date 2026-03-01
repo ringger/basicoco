@@ -170,8 +170,8 @@ class TestFileCommands:
         self.assert_output_contains(result, 'CHANGED FROM')
         self.assert_output_contains(result, 'TO')
         
-        # Verify we're in the new directory
-        assert os.getcwd() == subdir
+        # Verify we're in the new directory (use realpath to resolve symlinks, e.g. /var -> /private/var on macOS)
+        assert os.path.realpath(os.getcwd()) == os.path.realpath(subdir)
 
     def test_cd_with_shortcuts(self, basic, helpers, test_dir):
         """Test CD command with path shortcuts"""
@@ -179,21 +179,21 @@ class TestFileCommands:
         subdir = os.path.join(test_dir, 'test_subdir')
         os.makedirs(subdir)
         os.chdir(subdir)
-        
+
         # Test .. (parent directory)
         result = basic.process_command('CD ".."')
         self.assert_output_contains(result, 'CHANGED FROM')
-        assert os.getcwd() == test_dir
+        assert os.path.realpath(os.getcwd()) == os.path.realpath(test_dir)
 
     def test_cd_quoted_paths(self, basic, helpers, test_dir):
         """Test CD command with quoted paths"""
         subdir = os.path.join(test_dir, 'quoted test')
         os.makedirs(subdir)
-        
+
         # Test with double quotes
         result = basic.process_command(f'CD "{subdir}"')
         self.assert_output_contains(result, 'CHANGED FROM')
-        assert os.getcwd() == subdir
+        assert os.path.realpath(os.getcwd()) == os.path.realpath(subdir)
         
         # Go back to test single quotes
         os.chdir(test_dir)
