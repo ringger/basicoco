@@ -171,6 +171,18 @@ def fn_rnd(evaluator, args: List[Any]) -> float:
     return random.random()
 
 
+def fn_sgn(evaluator, args: List[Any]) -> int:
+    """SGN(n) - return sign of number (-1, 0, or 1)"""
+    _check_args(evaluator, 'SGN', args, 1, 'SGN(number)')
+    n = _to_float(evaluator, args[0], 'SGN')
+    if n > 0:
+        return 1
+    elif n < 0:
+        return -1
+    else:
+        return 0
+
+
 def fn_sqr(evaluator, args: List[Any]) -> float:
     """SQR(n) - return square root"""
     _check_args(evaluator, 'SQR', args, 1, 'SQR(number)')
@@ -334,6 +346,7 @@ def register_all_functions(registry):
     registry.register('ABS', fn_abs)
     registry.register('INT', fn_int)
     registry.register('RND', fn_rnd)
+    registry.register('SGN', fn_sgn)
     registry.register('SQR', fn_sqr)
     
     # Trigonometric functions

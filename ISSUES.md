@@ -7,8 +7,8 @@
 Prioritized by how often real BASIC programs need them.
 
 **High — commonly used in programs:**
-- [ ] SGN — sign function (trivial, many math programs use it)
-- [ ] RANDOMIZE — seed random number generator (any game with RND needs this)
+- [x] SGN — sign function
+- [x] RANDOMIZE — seed random number generator
 - [ ] ON ERROR GOTO — error trapping (robust programs depend on this)
 - [ ] HEX$ — hex string conversion (frequently used for display/debugging)
 - [ ] TIMER — system timer (games, benchmarks, delays)

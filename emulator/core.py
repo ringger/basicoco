@@ -6,6 +6,7 @@ The class has been extracted from the monolithic app.py file to improve maintain
 """
 
 import os
+import random
 import re
 import time
 from .parser import BasicParser
@@ -714,6 +715,19 @@ class CoCoBasic:
             )
             return [{'type': 'error', 'message': error.format_detailed()}]
     
+    def execute_randomize(self, args):
+        """RANDOMIZE [seed] - seed the random number generator"""
+        args = args.strip()
+        if args:
+            try:
+                seed = int(self.evaluate_expression(args, self.current_line))
+                random.seed(seed)
+            except ValueError as e:
+                return [{'type': 'error', 'message': str(e)}]
+        else:
+            random.seed()
+        return self._system_ok()
+
     def execute_pause(self, args):
         """Execute PAUSE command - pause execution for specified time"""
         try:
@@ -1194,6 +1208,12 @@ class CoCoBasic:
                                      syntax="SOUND tone, duration",
                                      examples=["SOUND 440, 100", "SOUND 220, 50"])
         
+        self.command_registry.register('RANDOMIZE', self.execute_randomize,
+                                     category='system',
+                                     description="Seed the random number generator",
+                                     syntax="RANDOMIZE [seed]",
+                                     examples=["RANDOMIZE", "RANDOMIZE 42"])
+
         self.command_registry.register('PAUSE', self.execute_pause,
                                      category='system',
                                      description="Pause execution for specified time",

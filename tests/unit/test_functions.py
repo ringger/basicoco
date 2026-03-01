@@ -94,6 +94,28 @@ class TestFunction:
         result = basic.expression_evaluator.evaluate("SQR(0)")
         assert result == 0
 
+    def test_sgn_function(self, basic, helpers):
+        """Test SGN function for sign of number"""
+        # Positive
+        result = basic.expression_evaluator.evaluate("SGN(42)")
+        assert result == 1
+
+        # Negative
+        result = basic.expression_evaluator.evaluate("SGN(-7)")
+        assert result == -1
+
+        # Zero
+        result = basic.expression_evaluator.evaluate("SGN(0)")
+        assert result == 0
+
+        # With variable
+        result = basic.expression_evaluator.evaluate("SGN(B)")
+        assert result == -1  # B = -5
+
+        # With expression
+        result = basic.expression_evaluator.evaluate("SGN(3 - 3)")
+        assert result == 0
+
     def test_trigonometric_functions(self, basic, helpers):
         """Test trigonometric functions SIN, COS, TAN"""
         # SIN function
@@ -536,3 +558,43 @@ class TestFunction:
         # New Phase 2 functions in expressions
         result = basic.expression_evaluator.evaluate('LEN(SPACE$(5)) + INSTR("HELLO", "LO")')
         assert result == 9  # LEN(5 spaces) + INSTR("HELLO","LO") = 5 + 4 = 9
+
+
+class TestRandomize:
+    """Test RANDOMIZE command"""
+
+    def test_randomize_no_args(self, basic, helpers):
+        """RANDOMIZE without args seeds from system clock"""
+        result = basic.process_command('RANDOMIZE')
+        errors = helpers.get_error_messages(result)
+        assert errors == []
+
+    def test_randomize_with_seed(self, basic, helpers):
+        """RANDOMIZE with seed produces repeatable RND sequence"""
+        basic.process_command('RANDOMIZE 42')
+        r1 = basic.expression_evaluator.evaluate('RND(1)')
+        r2 = basic.expression_evaluator.evaluate('RND(1)')
+
+        basic.process_command('RANDOMIZE 42')
+        r3 = basic.expression_evaluator.evaluate('RND(1)')
+        r4 = basic.expression_evaluator.evaluate('RND(1)')
+
+        assert r1 == r3
+        assert r2 == r4
+
+    def test_randomize_different_seeds(self, basic, helpers):
+        """Different seeds produce different sequences"""
+        basic.process_command('RANDOMIZE 1')
+        r1 = basic.expression_evaluator.evaluate('RND(1)')
+
+        basic.process_command('RANDOMIZE 999')
+        r2 = basic.expression_evaluator.evaluate('RND(1)')
+
+        assert r1 != r2
+
+    def test_randomize_with_expression(self, basic, helpers):
+        """RANDOMIZE accepts expressions as seed"""
+        basic.process_command('X = 10')
+        result = basic.process_command('RANDOMIZE X * 4 + 2')
+        errors = helpers.get_error_messages(result)
+        assert errors == []
