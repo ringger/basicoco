@@ -2,6 +2,38 @@
 
 All notable changes to the TRS-80 Color Computer BASIC Emulator are documented here.
 
+## March 2026
+
+### Complete AST Execution Migration
+- Migrated all 12 core commands to AST-based execution: END, GOTO, LET, PRINT, GOSUB, RETURN, FOR, EXIT FOR, WHILE, DO, IF, INPUT
+- Two-tier dispatch architecture: AST-first execution via `_try_ast_execute()` with command registry fallback
+- Signal-based control flow with `List[Dict]` return format across all visitors
+- Added `visit_*` methods in `ASTEvaluator` for stateful command execution
+- Multi-line IF handler in `process_statement()` for bare `IF condition THEN` blocks
+- Fixed AST PRINT parser to handle parenthesized expressions correctly
+- Removed all legacy `execute_*` methods for migrated commands (~716 lines removed)
+- All 619 tests passing throughout the migration
+
+### Post-Migration Cleanup
+- Removed vestigial `_execute_via_ast()` from core.py (superseded by `_try_ast_execute()`)
+- Removed 3 dead methods from io.py: `_split_print_arguments()`, `_split_print_arguments_with_separators()`, `_is_valid_variable_name()`
+- Removed dead `_is_valid_variable_name()` from variables.py
+- Removed dead `BaseTestCase` imports from 5 test files
+- Removed vestigial `test_base.py`, `run_tests.py`, `run_unit_tests.py`, `run_integration_tests.py`
+- Removed `dev_tests/test_old_code_paths.py` (referenced functions that no longer exist)
+- Removed 29 test artifact `.bas` files from `programs/` directory
+- Fixed test isolation: file command tests now use autouse temp directory fixtures
+
+## February 2026
+
+### Public Release Preparation
+- Fixed stack initialization and flaky timestamp test
+- Removed dead code and wrapper boilerplate
+- Narrowed exception handlers to specific types
+- Removed duplicate state clearing in `execute_new` and `run_program`
+- Removed stale comments and fixed misleading docstrings
+- Cleaned up documentation for public release
+
 ## September 2025
 
 ### AST Integration Architecture Stabilization
