@@ -169,3 +169,79 @@ class TestLetMigration:
         results = helpers.execute_program(basic, program)
         output = helpers.get_text_output(results)
         assert any('20' in t for t in output)
+
+
+class TestPrintMigration:
+    """Phase 4: PRINT command via AST execution"""
+
+    def test_print_is_migrated(self, basic):
+        """PRINT should be in the migrated commands set"""
+        assert 'PRINT' in basic._ast_migrated_commands
+
+    def test_print_empty(self, basic, helpers):
+        """PRINT with no arguments should produce blank line"""
+        result = basic._try_ast_execute('PRINT')
+        assert result == [{'type': 'text', 'text': ''}]
+
+    def test_print_string_literal(self, basic, helpers):
+        """PRINT with string literal should output text"""
+        result = basic.process_command('PRINT "HELLO"')
+        output = helpers.get_text_output(result)
+        assert any('HELLO' in t for t in output)
+
+    def test_print_number(self, basic, helpers):
+        """PRINT with number should format correctly"""
+        result = basic.process_command('PRINT 42')
+        output = helpers.get_text_output(result)
+        assert any('42' in t for t in output)
+
+    def test_print_float_as_int(self, basic, helpers):
+        """PRINT with whole float should format as integer"""
+        result = basic.process_command('PRINT 5.0')
+        output = helpers.get_text_output(result)
+        assert any('5' in t for t in output)
+        assert not any('5.0' in t for t in output)
+
+    def test_print_expression(self, basic, helpers):
+        """PRINT with expression should evaluate and print"""
+        basic.process_command('X = 10')
+        result = basic.process_command('PRINT X * 2')
+        output = helpers.get_text_output(result)
+        assert any('20' in t for t in output)
+
+    def test_print_semicolon_separator(self, basic, helpers):
+        """PRINT with semicolons should concatenate without spaces"""
+        result = basic.process_command('PRINT "A";"B";"C"')
+        output = helpers.get_text_output(result)
+        assert any('ABC' in t for t in output)
+
+    def test_print_comma_separator(self, basic, helpers):
+        """PRINT with commas should add tab spacing"""
+        result = basic.process_command('PRINT "A","B"')
+        output = helpers.get_text_output(result)
+        assert any('\t' in t for t in output)
+
+    def test_print_trailing_semicolon(self, basic):
+        """PRINT with trailing semicolon should set inline flag"""
+        result = basic._try_ast_execute('PRINT "HELLO";')
+        assert result is not None
+        assert len(result) == 1
+        assert result[0].get('inline') is True
+
+    def test_print_no_trailing_separator(self, basic):
+        """PRINT without trailing separator should not set inline"""
+        result = basic._try_ast_execute('PRINT "HELLO"')
+        assert result is not None
+        assert len(result) == 1
+        assert 'inline' not in result[0]
+
+    def test_print_in_program(self, basic, helpers):
+        """PRINT in program execution should work"""
+        program = [
+            '10 PRINT "LINE1"',
+            '20 PRINT "LINE2"',
+        ]
+        results = helpers.execute_program(basic, program)
+        output = helpers.get_text_output(results)
+        assert any('LINE1' in t for t in output)
+        assert any('LINE2' in t for t in output)

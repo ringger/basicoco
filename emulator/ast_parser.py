@@ -1607,26 +1607,43 @@ class ASTEvaluator(ASTVisitor):
 
     def visit_print_statement(self, node: PrintStatementNode) -> Any:
         """Visit PRINT statement"""
+        # Handle empty PRINT (blank line)
+        if not node.expressions:
+            return [{'type': 'text', 'text': ''}]
+
         # Build output from expressions and separators
         output_parts = []
 
         for i, expr in enumerate(node.expressions):
             # Evaluate expression
-            value = self.visit(expr)
-            output_parts.append(str(value))
+            try:
+                value = self.visit(expr)
+                output_parts.append(self.emulator.io_handler._format_print_value(value))
+            except Exception as e:
+                error = self.emulator.error_context.runtime_error(
+                    f"Error evaluating PRINT expression: {e}",
+                    suggestions=[
+                        'Check that all variables are defined',
+                        'Verify expression syntax is correct',
+                        'Example: PRINT X, "Hello", Y+5'
+                    ]
+                )
+                return [{'type': 'error', 'message': error.format_detailed()}]
 
-            # Add separator if present
-            if i < len(node.separators):
+            # Add separator spacing (not for trailing separator)
+            if i < len(node.separators) and i < len(node.expressions) - 1:
                 sep = node.separators[i]
-                if sep == ';':
-                    # Semicolon = no space/newline
-                    pass
-                elif sep == ',':
-                    # Comma = tab to next zone
+                if sep == ',':
                     output_parts.append('\t')
+                # Semicolon = no spacing
 
-        # Join parts and return as text output
+        # Join parts
         output_text = ''.join(output_parts)
+
+        # Trailing separator means inline output (no newline)
+        has_trailing_separator = len(node.separators) >= len(node.expressions)
+        if '\r' in output_text or has_trailing_separator:
+            return [{'type': 'text', 'text': output_text, 'inline': True}]
         return [{'type': 'text', 'text': output_text}]
 
     def visit_assignment(self, node: AssignmentNode) -> Any:
