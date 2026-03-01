@@ -3,6 +3,7 @@
 Manual test to verify the lunar lander program works correctly
 """
 
+import os
 import pexpect
 import sys
 import time
@@ -10,10 +11,11 @@ from datetime import datetime
 
 def test_manual_lunar():
     print("🚀 === MANUAL LUNAR LANDER TEST === 🚀")
-    
+
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    os.makedirs("logs", exist_ok=True)
     log_filename = f"logs/manual_lunar_test_{timestamp}.log"
-    
+
     with open(log_filename, 'w') as logfile:
         logfile.write(f"Manual Lunar Lander Test Log - {datetime.now()}\n")
         logfile.write("=" * 70 + "\n\n")

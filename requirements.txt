@@ -6,3 +6,4 @@ python-engineio==4.7.1
 # Testing
 pytest>=7.0.0
 pytest-cov>=4.0.0
+pexpect>=4.8.0

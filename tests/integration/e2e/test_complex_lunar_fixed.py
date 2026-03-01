@@ -3,6 +3,7 @@
 Run the complex Lunar Lander with better error handling
 """
 
+import os
 import pexpect
 import sys
 import time
@@ -10,10 +11,11 @@ from datetime import datetime
 
 def test_complex_lunar_lander():
     print("🚀 === COMPLEX LUNAR LANDER SESSION === 🚀")
-    
+
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    os.makedirs("logs", exist_ok=True)
     log_filename = f"logs/complex_lunar_session_{timestamp}.log"
-    
+
     with open(log_filename, 'w') as logfile:
         logfile.write(f"Complex Lunar Lander Session Log - {datetime.now()}\n")
         logfile.write("=" * 70 + "\n\n")

@@ -3,6 +3,7 @@
 Enhanced pexpect CLI test with detailed logging
 """
 
+import os
 import pexpect
 import sys
 import time
@@ -10,11 +11,12 @@ from datetime import datetime
 
 def test_cli_with_logging():
     print("=== TRS-80 CLI SESSION WITH DETAILED LOGGING ===")
-    
+
     # Create log file
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    os.makedirs("logs", exist_ok=True)
     log_filename = f"logs/cli_session_{timestamp}.log"
-    
+
     with open(log_filename, 'w') as logfile:
         logfile.write(f"TRS-80 CLI Session Log - {datetime.now()}\n")
         logfile.write("=" * 60 + "\n\n")
