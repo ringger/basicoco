@@ -72,7 +72,11 @@ class CoCoBasic:
         
         # Initialize expression evaluator
         self.expression_evaluator = ExpressionEvaluator(self)
-        
+
+        # AST-based execution: commands in this set use AST parse+visit instead of registry
+        self._ast_migrated_commands = set()
+        self._ast_evaluator = None  # Lazy-initialized ASTEvaluator
+
         # Initialize command registry
         self.command_registry = CommandRegistry()
         self._register_all_commands()
@@ -1231,11 +1235,47 @@ class CoCoBasic:
             self.for_stack = old_for_stack
             self.call_stack = old_call_stack
 
+    def _try_ast_execute(self, code):
+        """Try to execute a statement via AST. Returns None if not migrated."""
+        if not self._ast_migrated_commands:
+            return None
+
+        code_stripped = code.strip()
+        code_upper = code_stripped.upper()
+        parts = code_upper.split(None, 1)
+        first_word = parts[0] if parts else ''
+
+        if first_word not in self._ast_migrated_commands:
+            # Check for implicit assignment (no LET keyword)
+            if 'LET' in self._ast_migrated_commands and '=' in code_stripped:
+                # Avoid misidentifying comparisons (IF X=5, etc.)
+                lhs = code_stripped.split('=', 1)[0]
+                if not any(op in lhs for op in ['<', '>', '!']):
+                    first_word = 'LET'
+                else:
+                    return None
+            else:
+                return None
+
+        try:
+            ast_node = self.expression_evaluator.ast_parser.parse_statement(code_stripped)
+            if self._ast_evaluator is None:
+                from .ast_parser import ASTEvaluator
+                self._ast_evaluator = ASTEvaluator(self)
+            return self._ast_evaluator.visit(ast_node)
+        except Exception:
+            return None  # Fall back to registry
+
     def process_statement(self, code):
         if not code.strip():
             return []
-        
-        # Try the command registry first
+
+        # Try AST execution for migrated commands
+        ast_result = self._try_ast_execute(code)
+        if ast_result is not None:
+            return ast_result
+
+        # Try the command registry
         result = self.command_registry.execute(code.strip())
         if result is not None:
             return result
