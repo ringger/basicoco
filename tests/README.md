@@ -1,6 +1,6 @@
-# TRS-80 Color Computer BASIC Emulator Test Suite
+# BasiCoCo Test Suite
 
-This directory contains the comprehensive test suite for the TRS-80 Color Computer BASIC emulator, organized into unit tests and integration tests.
+This directory contains the comprehensive test suite for BasiCoCo, organized into unit tests and integration tests.
 
 ## Running Tests
 

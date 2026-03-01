@@ -1,4 +1,4 @@
-# TRS-80 Color Computer BASIC Environment
+# BasiCoCo
 
 An educational BASIC programming environment inspired by the TRS-80 Color Computer. Type BASIC, see what happens, and learn from mistakes — every error message tells you what went wrong and how to fix it.
 
@@ -34,8 +34,8 @@ The dual-monitor web interface puts your REPL and graphics side by side — some
 ## Quick Start
 
 ```bash
-git clone https://github.com/ringger/trs80.git
-cd trs80
+git clone https://github.com/ringger/basicoco.git
+cd basicoco
 python -m venv venv
 source venv/bin/activate  # On Windows: venv\Scripts\activate
 pip install -r requirements.txt
@@ -147,7 +147,7 @@ If you're looking for authentic hardware emulation or other BASIC environments:
 ## Architecture
 
 ```
-trs80/
+basicoco/
 ├── app.py                  # Flask web server
 ├── cli_client.py           # Terminal-based CLI client
 ├── emulator/

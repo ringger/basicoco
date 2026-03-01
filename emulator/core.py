@@ -1,5 +1,5 @@
 """
-Core TRS-80 Color Computer BASIC Emulator
+BasiCoCo - Educational Color Computer BASIC Environment
 
 This module contains the main CoCoBasic class that implements the BASIC interpreter.
 The class has been extracted from the monolithic app.py file to improve maintainability.

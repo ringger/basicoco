@@ -1,4 +1,4 @@
-# TRS-80 CoCo BASIC Emulator
+# BasiCoCo
 
 ## Command Dispatch
 

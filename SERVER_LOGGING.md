@@ -1,6 +1,6 @@
-# TRS-80 Server Logging Scripts
+# Server Logging Scripts
 
-These scripts help you run and monitor the TRS-80 BASIC emulator server with comprehensive logging for debugging purposes.
+These scripts help you run and monitor the BasiCoCo server with comprehensive logging for debugging purposes.
 
 ## Scripts
 

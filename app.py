@@ -58,7 +58,7 @@ def handle_disconnect():
 
 @app.route('/')
 def index():
-    """TRS-80 Color Computer BASIC Emulator"""
+    """BasiCoCo - Educational Color Computer BASIC Environment"""
     return render_template('dual_monitor.html')
 
 @app.route('/dual')

@@ -1,6 +1,6 @@
-# TRS-80 Color Computer BASIC Programs
+# BasiCoCo Programs
 
-This directory contains BASIC programs for the TRS-80 Color Computer emulator.
+This directory contains BASIC programs for BasiCoCo.
 
 ## Available Programs
 

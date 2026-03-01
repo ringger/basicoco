@@ -1,5 +1,5 @@
 /**
- * TRS-80 Color Computer BASIC Emulator - Dual Monitor Interface
+ * BasiCoCo - Dual Monitor Interface
  * Revolutionary split-screen interface with persistent REPL and dedicated graphics display
  */
 
@@ -1320,7 +1320,7 @@ class DualMonitorEmulator {
             
             // Clear the connecting message and show welcome
             this.displayManager.textDisplay.clearScreen();
-            this.displayManager.textDisplay.printText('TRS-80 Color Computer BASIC - Dual Monitor Mode\n');
+            this.displayManager.textDisplay.printText('BASICOCO V1.0\n');
             this.displayManager.textDisplay.printText('Type BASIC commands or programs. Type HELP for assistance.\n\n');
             
             // Show initial prompt now that we're ready
@@ -1329,7 +1329,7 @@ class DualMonitorEmulator {
         
         this.socket.on('connect', () => {
             console.log('Socket.IO connected successfully to server');
-            console.log('Connected to TRS-80 Color Computer - Dual Monitor Mode');
+            console.log('Connected to BasiCoCo');
             document.getElementById('program-status').textContent = 'Connected';
             console.log('Waiting for session ID...');
         });

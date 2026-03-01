@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-TRS-80 Color Computer BASIC Emulator - CLI Client
+BasiCoCo - CLI Client
 A standalone terminal interface for the BASIC emulator that connects to the Flask-SocketIO server.
 """
 
@@ -66,7 +66,7 @@ class TRS80CLI:
         @self.sio.event
         def connect():
             self.connected = True
-            print("Connected to TRS-80 Color Computer BASIC Emulator")
+            print("Connected to BasiCoCo")
             print("Type BASIC commands or programs. Press Ctrl+C to exit.")
             print("=" * 60)
         
@@ -252,7 +252,7 @@ def main():
     """Entry point for the CLI client."""
     import argparse
     
-    parser = argparse.ArgumentParser(description='TRS-80 Color Computer BASIC CLI Client')
+    parser = argparse.ArgumentParser(description='BasiCoCo CLI Client')
     parser.add_argument('--host', default='localhost', 
                        help='Server host (default: localhost)')
     parser.add_argument('--port', type=int, default=5000,
@@ -261,9 +261,9 @@ def main():
     args = parser.parse_args()
     
     # Display banner
-    print("TRS-80 COLOR COMPUTER BASIC V1.0")
-    print("(C) 1980 BY TANDY")
-    print("ENHANCED EMULATOR VERSION")
+    print("BASICOCO V1.0")
+    print("EDUCATIONAL COLOR COMPUTER BASIC")
+    print("INSPIRED BY TANDY/RADIO SHACK")
     print()
     
     cli = TRS80CLI(args.host, args.port)
