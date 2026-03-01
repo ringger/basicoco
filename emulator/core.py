@@ -127,6 +127,40 @@ class CoCoBasic:
         """Return a system OK acknowledgment (not user-generated output)."""
         return [{'type': 'text', 'text': 'OK', 'source': 'system'}]
 
+    @staticmethod
+    def _strip_quotes(s):
+        """Strip surrounding single or double quotes from a string."""
+        s = s.strip()
+        if (s.startswith('"') and s.endswith('"')) or (s.startswith("'") and s.endswith("'")):
+            return s[1:-1]
+        return s
+
+    @staticmethod
+    def _ensure_bas_extension(filename):
+        """Add .bas extension if not already present."""
+        if not filename.lower().endswith('.bas'):
+            filename += '.bas'
+        return filename
+
+    def _find_program_file(self, filename):
+        """Search for a .bas file in standard locations. Returns path or None."""
+        import os
+        search_paths = [
+            filename,
+            os.path.join('programs', filename),
+            os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), filename),
+            os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'programs', filename),
+        ]
+        for path in search_paths:
+            if os.path.exists(path):
+                return path
+        return None
+
+    def _file_error(self, message, filename, command):
+        """Return a formatted file error response list."""
+        error = self.error_context.file_error(message, filename, command)
+        return [{'type': 'error', 'message': error.format_detailed()}]
+
     def get_reserved_function_names(self):
         """Return list of reserved function names that cannot be used as variable/array names"""
         return ['LEFT$', 'RIGHT$', 'MID$', 'LEN', 'ABS', 'INT', 'RND', 'SQR', 
@@ -208,126 +242,72 @@ class CoCoBasic:
     def load_program(self, filename):
         """Load a BASIC program from a file"""
         import os
-        
-        # Parse filename - handle quotes
-        filename = filename.strip()
-        if filename.startswith('"') and filename.endswith('"'):
-            filename = filename[1:-1]
-        elif filename.startswith("'") and filename.endswith("'"):
-            filename = filename[1:-1]
-        
+
+        filename = self._strip_quotes(filename)
+
         if not filename:
             error = self.error_context.syntax_error(
                 "SYNTAX ERROR: Filename required",
                 self.current_line,
                 suggestions=[
                     "Provide a filename to load",
-                    'Example: LOAD "MYGAME"', 
+                    'Example: LOAD "MYGAME"',
                     'File extension .bas will be added automatically'
                 ]
             )
             return [{'type': 'error', 'message': error.format_detailed()}]
-        
-        # Add .bas extension if not present
-        if not filename.lower().endswith('.bas'):
-            filename += '.bas'
-        
+
+        filename = self._ensure_bas_extension(filename)
+
         try:
-            original_filename = filename
-            
-            # Search order: current dir -> programs/ -> project root
-            search_paths = [
-                filename,  # Current directory
-                os.path.join('programs', filename),  # programs subdirectory
-                os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), filename),  # project root
-                os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'programs', filename)  # project root/programs
-            ]
-            
-            found_file = None
-            for path in search_paths:
-                if os.path.exists(path):
-                    found_file = path
-                    break
-            
+            found_file = self._find_program_file(filename)
+
             if not found_file:
-                error = self.error_context.file_error(
-                    f"FILE NOT FOUND: {os.path.basename(original_filename)}",
-                    original_filename,
-                    "LOAD"
-                )
-                return [{'type': 'error', 'message': error.format_detailed()}]
-            
-            filename = found_file
-            
+                return self._file_error(f"FILE NOT FOUND: {os.path.basename(filename)}", filename, "LOAD")
+
             # Clear current program and interpreter state
             self.clear_interpreter_state(clear_program=True)
-            
+
             # Load and parse the file
-            with open(filename, 'r') as f:
+            with open(found_file, 'r') as f:
                 lines_loaded = 0
                 for line in f:
                     line = line.strip()
                     if line and not line.startswith('#'):  # Skip empty lines and comments
-                        # Parse each line as if it were entered directly
                         line_num, code = self.parse_line(line)
                         if line_num is not None:
                             if code:
                                 self.program[line_num] = code
                                 self.expand_line_to_sublines(line_num, code)
                                 lines_loaded += 1
-                            # Skip lines that are just line numbers with no code
-                        else:
-                            # Handle lines without line numbers - treat as comments or ignore
-                            pass
-            
-            return [{'type': 'text', 'text': f'LOADED {lines_loaded} LINES FROM {os.path.basename(filename)}'}]
-            
+
+            return [{'type': 'text', 'text': f'LOADED {lines_loaded} LINES FROM {os.path.basename(found_file)}'}]
+
         except FileNotFoundError:
-            error = self.error_context.file_error(
-                f"FILE NOT FOUND: {os.path.basename(filename)}",
-                filename,
-                "LOAD"
-            )
-            return [{'type': 'error', 'message': error.format_detailed()}]
+            return self._file_error(f"FILE NOT FOUND: {os.path.basename(filename)}", filename, "LOAD")
         except PermissionError:
-            error = self.error_context.file_error(
-                f"PERMISSION DENIED: {os.path.basename(filename)}",
-                filename, 
-                "LOAD"
-            )
-            return [{'type': 'error', 'message': error.format_detailed()}]
+            return self._file_error(f"PERMISSION DENIED: {os.path.basename(filename)}", filename, "LOAD")
         except Exception as e:
-            error = self.error_context.file_error(
-                f"LOAD ERROR: {str(e)}",
-                filename,
-                "LOAD"
-            )
-            return [{'type': 'error', 'message': error.format_detailed()}]
+            return self._file_error(f"LOAD ERROR: {str(e)}", filename, "LOAD")
     
     def save_program(self, filename):
         """Save the current BASIC program to a file"""
         import os
-        
-        # Parse filename - handle quotes
-        filename = filename.strip()
-        if filename.startswith('"') and filename.endswith('"'):
-            filename = filename[1:-1]
-        elif filename.startswith("'") and filename.endswith("'"):
-            filename = filename[1:-1]
-        
+
+        filename = self._strip_quotes(filename)
+
         if not filename:
             error = self.error_context.syntax_error(
                 "SYNTAX ERROR: Filename required",
                 self.current_line,
                 suggestions=[
                     "Provide a filename to save",
-                    'Example: SAVE "MYGAME"', 
+                    'Example: SAVE "MYGAME"',
                     'File extension .bas will be added automatically'
                 ]
             )
             return [{'type': 'error', 'message': error.format_detailed()}]
-        
-        # Check if there's a program to save
+
         if not self.program:
             error = self.error_context.runtime_error(
                 "NO PROGRAM TO SAVE",
@@ -338,51 +318,28 @@ class CoCoBasic:
                 ]
             )
             return [{'type': 'error', 'message': error.format_detailed()}]
-        
-        # Add .bas extension if not present
-        if not filename.lower().endswith('.bas'):
-            filename += '.bas'
-        
+
+        filename = self._ensure_bas_extension(filename)
+
         try:
-            # Create programs directory if it doesn't exist
             os.makedirs('programs', exist_ok=True)
-            
-            # Default save location is programs directory
+
             if not os.path.dirname(filename):
                 filename = os.path.join('programs', filename)
-            
-            # Sort program lines by line number for proper output
+
             sorted_lines = sorted(self.program.items())
-            
-            # Write program to file
+
             with open(filename, 'w') as f:
                 for line_num, code in sorted_lines:
                     f.write(f"{line_num} {code}\n")
-            
+
             lines_saved = len(sorted_lines)
             return [{'type': 'text', 'text': f'SAVED {lines_saved} LINES TO {os.path.basename(filename)}'}]
-            
+
         except PermissionError:
-            error = self.error_context.file_error(
-                f"PERMISSION DENIED: {os.path.basename(filename)}",
-                filename,
-                "SAVE"
-            )
-            return [{'type': 'error', 'message': error.format_detailed()}]
-        except OSError as e:
-            error = self.error_context.file_error(
-                f"SAVE ERROR: {str(e)}",
-                filename,
-                "SAVE"
-            )
-            return [{'type': 'error', 'message': error.format_detailed()}]
-        except Exception as e:
-            error = self.error_context.file_error(
-                f"SAVE ERROR: {str(e)}",
-                filename,
-                "SAVE"
-            )
-            return [{'type': 'error', 'message': error.format_detailed()}]
+            return self._file_error(f"PERMISSION DENIED: {os.path.basename(filename)}", filename, "SAVE")
+        except (OSError, Exception) as e:
+            return self._file_error(f"SAVE ERROR: {str(e)}", filename, "SAVE")
     
     def dir_command(self, args=None):
         """DIR command - List available BASIC program files"""
@@ -494,114 +451,65 @@ class CoCoBasic:
     def kill_file(self, filename):
         """Delete a BASIC program file with confirmation"""
         import os
-        
-        # Parse filename - handle quotes
-        filename = filename.strip()
-        if filename.startswith('"') and filename.endswith('"'):
-            filename = filename[1:-1]
-        elif filename.startswith("'") and filename.endswith("'"):
-            filename = filename[1:-1]
-        
+
+        filename = self._strip_quotes(filename)
+
         if not filename:
             error = self.error_context.syntax_error(
                 "SYNTAX ERROR: Filename required",
                 self.current_line,
                 suggestions=[
                     "Provide a filename to delete",
-                    'Example: KILL "OLDGAME"', 
+                    'Example: KILL "OLDGAME"',
                     'File extension .bas will be added automatically'
                 ]
             )
             return [{'type': 'error', 'message': error.format_detailed()}]
-        
-        # Add .bas extension if not present
-        if not filename.lower().endswith('.bas'):
-            filename += '.bas'
-        
+
+        filename = self._ensure_bas_extension(filename)
+
         try:
-            # Search for the file in the same locations as LOAD
-            search_paths = [
-                filename,  # Current directory
-                os.path.join('programs', filename),  # programs subdirectory
-                os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), filename),  # project root
-                os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'programs', filename)  # project root/programs
-            ]
-            
-            found_file = None
-            for path in search_paths:
-                if os.path.exists(path):
-                    found_file = path
-                    break
-            
+            found_file = self._find_program_file(filename)
+
             if not found_file:
-                error = self.error_context.file_error(
-                    f"FILE NOT FOUND: {os.path.basename(filename)}",
-                    filename,
-                    "KILL"
-                )
-                return [{'type': 'error', 'message': error.format_detailed()}]
-            
-            # For safety, we'll implement a simple confirmation through the CLI
-            # The CLI client will handle the confirmation prompt
-            output = []
-            output.append({'type': 'text', 'text': f'DELETE {os.path.basename(found_file)}? (Y/N)'})
-            output.append({'type': 'input_request', 'prompt': '? ', 'variable': '_kill_confirm', 'filename': found_file})
-            
-            return output
-            
+                return self._file_error(f"FILE NOT FOUND: {os.path.basename(filename)}", filename, "KILL")
+
+            return [
+                {'type': 'text', 'text': f'DELETE {os.path.basename(found_file)}? (Y/N)'},
+                {'type': 'input_request', 'prompt': '? ', 'variable': '_kill_confirm', 'filename': found_file},
+            ]
+
         except Exception as e:
-            error = self.error_context.file_error(
-                f"KILL ERROR: {str(e)}",
-                filename,
-                "KILL"
-            )
-            return [{'type': 'error', 'message': error.format_detailed()}]
+            return self._file_error(f"KILL ERROR: {str(e)}", filename, "KILL")
     
     def process_kill_confirmation(self, response, filename):
         """Process the confirmation response for KILL command"""
         import os
-        
+
         response = response.strip().upper()
-        
+
         if response in ['Y', 'YES']:
             try:
                 os.remove(filename)
                 return [{'type': 'text', 'text': f'DELETED {os.path.basename(filename)}'}]
             except PermissionError:
-                error = self.error_context.file_error(
-                    f"PERMISSION DENIED: {os.path.basename(filename)}",
-                    filename,
-                    "KILL"
-                )
-                return [{'type': 'error', 'message': error.format_detailed()}]
+                return self._file_error(f"PERMISSION DENIED: {os.path.basename(filename)}", filename, "KILL")
             except Exception as e:
-                error = self.error_context.file_error(
-                    f"DELETE ERROR: {str(e)}",
-                    filename,
-                    "KILL"
-                )
-                return [{'type': 'error', 'message': error.format_detailed()}]
+                return self._file_error(f"DELETE ERROR: {str(e)}", filename, "KILL")
         else:
             return [{'type': 'text', 'text': 'DELETE CANCELLED'}]
     
     def change_directory(self, path):
         """Change current working directory"""
         import os
-        
-        # Parse path - handle quotes
-        path = path.strip()
-        if path.startswith('"') and path.endswith('"'):
-            path = path[1:-1]
-        elif path.startswith("'") and path.endswith("'"):
-            path = path[1:-1]
-        
-        # If no path provided, show current directory
+
+        path = self._strip_quotes(path)
+
         if not path:
             current_dir = os.getcwd()
             return [{'type': 'text', 'text': f'CURRENT DIRECTORY: {current_dir}'}]
-        
+
         try:
-            # Special handling for common shortcuts
             if path == "..":
                 path = os.path.dirname(os.getcwd())
             elif path == "~":
@@ -610,43 +518,20 @@ class CoCoBasic:
                 path = "/"
             elif path.startswith("~/"):
                 path = os.path.expanduser(path)
-            
-            # Change to the directory
+
             old_dir = os.getcwd()
             os.chdir(path)
             new_dir = os.getcwd()
-            
-            return [{'type': 'text', 'text': f'CHANGED FROM {old_dir}'}] + \
-                   [{'type': 'text', 'text': f'TO {new_dir}'}]
-            
+
+            return [{'type': 'text', 'text': f'CHANGED FROM {old_dir}'},
+                    {'type': 'text', 'text': f'TO {new_dir}'}]
+
         except FileNotFoundError:
-            error = self.error_context.file_error(
-                f"DIRECTORY NOT FOUND: {path}",
-                path,
-                "CD"
-            )
-            return [{'type': 'error', 'message': error.format_detailed()}]
+            return self._file_error(f"DIRECTORY NOT FOUND: {path}", path, "CD")
         except PermissionError:
-            error = self.error_context.file_error(
-                f"PERMISSION DENIED: {path}",
-                path,
-                "CD"
-            )
-            return [{'type': 'error', 'message': error.format_detailed()}]
-        except OSError as e:
-            error = self.error_context.file_error(
-                f"CD ERROR: {str(e)}",
-                path,
-                "CD"
-            )
-            return [{'type': 'error', 'message': error.format_detailed()}]
-        except Exception as e:
-            error = self.error_context.file_error(
-                f"CD ERROR: {str(e)}",
-                path,
-                "CD"
-            )
-            return [{'type': 'error', 'message': error.format_detailed()}]
+            return self._file_error(f"PERMISSION DENIED: {path}", path, "CD")
+        except (OSError, Exception) as e:
+            return self._file_error(f"CD ERROR: {str(e)}", path, "CD")
     
     def expand_line_to_sublines(self, line_num, code):
         """Expand line using BasicParser or AST converter for single-line control structures"""

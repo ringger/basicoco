@@ -42,6 +42,38 @@ class BasicGraphics:
             message, self.emulator.current_line, suggestions=suggestions)
         return [{'type': 'error', 'message': error.format_detailed()}]
 
+    def _require_graphics_mode(self):
+        """Return error response if not in graphics mode, else None."""
+        if self.emulator.graphics_mode == 0:
+            return [{'type': 'error', 'message': 'ILLEGAL FUNCTION CALL'}]
+        return None
+
+    def _parse_coord_pair(self, args, command_name):
+        """Parse (x,y) from args. Returns (x, y, remainder_after_paren) or error list."""
+        if not (args.startswith('(') and ')' in args):
+            return self._syntax_error(
+                f"{command_name} requires parenthesized coordinates",
+                [f'Correct syntax: {command_name}(x,y)', f'Example: {command_name}(100,50)'])
+        coords_end = self._find_matching_parenthesis(args, 0)
+        if coords_end == -1:
+            return self._syntax_error(
+                f"Missing closing parenthesis in {command_name} coordinates",
+                [f'Correct syntax: {command_name}(x,y)',
+                 f'Example: {command_name}(100,50)',
+                 'Make sure parentheses are properly matched'])
+        coords = args[1:coords_end]
+        coord_parts = self._split_arguments_respecting_parentheses(coords)
+        if len(coord_parts) != 2:
+            return self._syntax_error(
+                f"{command_name} requires exactly two coordinates",
+                [f'Correct syntax: {command_name}(x,y)',
+                 f'Example: {command_name}(100,50)',
+                 'Specify both X and Y coordinates'])
+        x = self._eval_int(coord_parts[0])
+        y = self._eval_int(coord_parts[1])
+        remainder = args[coords_end + 1:].strip()
+        return (x, y, remainder)
+
     def _find_matching_parenthesis(self, text, start):
         """Find the matching closing parenthesis for the opening one at start"""
         if start >= len(text) or text[start] != '(':
@@ -139,56 +171,33 @@ class BasicGraphics:
     def execute_pset(self, args):
         """Execute PSET command to set a pixel"""
         try:
-            # Check if we're in graphics mode
-            if self.emulator.graphics_mode == 0:
-                return [{'type': 'error', 'message': 'ILLEGAL FUNCTION CALL'}]
-            
-            # Parse PSET (x,y)[,color] or PSET x,y[,color]
+            err = self._require_graphics_mode()
+            if err:
+                return err
+
             if args.startswith('(') and ')' in args:
-                # Parentheses syntax: PSET(x,y)[,color]
-                coords_end = self._find_matching_parenthesis(args, 0)
-                if coords_end == -1:
-                    return self._syntax_error(
-                        "Missing closing parenthesis in PSET coordinates",
-                        ['Correct syntax: PSET(x,y) or PSET(x,y),color',
-                         'Example: PSET(100,50)',
-                         'Make sure parentheses are properly matched'])
-                coords = args[1:coords_end]
-                coord_parts = self._split_arguments_respecting_parentheses(coords)
-                if len(coord_parts) != 2:
-                    return self._syntax_error(
-                        "PSET requires exactly two coordinates",
-                        ['Correct syntax: PSET(x,y) or PSET(x,y),color',
-                         'Example: PSET(100,50,1)',
-                         'Specify both X and Y coordinates'])
-                x = self._eval_int(coord_parts[0].strip())
-                y = self._eval_int(coord_parts[1].strip())
-                
-                # Check for color parameter
+                result = self._parse_coord_pair(args, 'PSET')
+                if isinstance(result, list):
+                    return result
+                x, y, remainder = result
                 color = None
-                remainder = args[coords_end + 1:].strip()
                 if remainder.startswith(','):
                     color_str = remainder[1:].strip()
                     if color_str:
                         color = self._eval_int(color_str)
-                
                 return [{'type': 'pset', 'x': x, 'y': y, 'color': color}]
             else:
-                # Space-separated syntax: PSET x,y[,color]
                 parts = self._split_arguments_respecting_parentheses(args)
                 if len(parts) < 2:
-                    return self._syntax_error("PSET requires X and Y coordinates", ['Correct syntax: PSET x,y or PSET x,y,color',
-                            'Example: PSET 100,50',
-                            'Specify both X and Y coordinates'])
-                
-                x = self._eval_int(parts[0].strip())
-                y = self._eval_int(parts[1].strip())
-                
-                # Check for color parameter
+                    return self._syntax_error("PSET requires X and Y coordinates",
+                        ['Correct syntax: PSET x,y or PSET x,y,color',
+                         'Example: PSET 100,50',
+                         'Specify both X and Y coordinates'])
+                x = self._eval_int(parts[0])
+                y = self._eval_int(parts[1])
                 color = None
                 if len(parts) > 2 and parts[2].strip():
-                    color = self._eval_int(parts[2].strip())
-                
+                    color = self._eval_int(parts[2])
                 return [{'type': 'pset', 'x': x, 'y': y, 'color': color}]
         except Exception as e:
             return [{'type': 'error', 'message': f'Error in PSET: {str(e)}'}]
@@ -196,39 +205,24 @@ class BasicGraphics:
     def execute_preset(self, args):
         """Execute PRESET command to reset a pixel to background color"""
         try:
-            # Check if we're in graphics mode
-            if self.emulator.graphics_mode == 0:
-                return [{'type': 'error', 'message': 'ILLEGAL FUNCTION CALL'}]
-            
-            # Parse PRESET (x,y) or PRESET x,y
+            err = self._require_graphics_mode()
+            if err:
+                return err
+
             if args.startswith('(') and ')' in args:
-                # Parentheses syntax: PRESET(x,y)
-                coords_end = self._find_matching_parenthesis(args, 0)
-                if coords_end == -1:
-                    return self._syntax_error("Missing closing parenthesis in PRESET coordinates", ['Correct syntax: PRESET(x,y)',
-                            'Example: PRESET(100,50)',
-                            'Make sure parentheses are properly matched'])
-                coords = args[1:coords_end]
-                coord_parts = self._split_arguments_respecting_parentheses(coords)
-                if len(coord_parts) != 2:
-                    return self._syntax_error("PRESET requires exactly two coordinates", ['Correct syntax: PRESET(x,y)',
-                            'Example: PRESET(100,50)',
-                            'Specify both X and Y coordinates'])
-                x = self._eval_int(coord_parts[0].strip())
-                y = self._eval_int(coord_parts[1].strip())
-                
+                result = self._parse_coord_pair(args, 'PRESET')
+                if isinstance(result, list):
+                    return result
+                x, y, _ = result
                 return [{'type': 'preset', 'x': x, 'y': y}]
             else:
-                # Space-separated syntax: PRESET x,y
                 parts = self._split_arguments_respecting_parentheses(args)
                 if len(parts) != 2:
-                    return self._syntax_error("PRESET requires exactly two coordinates", ['Correct syntax: PRESET x,y',
-                            'Example: PRESET 100,50',
-                            'Specify both X and Y coordinates'])
-                
-                x = self._eval_int(parts[0].strip())
-                y = self._eval_int(parts[1].strip())
-                
+                    return self._syntax_error("PRESET requires exactly two coordinates",
+                        ['Correct syntax: PRESET x,y', 'Example: PRESET 100,50',
+                         'Specify both X and Y coordinates'])
+                x = self._eval_int(parts[0])
+                y = self._eval_int(parts[1])
                 return [{'type': 'preset', 'x': x, 'y': y}]
         except Exception as e:
             return [{'type': 'error', 'message': f'Error in PRESET: {str(e)}'}]
@@ -236,9 +230,9 @@ class BasicGraphics:
     def execute_line_graphics(self, args):
         """Execute LINE command to draw a line"""
         try:
-            # Check if we're in graphics mode
-            if self.emulator.graphics_mode == 0:
-                return [{'type': 'error', 'message': 'ILLEGAL FUNCTION CALL'}]
+            err = self._require_graphics_mode()
+            if err:
+                return err
             
             # Parse LINE (x1,y1)-(x2,y2)[,color] or LINE x1,y1,x2,y2[,color]
             if '-(' in args:
@@ -294,30 +288,19 @@ class BasicGraphics:
     def execute_circle(self, args):
         """Execute CIRCLE command to draw a circle"""
         try:
-            # Check if we're in graphics mode
-            if self.emulator.graphics_mode == 0:
-                return [{'type': 'error', 'message': 'ILLEGAL FUNCTION CALL'}]
-            
+            err = self._require_graphics_mode()
+            if err:
+                return err
+
             # Parse CIRCLE (x,y),radius[,color] or CIRCLE x,y,radius[,color]
             if args.startswith('(') and ')' in args:
-                # Parentheses syntax: CIRCLE(x,y),radius[,color]
-                coords_end = self._find_matching_parenthesis(args, 0)
-                if coords_end == -1:
-                    return self._syntax_error("Missing closing parenthesis in CIRCLE coordinates", ['Correct syntax: CIRCLE(x,y),radius or CIRCLE(x,y),radius,color',
-                            'Example: CIRCLE(100,50),25',
-                            'Make sure parentheses are properly matched'])
-                coords = args[1:coords_end]
-                coord_parts = self._split_arguments_respecting_parentheses(coords)
-                if len(coord_parts) != 2:
-                    return self._syntax_error("CIRCLE requires exactly two coordinates", ['Correct syntax: CIRCLE(x,y),radius',
-                            'Example: CIRCLE(100,50),25',
-                            'Specify center X and Y coordinates'])
-                x = self._eval_int(coord_parts[0].strip())
-                y = self._eval_int(coord_parts[1].strip())
-                
-                remainder = args[coords_end + 1:].strip()  # Skip ')' and whitespace
+                result = self._parse_coord_pair(args, 'CIRCLE')
+                if isinstance(result, list):
+                    return result
+                x, y, remainder = result
+
                 if remainder.startswith(','):
-                    remainder = remainder[1:].strip()  # Skip comma and whitespace
+                    remainder = remainder[1:].strip()
                 parts = remainder.split(',')
                 radius = self._eval_int(parts[0].strip())
                 
@@ -351,62 +334,46 @@ class BasicGraphics:
     def execute_paint(self, args):
         """Execute PAINT command for flood fill"""
         try:
-            # Check if we're in graphics mode
-            if self.emulator.graphics_mode == 0:
-                return [{'type': 'error', 'message': 'ILLEGAL FUNCTION CALL'}]
-            
-            # Parse PAINT (x,y)[,color[,border_color]]
+            err = self._require_graphics_mode()
+            if err:
+                return err
+
             if args.startswith('(') and ')' in args:
-                coords_end = self._find_matching_parenthesis(args, 0)
-                if coords_end == -1:
-                    return self._syntax_error("Missing closing parenthesis in PAINT coordinates", ['Correct syntax: PAINT(x,y),color or PAINT(x,y),color,boundary',
-                            'Example: PAINT(100,50),1',
-                            'Make sure parentheses are properly matched'])
-                coords = args[1:coords_end]
-                
-                # Must have exactly 2 coordinates
-                coord_parts = coords.split(',')
-                if len(coord_parts) != 2:
-                    return self._syntax_error("PAINT requires exactly two coordinates", ['Correct syntax: PAINT(x,y),color',
-                            'Example: PAINT(100,50),1',
-                            'Specify both X and Y coordinates'])
-                
-                x_str, y_str = coord_parts
-                x = self._eval_int(x_str.strip())
-                y = self._eval_int(y_str.strip())
-                
-                # Parse optional color parameters
+                result = self._parse_coord_pair(args, 'PAINT')
+                if isinstance(result, list):
+                    return result
+                x, y, remainder = result
+
                 paint_color = 1  # Default paint color
                 border_color = None
-                
-                remainder = args[coords_end + 1:].strip()
+
                 if remainder.startswith(','):
                     parts = remainder[1:].split(',')
                     if parts[0].strip():
-                        paint_color = self._eval_int(parts[0].strip())
+                        paint_color = self._eval_int(parts[0])
                     if len(parts) > 1 and parts[1].strip():
-                        border_color = self._eval_int(parts[1].strip())
+                        border_color = self._eval_int(parts[1])
                 elif remainder == '':
-                    # PAINT(x,y) without color is a syntax error
-                    return self._syntax_error("PAINT requires color parameter", ['Correct syntax: PAINT(x,y),color',
-                            'Example: PAINT(100,50),1',
-                            'Specify the fill color after coordinates'])
-                
-                # Use the key names expected by tests
+                    return self._syntax_error("PAINT requires color parameter",
+                        ['Correct syntax: PAINT(x,y),color',
+                         'Example: PAINT(100,50),1',
+                         'Specify the fill color after coordinates'])
+
                 return [{'type': 'paint', 'x': x, 'y': y, 'fill_color': paint_color, 'boundary_color': border_color}]
             else:
-                return self._syntax_error("Invalid PAINT syntax", ['Correct syntax: PAINT(x,y),color or PAINT(x,y),color,boundary',
-                        'Example: PAINT(100,50),1',
-                        'Coordinates must be enclosed in parentheses'])
+                return self._syntax_error("Invalid PAINT syntax",
+                    ['Correct syntax: PAINT(x,y),color or PAINT(x,y),color,boundary',
+                     'Example: PAINT(100,50),1',
+                     'Coordinates must be enclosed in parentheses'])
         except Exception as e:
             return [{'type': 'error', 'message': f'Error in PAINT: {str(e)}'}]
     
     def execute_get(self, args):
         """Execute GET command to capture graphics area"""
         try:
-            # Check if we're in graphics mode
-            if self.emulator.graphics_mode == 0:
-                return [{'type': 'error', 'message': 'ILLEGAL FUNCTION CALL'}]
+            err = self._require_graphics_mode()
+            if err:
+                return err
             
             # Parse GET (x1,y1)-(x2,y2), array_name
             if '-(' in args and ',' in args:
@@ -439,9 +406,9 @@ class BasicGraphics:
     def execute_put(self, args):
         """Execute PUT command to display stored graphics"""
         try:
-            # Check if we're in graphics mode
-            if self.emulator.graphics_mode == 0:
-                return [{'type': 'error', 'message': 'ILLEGAL FUNCTION CALL'}]
+            err = self._require_graphics_mode()
+            if err:
+                return err
             
             # Parse PUT (x,y), array_name [,action]
             parts = args.split(',')
@@ -473,9 +440,9 @@ class BasicGraphics:
     def execute_draw(self, args):
         """Execute DRAW command for turtle graphics"""
         try:
-            # Check if we're in graphics mode
-            if self.emulator.graphics_mode == 0:
-                return [{'type': 'error', 'message': 'ILLEGAL FUNCTION CALL'}]
+            err = self._require_graphics_mode()
+            if err:
+                return err
             
             # Evaluate the draw string expression
             draw_string = self.emulator.evaluate_expression(args)

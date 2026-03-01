@@ -21,23 +21,23 @@ from typing import Any, List, Union
 from .error_context import ErrorContextManager
 
 
+def _check_args(evaluator, func_name, args, expected, syntax_example):
+    """Validate argument count. Raises ValueError with formatted error if wrong."""
+    if len(args) != expected:
+        error = evaluator.error_context.syntax_error(
+            f"{func_name} requires exactly {expected} argument{'s' if expected != 1 else ''}, got {len(args)}",
+            suggestions=[f"Correct syntax: {syntax_example}"]
+        )
+        raise ValueError(error.format_detailed())
+
+
 # ============================================================================
 # String Functions
 # ============================================================================
 
 def fn_left(evaluator, args: List[Any]) -> str:
     """LEFT$(string, n) - return leftmost n characters"""
-    if len(args) != 2:
-        error = evaluator.error_context.syntax_error(
-            f"LEFT$ requires exactly 2 arguments, got {len(args)}",
-            suggestions=[
-                "Correct syntax: LEFT$(string, count)",
-                'Example: LEFT$("HELLO", 3) returns "HEL"',
-                "First argument: string to extract from",
-                "Second argument: number of characters to extract"
-            ]
-        )
-        raise ValueError(error.format_detailed())
+    _check_args(evaluator, 'LEFT$', args, 2, 'LEFT$(string, count)')
         
     try:
         string_val = str(args[0])
@@ -74,17 +74,7 @@ def fn_left(evaluator, args: List[Any]) -> str:
 
 def fn_right(evaluator, args: List[Any]) -> str:
     """RIGHT$(string, n) - return rightmost n characters"""
-    if len(args) != 2:
-        error = evaluator.error_context.syntax_error(
-            f"RIGHT$ requires exactly 2 arguments, got {len(args)}",
-            suggestions=[
-                "Correct syntax: RIGHT$(string, count)",
-                'Example: RIGHT$("HELLO", 3) returns "LLO"',
-                "First argument: string to extract from",
-                "Second argument: number of characters to extract"
-            ]
-        )
-        raise ValueError(error.format_detailed())
+    _check_args(evaluator, 'RIGHT$', args, 2, 'RIGHT$(string, count)')
         
     try:
         string_val = str(args[0])
@@ -124,12 +114,7 @@ def fn_mid(evaluator, args: List[Any]) -> str:
     if len(args) < 2 or len(args) > 3:
         error = evaluator.error_context.syntax_error(
             f"MID$ requires 2 or 3 arguments, got {len(args)}",
-            suggestions=[
-                "Two argument form: MID$(string, start)",
-                "Three argument form: MID$(string, start, length)",
-                'Example: MID$("HELLO", 2, 3) returns "ELL"',
-                "Start position is 1-based (first character is position 1)"
-            ]
+            suggestions=["Correct syntax: MID$(string, start[, length])"]
         )
         raise ValueError(error.format_detailed())
         
@@ -186,16 +171,7 @@ def fn_mid(evaluator, args: List[Any]) -> str:
 
 def fn_chr(evaluator, args: List[Any]) -> str:
     """CHR$(n) - return character from ASCII code"""
-    if len(args) != 1:
-        error = evaluator.error_context.syntax_error(
-            f"CHR$ requires exactly 1 argument, got {len(args)}",
-            suggestions=[
-                "Correct syntax: CHR$(code)",
-                "Example: CHR$(65) returns 'A'",
-                "Argument: ASCII code (0-255)"
-            ]
-        )
-        raise ValueError(error.format_detailed())
+    _check_args(evaluator, 'CHR$', args, 1, 'CHR$(code)')
         
     try:
         n = int(args[0])
@@ -231,16 +207,7 @@ def fn_chr(evaluator, args: List[Any]) -> str:
 
 def fn_str(evaluator, args: List[Any]) -> str:
     """STR$(n) - convert number to string"""
-    if len(args) != 1:
-        error = evaluator.error_context.syntax_error(
-            f"STR$ requires exactly 1 argument, got {len(args)}",
-            suggestions=[
-                "Correct syntax: STR$(number)",
-                "Example: STR$(42) returns ' 42'",
-                "Converts number to string with leading space for positive numbers"
-            ]
-        )
-        raise ValueError(error.format_detailed())
+    _check_args(evaluator, 'STR$', args, 1, 'STR$(number)')
         
     try:
         n = float(args[0])  # Convert to number to validate
@@ -272,32 +239,14 @@ def fn_str(evaluator, args: List[Any]) -> str:
 
 def fn_len(evaluator, args: List[Any]) -> int:
     """LEN(string) - return string length"""
-    if len(args) != 1:
-        error = evaluator.error_context.syntax_error(
-            f"LEN requires exactly 1 argument, got {len(args)}",
-            suggestions=[
-                "Correct syntax: LEN(string)",
-                'Example: LEN("HELLO") returns 5',
-                "Works with any string or string variable"
-            ]
-        )
-        raise ValueError(error.format_detailed())
+    _check_args(evaluator, 'LEN', args, 1, 'LEN(string)')
         
     return len(str(args[0]))
 
 
 def fn_abs(evaluator, args: List[Any]) -> float:
     """ABS(n) - return absolute value"""
-    if len(args) != 1:
-        error = evaluator.error_context.syntax_error(
-            f"ABS requires exactly 1 argument, got {len(args)}",
-            suggestions=[
-                "Correct syntax: ABS(number)",
-                "Example: ABS(-5) returns 5",
-                "Returns positive value regardless of input sign"
-            ]
-        )
-        raise ValueError(error.format_detailed())
+    _check_args(evaluator, 'ABS', args, 1, 'ABS(number)')
         
     try:
         return abs(float(args[0]))
@@ -317,16 +266,7 @@ def fn_abs(evaluator, args: List[Any]) -> float:
 
 def fn_int(evaluator, args: List[Any]) -> int:
     """INT(n) - return integer part (floor)"""
-    if len(args) != 1:
-        error = evaluator.error_context.syntax_error(
-            f"INT requires exactly 1 argument, got {len(args)}",
-            suggestions=[
-                "Correct syntax: INT(number)",
-                "Example: INT(3.7) returns 3",
-                "Truncates decimal part (floor operation)"
-            ]
-        )
-        raise ValueError(error.format_detailed())
+    _check_args(evaluator, 'INT', args, 1, 'INT(number)')
         
     try:
         return int(float(args[0]))
@@ -346,17 +286,7 @@ def fn_int(evaluator, args: List[Any]) -> int:
 
 def fn_rnd(evaluator, args: List[Any]) -> float:
     """RND(n) - return random number between 0 and 1"""
-    if len(args) != 1:
-        error = evaluator.error_context.syntax_error(
-            f"RND requires exactly 1 argument, got {len(args)}",
-            suggestions=[
-                "Correct syntax: RND(seed)",
-                "Example: RND(1) returns random number 0.0 to 1.0",
-                "Positive values generate new random numbers",
-                "Negative values can be used to seed the generator"
-            ]
-        )
-        raise ValueError(error.format_detailed())
+    _check_args(evaluator, 'RND', args, 1, 'RND(seed)')
         
     try:
         n = float(args[0])
@@ -381,16 +311,7 @@ def fn_rnd(evaluator, args: List[Any]) -> float:
 
 def fn_sqr(evaluator, args: List[Any]) -> float:
     """SQR(n) - return square root"""
-    if len(args) != 1:
-        error = evaluator.error_context.syntax_error(
-            f"SQR requires exactly 1 argument, got {len(args)}",
-            suggestions=[
-                "Correct syntax: SQR(number)",
-                "Example: SQR(9) returns 3",
-                "Calculates square root of positive numbers"
-            ]
-        )
-        raise ValueError(error.format_detailed())
+    _check_args(evaluator, 'SQR', args, 1, 'SQR(number)')
         
     try:
         n = float(args[0])
@@ -426,16 +347,7 @@ def fn_sqr(evaluator, args: List[Any]) -> float:
 
 def fn_sin(evaluator, args: List[Any]) -> float:
     """SIN(n) - return sine of angle in radians"""
-    if len(args) != 1:
-        error = evaluator.error_context.syntax_error(
-            f"SIN requires exactly 1 argument, got {len(args)}",
-            suggestions=[
-                "Correct syntax: SIN(angle)",
-                "Example: SIN(3.14159/2) returns 1 (90 degrees)",
-                "Angle must be in radians, not degrees"
-            ]
-        )
-        raise ValueError(error.format_detailed())
+    _check_args(evaluator, 'SIN', args, 1, 'SIN(angle)')
         
     try:
         return math.sin(float(args[0]))
@@ -455,16 +367,7 @@ def fn_sin(evaluator, args: List[Any]) -> float:
 
 def fn_cos(evaluator, args: List[Any]) -> float:
     """COS(n) - return cosine of angle in radians"""
-    if len(args) != 1:
-        error = evaluator.error_context.syntax_error(
-            f"COS requires exactly 1 argument, got {len(args)}",
-            suggestions=[
-                "Correct syntax: COS(angle)",
-                "Example: COS(0) returns 1 (0 degrees)",
-                "Angle must be in radians, not degrees"
-            ]
-        )
-        raise ValueError(error.format_detailed())
+    _check_args(evaluator, 'COS', args, 1, 'COS(angle)')
         
     try:
         return math.cos(float(args[0]))
@@ -484,17 +387,7 @@ def fn_cos(evaluator, args: List[Any]) -> float:
 
 def fn_tan(evaluator, args: List[Any]) -> float:
     """TAN(n) - return tangent of angle in radians"""
-    if len(args) != 1:
-        error = evaluator.error_context.syntax_error(
-            f"TAN requires exactly 1 argument, got {len(args)}",
-            suggestions=[
-                "Correct syntax: TAN(angle)",
-                "Example: TAN(0.785) returns 1 (45 degrees)",
-                "Angle must be in radians, not degrees",
-                "Note: TAN is undefined at odd multiples of π/2"
-            ]
-        )
-        raise ValueError(error.format_detailed())
+    _check_args(evaluator, 'TAN', args, 1, 'TAN(angle)')
         
     try:
         angle = float(args[0])
@@ -533,16 +426,7 @@ def fn_tan(evaluator, args: List[Any]) -> float:
 
 def fn_atn(evaluator, args: List[Any]) -> float:
     """ATN(n) - return arctangent in radians"""
-    if len(args) != 1:
-        error = evaluator.error_context.syntax_error(
-            f"ATN requires exactly 1 argument, got {len(args)}",
-            suggestions=[
-                "Correct syntax: ATN(number)",
-                "Example: ATN(1) returns 0.785 (45 degrees in radians)",
-                "Returns angle in radians whose tangent is the argument"
-            ]
-        )
-        raise ValueError(error.format_detailed())
+    _check_args(evaluator, 'ATN', args, 1, 'ATN(number)')
         
     try:
         return math.atan(float(args[0]))
@@ -566,16 +450,7 @@ def fn_atn(evaluator, args: List[Any]) -> float:
 
 def fn_exp(evaluator, args: List[Any]) -> float:
     """EXP(n) - return e raised to the power of n"""
-    if len(args) != 1:
-        error = evaluator.error_context.syntax_error(
-            f"EXP requires exactly 1 argument, got {len(args)}",
-            suggestions=[
-                "Correct syntax: EXP(power)",
-                "Example: EXP(1) returns 2.718 (e^1)",
-                "Calculates e (2.718...) raised to the given power"
-            ]
-        )
-        raise ValueError(error.format_detailed())
+    _check_args(evaluator, 'EXP', args, 1, 'EXP(power)')
         
     try:
         power = float(args[0])
@@ -613,16 +488,7 @@ def fn_exp(evaluator, args: List[Any]) -> float:
 
 def fn_log(evaluator, args: List[Any]) -> float:
     """LOG(n) - return natural logarithm"""
-    if len(args) != 1:
-        error = evaluator.error_context.syntax_error(
-            f"LOG requires exactly 1 argument, got {len(args)}",
-            suggestions=[
-                "Correct syntax: LOG(number)",
-                "Example: LOG(2.718) returns 1 (natural log of e)",
-                "Calculates natural logarithm (base e)"
-            ]
-        )
-        raise ValueError(error.format_detailed())
+    _check_args(evaluator, 'LOG', args, 1, 'LOG(number)')
         
     try:
         n = float(args[0])
@@ -664,16 +530,7 @@ def fn_log(evaluator, args: List[Any]) -> float:
 
 def fn_asc(evaluator, args: List[Any]) -> int:
     """ASC(string) - return ASCII code of first character"""
-    if len(args) != 1:
-        error = evaluator.error_context.syntax_error(
-            f"ASC requires exactly 1 argument, got {len(args)}",
-            suggestions=[
-                "Correct syntax: ASC(string)",
-                'Example: ASC("A") returns 65',
-                "Returns ASCII code of first character in string"
-            ]
-        )
-        raise ValueError(error.format_detailed())
+    _check_args(evaluator, 'ASC', args, 1, 'ASC(string)')
         
     s = str(args[0])
     
@@ -693,16 +550,7 @@ def fn_asc(evaluator, args: List[Any]) -> int:
 
 def fn_val(evaluator, args: List[Any]) -> Union[int, float]:
     """VAL(string) - convert string to number"""
-    if len(args) != 1:
-        error = evaluator.error_context.syntax_error(
-            f"VAL requires exactly 1 argument, got {len(args)}",
-            suggestions=[
-                "Correct syntax: VAL(string)",
-                'Example: VAL("123") returns 123',
-                "Converts string representation to numeric value"
-            ]
-        )
-        raise ValueError(error.format_detailed())
+    _check_args(evaluator, 'VAL', args, 1, 'VAL(string)')
         
     s = str(args[0]).strip()
     
@@ -722,9 +570,7 @@ def fn_val(evaluator, args: List[Any]) -> Union[int, float]:
 
 def fn_inkey(evaluator, args: List[Any]) -> str:
     """INKEY$ - return next key from keyboard buffer"""
-    # INKEY$ takes no arguments
-    if len(args) != 0:
-        raise ValueError("INKEY$ takes no arguments")
+    _check_args(evaluator, 'INKEY$', args, 0, 'INKEY$')
     
     # Get key from emulator's keyboard buffer
     if evaluator.keyboard_buffer:
@@ -777,8 +623,7 @@ def register_all_functions(registry):
 
 def fn_instr(evaluator, args: List[Any]) -> int:
     """INSTR(string, search) - find position of substring (1-based)"""
-    if len(args) != 2:
-        raise ValueError("INSTR requires 2 arguments")
+    _check_args(evaluator, 'INSTR', args, 2, 'INSTR(string, search)')
     string_val = str(args[0])
     search_val = str(args[1])
     
@@ -788,8 +633,7 @@ def fn_instr(evaluator, args: List[Any]) -> int:
 
 def fn_space(evaluator, args: List[Any]) -> str:
     """SPACE$(n) - return string of n spaces"""
-    if len(args) != 1:
-        raise ValueError("SPACE$ requires 1 argument")
+    _check_args(evaluator, 'SPACE$', args, 1, 'SPACE$(count)')
     n = int(args[0])
     if n < 0:
         raise ValueError("SPACE$ argument must be non-negative")
@@ -798,8 +642,7 @@ def fn_space(evaluator, args: List[Any]) -> str:
 
 def fn_string(evaluator, args: List[Any]) -> str:
     """STRING$(n, char) - return string of n repeated characters"""
-    if len(args) != 2:
-        raise ValueError("STRING$ requires 2 arguments")
+    _check_args(evaluator, 'STRING$', args, 2, 'STRING$(count, char)')
     n = int(args[0])
     char_arg = args[1]
     
