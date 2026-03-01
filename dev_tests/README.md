@@ -21,11 +21,6 @@ These scripts provide **quick verification** and **feature demonstration** durin
   - Valuable for debugging failing test cases
   - Run: `python debug_test_failures.py`
 
-- **`test_old_code_paths.py`** - Development debugging tool
-  - Checks if legacy code paths are still being used
-  - Helps verify refactoring completeness
-  - Run: `python test_old_code_paths.py`
-
 ## Usage
 
 ### Quick Development Feedback
@@ -38,9 +33,6 @@ python dev_tests/smoke_test.py
 
 # Debug specific test failures
 python dev_tests/debug_test_failures.py
-
-# Verify refactoring completeness
-python dev_tests/test_old_code_paths.py
 ```
 
 ## Relationship to Other Test Directories
@@ -48,15 +40,15 @@ python dev_tests/test_old_code_paths.py
 - **`dev_tests/`** (this directory) - Immediate development feedback and architectural validation
 - **`tests/unit/`** - Comprehensive unit tests with full coverage
 - **`tests/integration/`** - Multi-component integration testing
-- **Main test runner**: `python run_tests.py` (includes all directories)
+- **Main test runner**: `python -m pytest` (includes all directories)
 
 ## Development Workflow
 
 1. **Quick Health Check**: `python dev_tests/smoke_test.py --quick` (30 seconds)
 2. **During Development**: Run relevant `dev_tests/` scripts for immediate feedback
 3. **Pre-Commit Verification**: `python dev_tests/smoke_test.py` (full smoke test)
-4. **Before Push**: `python run_tests.py` for comprehensive validation
-5. **Debugging**: Use diagnostic scripts like `debug_test_failures.py` and `test_old_code_paths.py`
+4. **Before Push**: `python -m pytest` for comprehensive validation
+5. **Debugging**: Use `debug_test_failures.py` for isolating specific failures
 
 ## Removed Files
 
