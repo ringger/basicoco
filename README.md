@@ -151,20 +151,22 @@ If you're looking for authentic hardware emulation or other BASIC environments:
 ```
 basicoco/
 ├── app.py                  # Flask web server
+├── basicoco.py             # Standalone CLI REPL (no server needed)
 ├── cli_client.py           # Terminal-based CLI client
 ├── emulator/
-│   ├── core.py             # Main CoCoBasic interpreter
+│   ├── core.py             # Main CoCoBasic interpreter and command dispatch
+│   ├── program_executor.py # Program execution loop and flow control
+│   ├── file_manager.py     # File I/O: LOAD, SAVE, DIR, KILL, CD
 │   ├── parser.py           # Command parsing and tokenization
-│   ├── ast_parser.py       # AST parser, node types, and ASTEvaluator for command execution
+│   ├── ast_parser.py       # AST node types, parser, and evaluator
 │   ├── ast_converter.py    # Single-line to multi-line control structure conversion
 │   ├── expressions.py      # Function registry
-│   ├── functions.py        # BASIC function implementations
+│   ├── functions.py        # BASIC function implementations (all registered here)
 │   ├── commands.py         # Command registry
-│   ├── error_context.py    # Educational error reporting
-│   ├── output_manager.py   # Output streaming
 │   ├── graphics.py         # Graphics commands and VDG-inspired emulation
-│   └── variables.py        # Variable/array management (DIM, array access)
-├── basicoco.py             # Standalone CLI REPL (no server needed)
+│   ├── variables.py        # Variable/array management (DIM, array access)
+│   ├── error_context.py    # Educational error reporting
+│   └── output_manager.py   # Output streaming
 ├── programs/               # BASIC program files (.bas)
 ├── templates/              # HTML templates (dual monitor interface)
 ├── static/                 # CSS, JavaScript, audio support
@@ -177,7 +179,7 @@ The interpreter is implemented in Python and is designed to be readable. If you'
 
 ## Testing
 
-673 tests passing.
+699 tests passing.
 
 ```bash
 # Run all tests

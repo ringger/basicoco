@@ -130,7 +130,7 @@ class BasicGraphics:
     def execute_pmode(self, args):
         """Execute PMODE command to set graphics mode"""
         # Parse arguments: PMODE mode[,page]
-        parts = [p.strip() for p in args.split(',')]
+        parts = self._split_arguments_respecting_parentheses(args)
         mode = self._eval_int(parts[0])
         page = 1
 
@@ -149,9 +149,9 @@ class BasicGraphics:
         """Execute SCREEN command to set screen/color mode"""
         # Parse SCREEN mode[,page] parameters
         if ',' in args:
-            parts = args.split(',')
-            mode = self._eval_int(parts[0].strip())
-            page = self._eval_int(parts[1].strip())
+            parts = self._split_arguments_respecting_parentheses(args)
+            mode = self._eval_int(parts[0])
+            page = self._eval_int(parts[1])
         else:
             mode = self._eval_int(args)
             page = 1  # Default page
@@ -167,9 +167,9 @@ class BasicGraphics:
     def execute_color(self, args):
         """Execute COLOR command to set foreground/background colors"""
         if ',' in args:
-            fg_str, bg_str = args.split(',', 1)
-            fg = self._eval_int(fg_str.strip()) if fg_str.strip() else None
-            bg = self._eval_int(bg_str.strip()) if bg_str.strip() else None
+            parts = self._split_arguments_respecting_parentheses(args)
+            fg = self._eval_int(parts[0]) if parts[0] else None
+            bg = self._eval_int(parts[1]) if len(parts) > 1 and parts[1] else None
         else:
             fg = self._eval_int(args)
             bg = None
@@ -295,12 +295,12 @@ class BasicGraphics:
 
             if remainder.startswith(','):
                 remainder = remainder[1:].strip()
-            parts = remainder.split(',')
-            radius = self._eval_int(parts[0].strip())
+            parts = self._split_arguments_respecting_parentheses(remainder)
+            radius = self._eval_int(parts[0])
 
             color = None
-            if len(parts) > 1 and parts[1].strip():
-                color = self._eval_int(parts[1].strip())
+            if len(parts) > 1 and parts[1]:
+                color = self._eval_int(parts[1])
 
             return [{'type': 'circle', 'x': x, 'y': y, 'radius': radius, 'color': color}]
         else:
@@ -338,10 +338,10 @@ class BasicGraphics:
             border_color = None
 
             if remainder.startswith(','):
-                parts = remainder[1:].split(',')
-                if parts[0].strip():
+                parts = self._split_arguments_respecting_parentheses(remainder[1:])
+                if parts[0]:
                     paint_color = self._eval_int(parts[0])
-                if len(parts) > 1 and parts[1].strip():
+                if len(parts) > 1 and parts[1]:
                     border_color = self._eval_int(parts[1])
             elif remainder == '':
                 return self._syntax_error("PAINT requires color parameter",
@@ -396,25 +396,25 @@ class BasicGraphics:
             return err
 
         # Parse PUT (x,y), array_name [,action]
-        parts = args.split(',')
-        if len(parts) >= 2 and parts[0].strip().startswith('('):
-            coords = parts[0].strip()
-            if coords.startswith('(') and coords.endswith(')'):
-                coord_parts = coords[1:-1].split(',')
-                x = self._eval_int(coord_parts[0].strip())
-                y = self._eval_int(coord_parts[1].strip())
+        if args.strip().startswith('('):
+            result = self._parse_coord_pair(args, 'PUT')
+            if isinstance(result, list):
+                return result
+            x, y, remainder = result
 
-                array_name = parts[1].strip()
-                action = 'PSET'  # Default action
-
-                if len(parts) > 2 and parts[2].strip():
-                    action = parts[2].strip().upper()
-
-                return [{'type': 'put', 'x': x, 'y': y, 'array': array_name, 'action': action}]
+            if remainder.startswith(','):
+                parts = self._split_arguments_respecting_parentheses(remainder[1:])
             else:
-                return self._syntax_error("Invalid PUT coordinate syntax", ['Correct syntax: PUT(x,y),array_name',
+                return self._syntax_error("Invalid PUT syntax", ['Correct syntax: PUT(x,y),array_name',
                         'Example: PUT(100,50),A',
-                        'Coordinates must be enclosed in parentheses'])
+                        'Specify array name after coordinates'])
+
+            array_name = parts[0].strip()
+            action = 'PSET'  # Default action
+            if len(parts) > 1 and parts[1]:
+                action = parts[1].strip().upper()
+
+            return [{'type': 'put', 'x': x, 'y': y, 'array': array_name, 'action': action}]
         else:
             return self._syntax_error("Invalid PUT syntax", ['Correct syntax: PUT(x,y),array_name or PUT(x,y),array_name,action',
                     'Example: PUT(100,50),A,PSET',

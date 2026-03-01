@@ -58,9 +58,9 @@ class VariableManager:
             for array_def in array_defs:
                 array_def = array_def.strip()
                 
-                # Parse array_name(dimensions)
-                match = re.match(r'(\w+\$?)\(([^)]+)\)', array_def)
-                if not match:
+                # Parse array_name(dimensions), handling nested parentheses
+                paren_pos = array_def.find('(')
+                if paren_pos == -1 or not array_def.rstrip().endswith(')'):
                     error = self.emulator.error_context.syntax_error(
                         f"Invalid array declaration syntax: {array_def}",
                         self.emulator.current_line,
@@ -71,10 +71,22 @@ class VariableManager:
                         ]
                     )
                     return [{'type': 'error', 'message': error.format_detailed()}]
-                
-                array_name = match.group(1).upper()
-                dimensions_str = match.group(2)
-                
+
+                array_name = array_def[:paren_pos].strip().upper()
+                dimensions_str = array_def[paren_pos + 1:-1].strip()
+
+                if not array_name or not dimensions_str:
+                    error = self.emulator.error_context.syntax_error(
+                        f"Invalid array declaration syntax: {array_def}",
+                        self.emulator.current_line,
+                        suggestions=[
+                            'Correct syntax: array_name(dimensions)',
+                            'Example: DIM A(10), B$(5,10)',
+                            'Array name and dimensions are required'
+                        ]
+                    )
+                    return [{'type': 'error', 'message': error.format_detailed()}]
+
                 # Check if array name conflicts with reserved function names
                 if array_name in self.emulator.get_reserved_function_names():
                     error = self.emulator.error_context.syntax_error(
@@ -91,7 +103,7 @@ class VariableManager:
                 # Parse dimensions (comma-separated numbers)
                 try:
                     dimensions = []
-                    for dim_str in dimensions_str.split(','):
+                    for dim_str in self.emulator._split_args(dimensions_str):
                         dim_value = int(self.emulator.evaluate_expression(dim_str.strip()))
                         if dim_value <= 0:
                             error = self.emulator.error_context.syntax_error(

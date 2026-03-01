@@ -131,6 +131,28 @@ class CoCoBasic:
         """Alias for evaluate_expression (compatibility with old ExpressionEvaluator API)."""
         return self.evaluate_expression(expr, line)
 
+    @staticmethod
+    def _split_args(args):
+        """Split arguments by comma, respecting parentheses."""
+        parts = []
+        current = ""
+        depth = 0
+        for ch in args:
+            if ch == '(':
+                depth += 1
+                current += ch
+            elif ch == ')':
+                depth -= 1
+                current += ch
+            elif ch == ',' and depth == 0:
+                parts.append(current.strip())
+                current = ""
+            else:
+                current += ch
+        if current.strip():
+            parts.append(current.strip())
+        return parts
+
     def _remove_expanded_lines(self, line_num):
         """Remove all expanded_program entries for a given line number."""
         keys = [k for k in self.expanded_program if k[0] == line_num]
@@ -633,7 +655,7 @@ class CoCoBasic:
         # SOUND frequency,duration
         self.error_context.set_context(self.current_line, f"SOUND {args}")
         
-        parts = args.split(',')
+        parts = self._split_args(args)
         if len(parts) != 2:
             error = self.error_context.syntax_error(
                 "SOUND requires two parameters",
@@ -645,10 +667,10 @@ class CoCoBasic:
                 ]
             )
             return [{'type': 'error', 'message': error.format_detailed()}]
-        
+
         try:
-            frequency = int(self.evaluate_expression(parts[0].strip(), self.current_line))
-            duration = int(self.evaluate_expression(parts[1].strip(), self.current_line))
+            frequency = int(self.evaluate_expression(parts[0], self.current_line))
+            duration = int(self.evaluate_expression(parts[1], self.current_line))
             
             if frequency < 1 or frequency > 4095:
                 error = self.error_context.runtime_error(
@@ -836,15 +858,14 @@ class CoCoBasic:
                 # String literal
                 data_items.append(item[1:-1])
             else:
-                # Try to parse as number
+                # Try to parse as number: int first, then float, else string
                 try:
-                    if '.' in item:
-                        data_items.append(float(item))
-                    else:
-                        data_items.append(int(item))
+                    data_items.append(int(item))
                 except ValueError:
-                    # Store as string if not a valid number
-                    data_items.append(item)
+                    try:
+                        data_items.append(float(item))
+                    except ValueError:
+                        data_items.append(item)
         
         # Store data items with current line number for organization
         self.data_statements.extend([(self.current_line, item) for item in data_items])
@@ -889,8 +910,8 @@ class CoCoBasic:
             )
             return [{'type': 'error', 'message': error.format_detailed()}]
         
-        # Parse variable names
-        var_names = [name.strip() for name in args.split(',')]
+        # Parse variable names (parenthesis-aware for multi-dim arrays)
+        var_names = self._split_args(args)
         
         for var_name in var_names:
             if self.data_pointer >= len(self.data_statements):
@@ -923,9 +944,9 @@ class CoCoBasic:
     
     def assign_array_element(self, var_name, value):
         """Assign a value to an array element, return error result if there's an issue"""
-        # Check if this is an array assignment (A(5) = 10)
-        array_match = re.match(r'(\w+\$?)\(([^)]+)\)', var_name)
-        if not array_match:
+        # Extract array name and index contents, handling nested parentheses
+        paren_pos = var_name.find('(')
+        if paren_pos == -1 or not var_name.rstrip().endswith(')'):
             error = self.error_context.syntax_error(
                 "Invalid array syntax in DATA statement",
                 self.current_line,
@@ -936,14 +957,13 @@ class CoCoBasic:
                 ]
             )
             return [{'type': 'error', 'message': error.format_detailed()}]
-            
-        # Array assignment
-        array_name = array_match.group(1)
-        indices_str = array_match.group(2)
-        
-        # Parse indices and use VariableManager
+
+        array_name = var_name[:paren_pos]
+        indices_str = var_name[paren_pos + 1:-1]  # contents between outer parens
+
+        # Parse indices using parenthesis-aware split
         try:
-            indices = [int(self.evaluate_expression(idx.strip())) for idx in indices_str.split(',')]
+            indices = [int(self.evaluate_expression(idx)) for idx in self._split_args(indices_str)]
             
             # Use VariableManager to set array element
             error = self.variable_manager.set_array_element(array_name.upper(), indices, value)
@@ -1362,13 +1382,28 @@ class CoCoBasic:
 
         # Check for condition at LOOP (overrides DO condition)
         if args.upper().startswith('WHILE '):
-            condition = args[6:].strip()
-            condition_ast = None  # LOOP-level condition is always a string
+            condition_str = args[6:].strip()
             condition_type = 'WHILE'
+            # Parse and cache AST node for efficiency on repeated iterations
+            if 'loop_condition_ast' not in do_info or do_info.get('loop_condition_str') != condition_str:
+                try:
+                    do_info['loop_condition_ast'] = self.ast_parser.parse_expression(condition_str, self.current_line)
+                    do_info['loop_condition_str'] = condition_str
+                except Exception:
+                    do_info['loop_condition_ast'] = None
+            condition_ast = do_info.get('loop_condition_ast')
+            condition = condition_str if condition_ast is None else None
         elif args.upper().startswith('UNTIL '):
-            condition = args[6:].strip()
-            condition_ast = None
+            condition_str = args[6:].strip()
             condition_type = 'UNTIL'
+            if 'loop_condition_ast' not in do_info or do_info.get('loop_condition_str') != condition_str:
+                try:
+                    do_info['loop_condition_ast'] = self.ast_parser.parse_expression(condition_str, self.current_line)
+                    do_info['loop_condition_str'] = condition_str
+                except Exception:
+                    do_info['loop_condition_ast'] = None
+            condition_ast = do_info.get('loop_condition_ast')
+            condition = condition_str if condition_ast is None else None
 
         # Evaluate loop continuation
         should_continue = False

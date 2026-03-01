@@ -221,6 +221,20 @@ class TestDataCommand:
         # Should read into array elements successfully
         assert len(errors) == 0, f"Should read into arrays: {errors}"
 
+    def test_read_into_multidim_array(self, basic, helpers):
+        """Test READ into multi-dimensional array elements"""
+        program = [
+            '10 DIM A(2,2)',
+            '20 DATA 10, 20, 30',
+            '30 READ A(0,0), A(1,1), A(2,2)',
+            '40 PRINT A(0,0); A(1,1); A(2,2)'
+        ]
+        results = helpers.execute_program(basic, program)
+        errors = helpers.get_error_messages(results)
+        assert len(errors) == 0, f"Should read into multi-dim arrays: {errors}"
+        text = helpers.get_text_output(results)
+        assert any('10' in t and '20' in t and '30' in t for t in text)
+
     def test_data_with_expressions(self, basic, helpers):
         """Test that DATA contains literal values, not expressions"""
         program = [
