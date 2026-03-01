@@ -30,26 +30,31 @@ The emulator has a clean, well-established architecture:
 **CRITICAL**: Maintain clear separation between internal system methods and user command methods:
 
 - **`process_*` methods**: Internal system processing (process_command, process_line, process_statement)
-- **`execute_*` methods**: User BASIC commands (execute_if, execute_goto, execute_print)
+- **`execute_*` methods**: Non-migrated BASIC commands in registry (execute_next, execute_wend, execute_loop, etc.)
+- **`visit_*` methods**: AST-based execution for migrated commands (visit_for_statement, visit_goto_statement, etc.)
 
-### Command Registry Architecture
+### Command Execution Architecture
 
-All BASIC commands use the unified `CommandRegistry` system:
+BASIC commands use a two-tier dispatch system:
 
-1. Add to appropriate module's `register_commands()` method
-2. Use the established registration pattern with metadata
-3. Do NOT add hardcoded if/elif chains in `process_statement()`
-4. Do NOT bypass the command registry system
+1. **AST-first execution** via `_try_ast_execute()` → `ASTEvaluator.visit_*()` methods
+   - Handles: END, GOTO, LET, PRINT, GOSUB, RETURN, FOR, EXIT FOR, WHILE, DO, IF, INPUT
+   - Also handles implicit assignment (`X = 5` without LET)
+   - Controlled by `_ast_migrated_commands` set
 
-Registration pattern:
-```python
-def register_commands(self, registry):
-    registry.register('COMMAND_NAME', self.execute_method,
-                     category='appropriate_category',
-                     description="Command description",
-                     syntax="COMMAND syntax",
-                     examples=["COMMAND example"])
-```
+2. **Command Registry fallback** via `CommandRegistry.execute()`
+   - Handles: NEXT, WEND, LOOP, ELSE, ENDIF, DIM, ON, STOP, CONT, DATA, READ, etc.
+   - Registration pattern:
+     ```python
+     def register_commands(self, registry):
+         registry.register('COMMAND_NAME', self.execute_method,
+                          category='appropriate_category',
+                          description="Command description",
+                          syntax="COMMAND syntax",
+                          examples=["COMMAND example"])
+     ```
+
+For new commands: add an AST visitor in `ast_parser.py` if the command involves control flow or core operations; use the registry for utility/system commands.
 
 **Function Registry**: All BASIC functions (CHR$, ASC, LEFT$, etc.) are handled by `/emulator/functions.py`. Never duplicate function implementations in other modules.
 
@@ -84,26 +89,24 @@ Requirements:
 - Each state manager has clear ownership boundaries
 - `clear_interpreter_state()` only clears program execution state, not input state
 
-### AST vs Direct Execution Guidelines
+### AST Execution Architecture
 
-**CRITICAL**: Clear separation between AST parsing and stateful execution:
+The emulator uses AST-first execution for migrated commands. Stateful AST visitors in `ASTEvaluator` directly manage emulator state (stacks, variables) and return signal-based `List[Dict]` results.
 
-**Use AST for:**
-- Expression evaluation (mathematical/logical expressions without side effects)
-- Single-line control structure expansion (transform `IF A THEN B:C:D` to multi-line)
-- Program structure analysis (dead code detection, flow analysis)
-- Stateless computation
+**AST visitors handle:**
+- Control flow: GOTO, GOSUB, RETURN, FOR, EXIT FOR, WHILE, DO, IF, END
+- I/O: INPUT, PRINT
+- Assignment: LET (explicit and implicit)
 
-**Do NOT use AST for:**
-- Stateful command execution (GOTO, GOSUB, FOR)
-- I/O operations (INPUT, PRINT with side effects)
-- Stack management (for_stack, call_stack, if_stack)
-- Program counter control
+**Registry handles (non-migrated):**
+- Closing commands: NEXT, WEND, LOOP, ELSE, ENDIF
+- Utility: DIM, ON, STOP, CONT, DATA, READ, SOUND, etc.
 
 Rules:
-1. AST for structure, `execute_*` for behavior
-2. `execute_*` methods must return `[{'type': 'xxx', ...}]` format
-3. Any AST integration must pass existing tests before merging
+1. Both `visit_*` and `execute_*` methods return `[{'type': 'xxx', ...}]` format
+2. AST visitors manage state directly (for_stack, call_stack, while_stack, etc.)
+3. Closing commands in registry reference stack state pushed by AST visitors
+4. Any changes must pass existing tests before merging
 
 ### Architecture Diagram
 ```
@@ -111,15 +114,20 @@ USER INPUT/PROGRAM
         |
         v
 AST CONVERTER (ast_converter.py)
-  Transform single-line -> multi-line control structs
+  Expand single-line → multi-line control structures
         |
         v
-COMMAND REGISTRY & EXECUTE_* METHODS
-  Stateful execution with stack/counter management
+process_statement()
+  ├─ Multi-line IF handler (bare "IF cond THEN")
+  ├─ _try_ast_execute() → ASTEvaluator.visit_*()
+  │     Migrated commands: stateful AST execution
+  ├─ CommandRegistry.execute()
+  │     Non-migrated commands: execute_* methods
+  └─ Syntax error
         |
         v
-EXPRESSION EVALUATOR (Uses AST)
-  Stateless pure computation
+EXPRESSION EVALUATOR (Uses AST internally)
+  Called by both visitors and execute_* methods
 ```
 
 ## Development Notes

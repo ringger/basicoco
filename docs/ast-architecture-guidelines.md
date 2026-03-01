@@ -2,319 +2,138 @@
 
 ## Executive Summary
 
-This document captures critical architectural lessons learned from attempting to integrate AST-based execution into the TRS-80 BASIC emulator. The integration initially led to 164 test failures, requiring systematic reversion and architectural clarification.
+The TRS-80 BASIC emulator uses an AST-first execution architecture. All migrated BASIC commands (END, GOTO, LET, PRINT, GOSUB, RETURN, FOR, EXIT FOR, WHILE, DO, IF, INPUT) are parsed into AST nodes by `ASTParser` and executed by `ASTEvaluator` visitor methods that directly manage emulator state. Non-migrated commands (NEXT, WEND, LOOP, ELSE, ENDIF, DIM, ON, etc.) remain in the `CommandRegistry` as `execute_*` methods.
 
-## Core Architectural Principle
+## Architecture Overview
 
-**AST parsing and stateful execution are separate concerns that must be carefully coordinated, not blindly merged.**
+```
+USER INPUT / PROGRAM LINE
+        |
+        v
+AST CONVERTER (ast_converter.py)
+  Expand single-line control structures to multi-line
+  e.g., "IF X=1 THEN A=5: B=10" → ["IF X=1 THEN", "A=5", "B=10", "ENDIF"]
+        |
+        v
+process_statement()
+        |
+        ├─ Multi-line IF handler (bare "IF cond THEN")
+        |    Push to if_stack, return skip_if_block or []
+        |
+        ├─ _try_ast_execute() — AST-first execution
+        |    Parse → ASTEvaluator.visit_*() → return List[Dict]
+        |    Handles: END, GOTO, LET, PRINT, GOSUB, RETURN,
+        |             FOR, EXIT FOR, WHILE, DO, IF, INPUT
+        |    Also handles implicit assignment (X = 5)
+        |
+        ├─ CommandRegistry.execute() — registry fallback
+        |    Handles: NEXT, WEND, LOOP, ELSE, ENDIF, DIM, ON,
+        |             STOP, CONT, DATA, READ, SOUND, etc.
+        |
+        └─ Syntax error (nothing matched)
+```
 
-## The Fundamental Question: Are AST Visitors and State Management Incompatible?
+## Core Principles
 
-**No, they are not inherently incompatible.** This is a crucial clarification. AST visitors can absolutely manage state - many production compilers and interpreters do exactly this. The incompatibility we experienced was due to:
+### 1. AST Visitors ARE the Primary Execution Path
 
-1. **Incomplete migration** - Mixing paradigms halfway
-2. **Return format mismatches** - AST visitors returning incompatible formats
-3. **Inconsistent state ownership** - Some state in visitors, some in execute methods
-4. **Violated architectural contracts** - Breaking existing patterns without complete conversion
-
-## Valid Architectural Approaches
-
-### Approach 1: Stateful AST Visitors (Valid)
+Migrated commands execute through `ASTEvaluator.visit_*()` methods that directly manage emulator state (stacks, variables, program counter signals). This is **Approach 1** (Stateful AST Visitors).
 
 ```python
-class StatefulASTEvaluator:
-    def __init__(self, emulator):
-        self.emulator = emulator
-
+class ASTEvaluator:
     def visit_for_statement(self, node: ForStatementNode):
-        # AST visitor directly manages emulator state
+        # Directly manages emulator state
+        self.emulator.variables[var_name] = start_val
         self.emulator.for_stack.append({
-            'var': node.variable.name,
-            'end': self.visit(node.end_value),
-            'step': self.visit(node.step_value),
-            'line': self.emulator.current_line
+            'var': var_name, 'end': end_val, 'step': step_val,
+            'line': self.emulator.current_line,
+            'sub_line': self.emulator.current_sub_line
         })
-        self.emulator.variables[node.variable.name] = self.visit(node.start_value)
-        return []  # Return format expected by execution engine
+        return []  # List[Dict] format
 ```
 
-**Pros:**
-- Single point of truth for each operation
-- Can leverage AST structure for optimizations
-- Modern, clean architecture
+### 2. Signal-Based Control Flow
 
-**Cons:**
-- Requires complete rewrite of execution engine
-- Must convert ALL commands simultaneously
-- Breaks existing test expectations
+Visitors return `List[Dict[str, Any]]` with type fields that `run_program()` interprets:
+- `jump` — GOTO target line
+- `jump_return` — RETURN from GOSUB
+- `skip_for_loop` — FOR loop should be skipped (start > end)
+- `exit_for_loop` — EXIT FOR signal
+- `skip_while_loop` — WHILE condition false
+- `skip_do_loop` — DO condition false (top-tested)
+- `skip_if_block` — IF condition false (multi-line)
+- `input_request` — INPUT waiting for user
+- `text` — output text
+- `error` — error message
 
-### Approach 2: Pure AST + Separate Execution (Valid)
+### 3. Closing Commands Stay in Registry
 
+Structural closing commands (NEXT, WEND, LOOP, ELSE, ENDIF) remain as `execute_*` methods in the registry. They reference stack state pushed by AST visitors:
+- `execute_next` reads `for_stack` (pushed by `visit_for_statement`)
+- `execute_wend` reads `while_stack` (pushed by `visit_while_statement`)
+- `execute_loop` reads `do_stack` (pushed by `visit_do_loop_statement`)
+- `execute_else`/`execute_endif` read `if_stack` (pushed by multi-line IF handler)
+
+### 4. AST Condition Storage
+
+WHILE and DO store AST condition nodes for re-evaluation:
 ```python
-class PureASTEvaluator:
-    def visit_for_statement(self, node: ForStatementNode):
-        # Pure visitor returns data structure
-        return {
-            'type': 'for_loop',
-            'variable': node.variable.name,
-            'start': self.visit(node.start_value),
-            'end': self.visit(node.end_value),
-            'step': self.visit(node.step_value)
-        }
+# visit_while_statement stores:
+self.emulator.while_stack.append({
+    'condition_ast': node.condition,  # AST node for re-evaluation
+    'line': ..., 'sub_line': ...
+})
 
-class ExecutionEngine:
-    def handle_for_loop(self, ast_result):
-        # Execution layer manages all state
-        self.for_stack.append({
-            'var': ast_result['variable'],
-            'end': ast_result['end'],
-            'step': ast_result['step']
-        })
-        self.variables[ast_result['variable']] = ast_result['start']
-        return []
+# execute_wend re-evaluates:
+result = self._ast_evaluator.visit(while_info['condition_ast'])
 ```
 
-**Pros:**
-- Clear separation of concerns
-- Can be implemented incrementally
-- Easier to test each layer independently
+## Migrated Commands
 
-**Cons:**
-- Two-step process for each operation
-- Potential duplication of logic
-- Extra translation layer
+| Command | AST Visitor | Notes |
+|---------|------------|-------|
+| END | `visit_end_statement` | Sets `running=False` |
+| GOTO | `visit_goto_statement` | Returns `jump` signal |
+| LET | `visit_assignment` | Handles arrays, reserved name check |
+| PRINT | `visit_print_statement` | Uses `_format_print_value()` |
+| GOSUB | `visit_gosub_statement` | Pushes `call_stack`, returns `jump` |
+| RETURN | `visit_return_statement` | Pops `call_stack`, returns `jump_return` |
+| FOR | `visit_for_statement` | Manages `for_stack` directly |
+| EXIT FOR | `visit_exit_for_statement` | Returns `exit_for_loop` signal |
+| WHILE | `visit_while_statement` | Pushes `while_stack` with `condition_ast` |
+| DO | `visit_do_loop_statement` | Pushes `do_stack` with `condition_ast` |
+| IF | `visit_if_statement` | Single-line; multi-line handled in `process_statement` |
+| INPUT | `visit_input_statement` | Sets `waiting_for_input`, returns `input_request` |
 
-### Approach 3: Hybrid for Specific Use Cases (Our Current Approach)
+## Non-Migrated Commands (Registry)
 
-```python
-# Use AST for structural transformation
-def parse_and_convert_single_line(statement):
-    # Convert: IF X=1 THEN PRINT "A": GOTO 100
-    # To: ["IF X=1 THEN", "PRINT \"A\"", "GOTO 100", "ENDIF"]
-    ast = parse_statement(statement)
-    return expand_control_structure(ast)
+NEXT, WEND, LOOP, ELSE, ENDIF, STOP, CONT, DIM, ON, DATA, READ, RESTORE, SOUND, PAUSE, CLS, NEW, LIST, RUN, CLEAR, DELETE, RENUM, LOAD, SAVE, HELP, REM, and graphics commands.
 
-# Keep execution in execute_* methods
-def execute_for(self, args):
-    # Traditional stateful execution
-    # Manages for_stack, variables, program_counter
-    return self.execute_for(args)
-```
+## Key Implementation Details
 
-**Pros:**
-- Minimal disruption to existing code
-- Leverages AST where it provides clear value
-- Maintains backward compatibility
+### Implicit Assignment Detection
 
-**Cons:**
-- Not a "pure" architecture
-- Must maintain two systems
-- Complexity in deciding what uses which approach
+`_try_ast_execute()` detects implicit assignments (`X = 5` without `LET`) by checking:
+1. `=` present in code
+2. No comparison operators in LHS (`<`, `>`, `!`)
+3. First word is not a registered command
+4. First token starts with a letter (variable name)
 
-## What Went Wrong in Our Implementation
+### Multi-line IF Handling
 
-### 1. Mixed Mental Models
+Bare `IF condition THEN` (without action) is handled in `process_statement()` before AST execution. The AST parser cannot parse bare THEN (empty statement), so this is caught early and pushes to `if_stack` directly.
 
-We tried to use AST visitors as drop-in replacements for execute_* methods without fully converting the execution model:
+### Error Propagation
 
-```python
-# WRONG: Incompatible return format
-def visit_for_statement(self, node):
-    return [{'type': 'for_loop', 'variable': var_name, ...}]
-
-# Execution engine expected:
-def execute_for(self, args):
-    self.for_stack.append(...)  # Modifies state
-    return []  # Returns empty list
-```
-
-### 2. Incomplete State Management
-
-Some state was managed by visitors, some by execute methods:
-
-```python
-# WRONG: Visitor returns command, doesn't manage state
-def visit_goto_statement(self, node):
-    return [{'type': 'jump', 'line': target_line}]
-    # But program_counter not updated!
-
-# Should have been ALL or NOTHING:
-# Either visitor manages program_counter
-# OR visitor returns data for execution layer
-```
-
-### 3. Return Format Contract Violations
-
-The execution engine expects specific return formats:
-
-```python
-# Contract: execute_* methods return List[Dict[str, Any]]
-# Each dict must have 'type' field
-# Common types: 'text', 'error', 'jump', 'input_request'
-
-# WRONG: Mixed formats
-results = [{'type': 'for_loop', ...}, 'NEXT I', {'text': '0', 'type': 'text'}]
-```
-
-## Architectural Guidelines for This Codebase
-
-### ✅ DO: Use AST for These Cases
-
-1. **Expression Evaluation** - Pure computation, no side effects
-   ```python
-   result = ast_evaluator.evaluate("3 + 4 * 5")  # Returns 23
-   ```
-
-2. **Structural Transformation** - Converting code structure
-   ```python
-   # Single-line to multi-line expansion
-   "IF X=1 THEN A=5: B=10" → ["IF X=1 THEN", "A=5", "B=10", "ENDIF"]
-   ```
-
-3. **Program Analysis** - Reading without modifying
-   ```python
-   # Find all variable references
-   variables = ast_analyzer.find_variables(program)
-   ```
-
-### ❌ DON'T: Use AST for These Cases
-
-1. **State-Modifying Commands** - GOTO, GOSUB, FOR, RETURN
-   - These need direct access to execution state
-   - Must maintain specific return formats
-   - Have complex interactions with program flow
-
-2. **I/O Operations** - INPUT, PRINT with side effects
-   - Need to interact with system state
-   - Have specific output formatting requirements
-   - May pause execution for user input
-
-3. **Execution Control** - Program running, stopping, continuing
-   - Requires careful state management
-   - Must coordinate multiple subsystems
-   - Has specific error recovery requirements
-
-## State Manager Architecture (Future Enhancement)
-
-To prevent future architectural confusion, implement clear state ownership:
-
-```python
-class StateArchitecture:
-    """
-    Clear ownership boundaries prevent mixing stateful/stateless operations
-    """
-
-    def __init__(self):
-        self.variable_state = VariableStateManager()
-        # Owns: variables, arrays, array_dims
-        # Used by: LET, DIM, array access
-
-        self.execution_state = ExecutionStateManager()
-        # Owns: program_counter, call_stack, for_stack, if_stack
-        # Used by: GOTO, GOSUB, RETURN, FOR, NEXT, IF
-
-        self.io_state = IOStateManager()
-        # Owns: keyboard_buffer, input_variables, waiting_for_input
-        # Used by: INPUT, INKEY$, PRINT
-
-        self.graphics_state = GraphicsStateManager()
-        # Owns: graphics_mode, colors, cursor_position
-        # Used by: PMODE, SCREEN, PSET, LINE, CIRCLE
-```
-
-With state managers, it becomes obvious which operations are stateful:
-
-```python
-def execute_goto(self, args):
-    line_num = self.evaluate_expression(args)
-    # Must interact with state manager - clearly stateful!
-    self.state.execution.jump_to_line(line_num)
-    return [{'type': 'jump', 'line': line_num}]
-```
+When AST parsing fails for a migrated command, `_try_ast_execute()` returns the parse error with a "SYNTAX ERROR" prefix instead of falling through to the generic "Unrecognized command" error.
 
 ## Testing Guidelines
 
-### Before Any Architectural Change
+- Unit tests: `python -m pytest tests/unit/ --tb=short -q` (~1s)
+- Full suite: `python -m pytest --ignore=tests/integration/test_websocket_completion_signals.py --tb=short -q` (~11s)
+- All changes must pass the full suite before committing
+- 619+ tests covering all migrated and non-migrated commands
 
-1. **Run full test suite**: `python -m pytest`
-2. **Note baseline**: Document current pass/fail count
-3. **Incremental changes**: Change one component at a time
-4. **Test after each change**: Verify no regression
-5. **Revert if failures increase**: Don't accumulate problems
+## Historical Context
 
-### Test-Driven Architecture Changes
-
-```python
-# GOOD: Test contract explicitly
-def test_execute_method_contract():
-    """All execute_* methods must return List[Dict[str, Any]]"""
-    result = basic.execute_for("I = 1 TO 10")
-    assert isinstance(result, list)
-    for item in result:
-        assert isinstance(item, dict)
-        assert 'type' in item
-
-# BAD: Assuming implementation details
-def test_for_loop_internals():
-    """Don't test HOW it works, test WHAT it does"""
-    basic.execute_for("I = 1 TO 10")
-    assert len(basic.for_stack) == 1  # Too coupled to implementation
-```
-
-## Lessons Learned
-
-1. **Architecture is about boundaries** - Clear boundaries prevent confusion
-2. **Consistency over purity** - Better to be consistently "impure" than inconsistently "pure"
-3. **Incremental migration needs complete steps** - Half-migrated code is broken code
-4. **Tests are architectural documentation** - They encode the contracts
-5. **State ownership must be explicit** - Ambiguous ownership leads to bugs
-
-## Decision Record
-
-**Decision**: Use AST for parsing and structural transformation, keep execution in execute_* methods
-
-**Rationale**:
-- Minimizes disruption to working code
-- Leverages AST where it provides clear value
-- Maintains testability and backward compatibility
-- Clear separation of concerns
-
-**Consequences**:
-- Must maintain both AST and traditional execution
-- Cannot leverage some AST optimizations
-- Clear boundaries must be documented and enforced
-
-**Alternatives Considered**:
-1. Full AST-based execution - Too disruptive, too many test failures
-2. No AST at all - Loses valuable parsing improvements
-3. Gradual complete migration - High risk, long transition period
-
-## Future Considerations
-
-If we were starting fresh, a complete AST-based interpreter would be ideal:
-
-```python
-class ModernBASICInterpreter:
-    def run_program(self, source: str):
-        ast = self.parser.parse(source)
-        optimized_ast = self.optimizer.optimize(ast)
-        return self.evaluator.evaluate(optimized_ast)
-```
-
-But given our existing architecture, tests, and patterns, the hybrid approach provides the best balance of improvement and stability.
-
-## Enforcement Checklist
-
-Before implementing any AST-related change:
-
-- [ ] Is this operation stateless or stateful?
-- [ ] If stateful, who owns the state?
-- [ ] What return format is expected?
-- [ ] Are we mixing paradigms?
-- [ ] Have we tested the contract?
-- [ ] Is the boundary clear and documented?
-- [ ] Can we revert if needed?
-
-## Conclusion
-
-AST visitors and state management are not incompatible - they just need clear architectural decisions about ownership and responsibilities. In our codebase, we've chosen separation for pragmatic reasons, not because it's the only way. The key is consistency, clarity, and respect for existing architectural patterns.
+This architecture evolved from an initial hybrid approach (Approach 3) where AST was used only for expression evaluation and single-line control structure expansion, while all commands used `execute_*` methods via the registry. Through a 12-phase migration, all core control flow and I/O commands were moved to AST-first execution. The legacy `execute_*` methods for migrated commands have been removed.
