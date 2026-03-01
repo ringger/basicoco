@@ -1361,15 +1361,7 @@ class CoCoBasic:
                 ]
             )
             return [{'type': 'error', 'message': error.format_detailed()}]
-    
-    
-    
-    
-    
-    
-    
-    
-    
+
     def evaluate_expression(self, expr, line=None):
         """Delegate expression evaluation to the ExpressionEvaluator"""
         try:
@@ -1440,21 +1432,6 @@ class CoCoBasic:
         
         return False
     
-    def _execute_via_ast(self, statement: str):
-        """Execute a statement using AST parser and visitor"""
-        try:
-            # Parse statement using AST parser
-            ast_node = self.expression_evaluator.ast_parser.parse_statement(statement)
-
-            # Evaluate using AST visitor
-            from .ast_parser import ASTEvaluator
-            evaluator = ASTEvaluator(self)
-            return evaluator.visit(ast_node)
-
-        except Exception as e:
-            # Return error if AST execution fails
-            return [{'type': 'error', 'message': str(e)}]
-
     def execute_sound(self, args):
         # SOUND frequency,duration
         self.error_context.set_context(self.current_line, f"SOUND {args}")
