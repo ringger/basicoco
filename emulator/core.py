@@ -5,7 +5,9 @@ This module contains the main CoCoBasic class that implements the BASIC interpre
 The class has been extracted from the monolithic app.py file to improve maintainability.
 """
 
+import os
 import re
+import time
 from .parser import BasicParser
 from .graphics import BasicGraphics
 from .variables import VariableManager
@@ -13,8 +15,10 @@ from .commands import CommandRegistry
 from .expressions import FunctionRegistry
 from .functions import register_all_functions
 from .ast_parser import ASTParser, ASTEvaluator
-from .output_manager import StreamingOutputManager, LegacyOutputAdapter, OutputType
+from .output_manager import StreamingOutputManager, LegacyOutputAdapter
 from .error_context import ErrorContextManager
+from .file_manager import FileManager
+from .program_executor import ProgramExecutor
 
 class CoCoBasic:
     def __init__(self, output_callback=None, debug_mode=False):
@@ -49,6 +53,7 @@ class CoCoBasic:
         self.screen_mode = 1    # Screen/color mode
         self.iteration_count = 0  # Safety counter for infinite loops
         self.max_iterations = 50000  # Maximum iterations to prevent infinite loops
+        self.max_absolute_iterations = 10000000  # Hard cap even when safety is off
         self.safety_enabled = True  # Enable/disable iteration safety
         self.waiting_for_input = False  # Flag to indicate we're waiting for user input
         self.waiting_for_pause_continuation = False  # Flag for pause continuation
@@ -78,6 +83,10 @@ class CoCoBasic:
 
         # AST-based execution: commands in this set use AST parse+visit instead of registry
         self._ast_migrated_commands = {'END', 'GOTO', 'LET', 'PRINT', 'GOSUB', 'RETURN', 'FOR', 'EXIT', 'WHILE', 'DO', 'IF', 'INPUT'}
+
+        # Initialize file manager and program executor
+        self.file_manager = FileManager(self)
+        self.executor = ProgramExecutor(self)
 
         # Initialize command registry
         self.command_registry = CommandRegistry()
@@ -126,40 +135,6 @@ class CoCoBasic:
     def _system_ok():
         """Return a system OK acknowledgment (not user-generated output)."""
         return [{'type': 'text', 'text': 'OK', 'source': 'system'}]
-
-    @staticmethod
-    def _strip_quotes(s):
-        """Strip surrounding single or double quotes from a string."""
-        s = s.strip()
-        if (s.startswith('"') and s.endswith('"')) or (s.startswith("'") and s.endswith("'")):
-            return s[1:-1]
-        return s
-
-    @staticmethod
-    def _ensure_bas_extension(filename):
-        """Add .bas extension if not already present."""
-        if not filename.lower().endswith('.bas'):
-            filename += '.bas'
-        return filename
-
-    def _find_program_file(self, filename):
-        """Search for a .bas file in standard locations. Returns path or None."""
-        import os
-        search_paths = [
-            filename,
-            os.path.join('programs', filename),
-            os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), filename),
-            os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'programs', filename),
-        ]
-        for path in search_paths:
-            if os.path.exists(path):
-                return path
-        return None
-
-    def _file_error(self, message, filename, command):
-        """Return a formatted file error response list."""
-        error = self.error_context.file_error(message, filename, command)
-        return [{'type': 'error', 'message': error.format_detailed()}]
 
     def get_reserved_function_names(self):
         """Return list of reserved function names that cannot be used as variable/array names"""
@@ -239,299 +214,30 @@ class CoCoBasic:
             self.variable_manager.clear_variables()
             return self._system_ok()
     
+    # File operations — delegated to FileManager
     def load_program(self, filename):
-        """Load a BASIC program from a file"""
-        import os
+        return self.file_manager.load_program(filename)
 
-        filename = self._strip_quotes(filename)
-
-        if not filename:
-            error = self.error_context.syntax_error(
-                "SYNTAX ERROR: Filename required",
-                self.current_line,
-                suggestions=[
-                    "Provide a filename to load",
-                    'Example: LOAD "MYGAME"',
-                    'File extension .bas will be added automatically'
-                ]
-            )
-            return [{'type': 'error', 'message': error.format_detailed()}]
-
-        filename = self._ensure_bas_extension(filename)
-
-        try:
-            found_file = self._find_program_file(filename)
-
-            if not found_file:
-                return self._file_error(f"FILE NOT FOUND: {os.path.basename(filename)}", filename, "LOAD")
-
-            # Clear current program and interpreter state
-            self.clear_interpreter_state(clear_program=True)
-
-            # Load and parse the file
-            with open(found_file, 'r') as f:
-                lines_loaded = 0
-                for line in f:
-                    line = line.strip()
-                    if line and not line.startswith('#'):  # Skip empty lines and comments
-                        line_num, code = self.parse_line(line)
-                        if line_num is not None:
-                            if code:
-                                self.program[line_num] = code
-                                self.expand_line_to_sublines(line_num, code)
-                                lines_loaded += 1
-
-            return [{'type': 'text', 'text': f'LOADED {lines_loaded} LINES FROM {os.path.basename(found_file)}'}]
-
-        except FileNotFoundError:
-            return self._file_error(f"FILE NOT FOUND: {os.path.basename(filename)}", filename, "LOAD")
-        except PermissionError:
-            return self._file_error(f"PERMISSION DENIED: {os.path.basename(filename)}", filename, "LOAD")
-        except Exception as e:
-            return self._file_error(f"LOAD ERROR: {str(e)}", filename, "LOAD")
-    
     def save_program(self, filename):
-        """Save the current BASIC program to a file"""
-        import os
+        return self.file_manager.save_program(filename)
 
-        filename = self._strip_quotes(filename)
-
-        if not filename:
-            error = self.error_context.syntax_error(
-                "SYNTAX ERROR: Filename required",
-                self.current_line,
-                suggestions=[
-                    "Provide a filename to save",
-                    'Example: SAVE "MYGAME"',
-                    'File extension .bas will be added automatically'
-                ]
-            )
-            return [{'type': 'error', 'message': error.format_detailed()}]
-
-        if not self.program:
-            error = self.error_context.runtime_error(
-                "NO PROGRAM TO SAVE",
-                suggestions=[
-                    "Enter a program first using line numbers",
-                    'Example: 10 PRINT "HELLO"',
-                    'Use LIST command to see current program'
-                ]
-            )
-            return [{'type': 'error', 'message': error.format_detailed()}]
-
-        filename = self._ensure_bas_extension(filename)
-
-        try:
-            os.makedirs('programs', exist_ok=True)
-
-            if not os.path.dirname(filename):
-                filename = os.path.join('programs', filename)
-
-            sorted_lines = sorted(self.program.items())
-
-            with open(filename, 'w') as f:
-                for line_num, code in sorted_lines:
-                    f.write(f"{line_num} {code}\n")
-
-            lines_saved = len(sorted_lines)
-            return [{'type': 'text', 'text': f'SAVED {lines_saved} LINES TO {os.path.basename(filename)}'}]
-
-        except PermissionError:
-            return self._file_error(f"PERMISSION DENIED: {os.path.basename(filename)}", filename, "SAVE")
-        except (OSError, Exception) as e:
-            return self._file_error(f"SAVE ERROR: {str(e)}", filename, "SAVE")
-    
     def dir_command(self, args=None):
-        """DIR command - List available BASIC program files"""
-        import os
-        import glob
-        
-        # Get project root
-        project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        
-        # Search directories - use absolute paths to avoid duplicates
-        search_dirs = [
-            os.getcwd(),                           # Current directory
-            os.path.join(os.getcwd(), 'programs')  # Programs subdirectory from current dir
-        ]
-        
-        # Add project programs directory if different from above
-        project_programs = os.path.join(project_root, 'programs')
-        
-        # Convert to absolute paths and remove duplicates
-        search_dirs = list(dict.fromkeys([os.path.abspath(d) for d in search_dirs + [project_programs] if os.path.exists(d)]))
-        
-        output = []
-        output.append({'type': 'text', 'text': 'BASIC PROGRAM FILES:'})
-        output.append({'type': 'text', 'text': '=' * 40})
-        
-        total_files = 0
-        
-        for directory in search_dirs:
-            if not os.path.exists(directory):
-                continue
-                
-            # Find .bas files in this directory
-            pattern = os.path.join(directory, "*.bas")
-            files = glob.glob(pattern)
-            
-            if files:
-                # Display directory header based on absolute path
-                cwd = os.getcwd()
-                if directory == cwd:
-                    dir_name = "CURRENT DIRECTORY"
-                elif directory == os.path.join(cwd, 'programs'):
-                    dir_name = "PROGRAMS/"
-                elif directory.endswith('programs'):
-                    # This is a programs directory from elsewhere (like project root)
-                    if directory != os.path.join(cwd, 'programs'):
-                        dir_name = "PROJECT PROGRAMS/"
-                    else:
-                        dir_name = "PROGRAMS/"
-                else:
-                    dir_name = f"{os.path.basename(directory)}/"
-                    
-                output.append({'type': 'text', 'text': f"\n{dir_name}:"})
-                
-                # Sort files and display
-                files.sort()
-                for file_path in files:
-                    filename = os.path.basename(file_path)
-                    try:
-                        # Get file size
-                        size = os.path.getsize(file_path)
-                        size_str = f"{size:>6} bytes"
-                        
-                        # Get modification time
-                        import time
-                        mtime = os.path.getmtime(file_path)
-                        time_str = time.strftime("%m/%d/%y %H:%M", time.localtime(mtime))
-                        
-                        output.append({'type': 'text', 'text': f"  {filename:<20} {size_str} {time_str}"})
-                        total_files += 1
-                    except OSError:
-                        # If we can't get file info, just show the name
-                        output.append({'type': 'text', 'text': f"  {filename}"})
-                        total_files += 1
-        
-        if total_files == 0:
-            output.append({'type': 'text', 'text': '\nNO .BAS FILES FOUND'})
-            output.append({'type': 'text', 'text': 'Use SAVE "filename" to create programs'})
-        else:
-            output.append({'type': 'text', 'text': f'\nTOTAL: {total_files} FILE(S)'})
-            output.append({'type': 'text', 'text': 'Use LOAD "filename" to load a program'})
-        
-        # Add empty line so prompt appears on new line
-        output.append({'type': 'text', 'text': ''})
-        
-        return output
-    
+        return self.file_manager.dir_command(args)
+
     def files_command(self, args=None):
-        """FILES command - Reserve file buffers (no-op in modern implementation)"""
-        # In authentic Disk BASIC, FILES reserved memory for file buffers
-        # With our modern backend, this is unnecessary
-        # We accept the command for compatibility but do nothing
-        
-        # Parse arguments if provided (e.g., FILES 4 or FILES 8,256)
-        # but ignore them since we don't need to reserve buffers
+        return self.file_manager.files_command(args)
 
-        return self._system_ok()
-    
     def drive_command(self, args=None):
-        """DRIVE command - Set default drive (no-op in modern implementation)"""
-        # In authentic Disk BASIC, DRIVE set the default drive number (0-3)
-        # With our modern filesystem backend, this is unnecessary
-        # We accept the command for compatibility but do nothing
-        
-        # Parse drive number if provided (e.g., DRIVE 0)
-        # but ignore it since we use filesystem paths directly
+        return self.file_manager.drive_command(args)
 
-        return self._system_ok()
-    
     def kill_file(self, filename):
-        """Delete a BASIC program file with confirmation"""
-        import os
+        return self.file_manager.kill_file(filename)
 
-        filename = self._strip_quotes(filename)
-
-        if not filename:
-            error = self.error_context.syntax_error(
-                "SYNTAX ERROR: Filename required",
-                self.current_line,
-                suggestions=[
-                    "Provide a filename to delete",
-                    'Example: KILL "OLDGAME"',
-                    'File extension .bas will be added automatically'
-                ]
-            )
-            return [{'type': 'error', 'message': error.format_detailed()}]
-
-        filename = self._ensure_bas_extension(filename)
-
-        try:
-            found_file = self._find_program_file(filename)
-
-            if not found_file:
-                return self._file_error(f"FILE NOT FOUND: {os.path.basename(filename)}", filename, "KILL")
-
-            return [
-                {'type': 'text', 'text': f'DELETE {os.path.basename(found_file)}? (Y/N)'},
-                {'type': 'input_request', 'prompt': '? ', 'variable': '_kill_confirm', 'filename': found_file},
-            ]
-
-        except Exception as e:
-            return self._file_error(f"KILL ERROR: {str(e)}", filename, "KILL")
-    
     def process_kill_confirmation(self, response, filename):
-        """Process the confirmation response for KILL command"""
-        import os
+        return self.file_manager.process_kill_confirmation(response, filename)
 
-        response = response.strip().upper()
-
-        if response in ['Y', 'YES']:
-            try:
-                os.remove(filename)
-                return [{'type': 'text', 'text': f'DELETED {os.path.basename(filename)}'}]
-            except PermissionError:
-                return self._file_error(f"PERMISSION DENIED: {os.path.basename(filename)}", filename, "KILL")
-            except Exception as e:
-                return self._file_error(f"DELETE ERROR: {str(e)}", filename, "KILL")
-        else:
-            return [{'type': 'text', 'text': 'DELETE CANCELLED'}]
-    
     def change_directory(self, path):
-        """Change current working directory"""
-        import os
-
-        path = self._strip_quotes(path)
-
-        if not path:
-            current_dir = os.getcwd()
-            return [{'type': 'text', 'text': f'CURRENT DIRECTORY: {current_dir}'}]
-
-        try:
-            if path == "..":
-                path = os.path.dirname(os.getcwd())
-            elif path == "~":
-                path = os.path.expanduser("~")
-            elif path == "/":
-                path = "/"
-            elif path.startswith("~/"):
-                path = os.path.expanduser(path)
-
-            old_dir = os.getcwd()
-            os.chdir(path)
-            new_dir = os.getcwd()
-
-            return [{'type': 'text', 'text': f'CHANGED FROM {old_dir}'},
-                    {'type': 'text', 'text': f'TO {new_dir}'}]
-
-        except FileNotFoundError:
-            return self._file_error(f"DIRECTORY NOT FOUND: {path}", path, "CD")
-        except PermissionError:
-            return self._file_error(f"PERMISSION DENIED: {path}", path, "CD")
-        except (OSError, Exception) as e:
-            return self._file_error(f"CD ERROR: {str(e)}", path, "CD")
+        return self.file_manager.change_directory(path)
     
     def expand_line_to_sublines(self, line_num, code):
         """Expand line using BasicParser or AST converter for single-line control structures"""
@@ -565,313 +271,12 @@ class CoCoBasic:
     # Shared execution engine
     # ------------------------------------------------------------------
 
-    def _save_resume_point(self, current_pos_index, all_positions):
-        """Save the program counter to the next position for later resumption."""
-        if current_pos_index + 1 < len(all_positions):
-            self.program_counter = all_positions[current_pos_index + 1]
-        else:
-            self.program_counter = None
-
-    def _find_line_position(self, target_line, all_positions):
-        """Find the first sub-line position for a given line number.
-
-        Returns the index into *all_positions*, or ``None`` if not found.
-        """
-        for i, (ln, _si) in enumerate(all_positions):
-            if ln == target_line:
-                return i
-        return None
-
-    def _skip_to_keyword(self, keyword, current_pos_index, all_positions):
-        """Search forward for a statement starting with *keyword*.
-
-        Returns the index of the matching position, or ``None``.
-        """
-        keyword_upper = keyword.upper()
-        for pos_idx in range(current_pos_index + 1, len(all_positions)):
-            stmt = self.expanded_program.get(all_positions[pos_idx], '')
-            if stmt.strip().upper().startswith(keyword_upper):
-                return pos_idx
-        return None
-
-    def _skip_to_next(self, var_name, current_pos_index, all_positions):
-        """Search forward for a matching NEXT statement.
-
-        Returns the index of the matching NEXT, or ``None``.
-        """
-        for pos_idx in range(current_pos_index + 1, len(all_positions)):
-            stmt = self.expanded_program.get(all_positions[pos_idx], '').strip()
-            if stmt.startswith('NEXT'):
-                parts = stmt.split()
-                if len(parts) == 1 or (len(parts) > 1 and parts[1] == var_name):
-                    return pos_idx
-        return None
-
-    def _skip_if_or_else_block(self, current_pos_index, all_positions, stop_at_else):
-        """Skip forward through nested IF blocks.
-
-        If *stop_at_else* is True, stop at a matching ELSE or ENDIF.
-        If False, stop only at a matching ENDIF.
-
-        Returns (new_pos_index, jumped).
-        """
-        nest_level = 0
-        for pos_idx in range(current_pos_index + 1, len(all_positions)):
-            stmt = self.expanded_program.get(all_positions[pos_idx], '').strip().upper()
-            if 'IF' in stmt and 'THEN' in stmt:
-                nest_level += 1
-            elif stop_at_else and stmt.startswith('ELSE') and nest_level == 0:
-                return pos_idx, True
-            elif stmt.startswith('ENDIF'):
-                if nest_level == 0:
-                    if stop_at_else:
-                        return pos_idx + 1, True
-                    else:
-                        return pos_idx, True
-                else:
-                    nest_level -= 1
-        return current_pos_index, False
-
-    def _handle_flow_control(self, result, current_pos_index, all_positions, output):
-        """Process flow-control items from a statement result.
-
-        Returns ``(new_pos_index, action)`` where *action* is:
-        - ``'next'``   – advance to *new_pos_index* normally
-        - ``'jumped'`` – jump to *new_pos_index* (don't increment)
-        - ``'return'`` – return *output* immediately (INPUT / PAUSE pause)
-        - ``'stop'``   – stop execution
-        """
-        # --- INPUT / PAUSE: return immediately so caller can yield control ---
-        for item in result:
-            if item.get('type') == 'input_request':
-                self._save_resume_point(current_pos_index, all_positions)
-                self.waiting_for_input = True
-                self.running = False
-                output.append(item)
-                return current_pos_index, 'return'
-            if item.get('type') == 'pause':
-                self._save_resume_point(current_pos_index, all_positions)
-                self.waiting_for_pause_continuation = True
-                self.running = False
-                output.append(item)
-                return current_pos_index, 'return'
-
-        # --- Jump / flow-control directives ---
-        for item in result:
-            item_type = item.get('type')
-
-            if item_type == 'jump':
-                idx = self._find_line_position(item['line'], all_positions)
-                if idx is not None:
-                    return idx, 'jumped'
-                output.append({'type': 'error', 'message': f"UNDEFINED LINE {item['line']}"})
-                return current_pos_index, 'stop'
-
-            elif item_type == 'jump_after_for':
-                for_pos = (item['for_line'], item.get('for_sub_line', 0))
-                if for_pos in all_positions:
-                    return all_positions.index(for_pos) + 1, 'jumped'
-                output.append({'type': 'error', 'message': f"UNDEFINED FOR LINE {item['for_line']}"})
-                return current_pos_index, 'stop'
-
-            elif item_type == 'jump_return':
-                return_line = item['line']
-                return_sub_line = item['sub_line']
-                # Find first sub-line after the GOSUB call
-                for i, (ln, si) in enumerate(all_positions):
-                    if ln == return_line and si > return_sub_line:
-                        return i, 'jumped'
-                # Try next line
-                for i, (ln, _si) in enumerate(all_positions):
-                    if ln > return_line:
-                        return i, 'jumped'
-                return current_pos_index + 1, 'jumped'
-
-            elif item_type == 'skip_for_loop':
-                idx = self._skip_to_next(item['var'], current_pos_index, all_positions)
-                if idx is not None:
-                    return idx + 1, 'jumped'
-                output.append({'type': 'error', 'message': 'FOR WITHOUT NEXT'})
-                return current_pos_index, 'stop'
-
-            elif item_type == 'skip_while_loop':
-                idx = self._skip_to_keyword('WEND', current_pos_index, all_positions)
-                if idx is not None:
-                    return idx + 1, 'jumped'
-                output.append({'type': 'error', 'message': 'WHILE WITHOUT WEND'})
-                return current_pos_index, 'stop'
-
-            elif item_type == 'jump_after_while':
-                pos = (item['while_line'], item['while_sub_line'])
-                if pos in all_positions:
-                    return all_positions.index(pos) + 1, 'jumped'
-                return current_pos_index + 1, 'next'
-
-            elif item_type == 'skip_do_loop':
-                idx = self._skip_to_keyword('LOOP', current_pos_index, all_positions)
-                if idx is not None:
-                    return idx + 1, 'jumped'
-                output.append({'type': 'error', 'message': 'DO WITHOUT LOOP'})
-                return current_pos_index, 'stop'
-
-            elif item_type == 'jump_after_do':
-                pos = (item['do_line'], item['do_sub_line'])
-                if pos in all_positions:
-                    return all_positions.index(pos) + 1, 'jumped'
-                return current_pos_index + 1, 'next'
-
-            elif item_type == 'exit_for_loop':
-                if self.for_stack:
-                    var_name = self.for_stack[-1]['var']
-                    self.for_stack.pop()
-                    idx = self._skip_to_next(var_name, current_pos_index, all_positions)
-                    if idx is not None:
-                        return idx + 1, 'jumped'
-                return current_pos_index + 1, 'jumped'
-
-            elif item_type == 'skip_if_block':
-                new_idx, found = self._skip_if_or_else_block(
-                    current_pos_index, all_positions, stop_at_else=True)
-                if found:
-                    return new_idx, 'jumped'
-                output.append({'type': 'error', 'message': 'IF WITHOUT ENDIF'})
-                return current_pos_index, 'stop'
-
-            elif item_type == 'skip_else_block':
-                new_idx, found = self._skip_if_or_else_block(
-                    current_pos_index, all_positions, stop_at_else=False)
-                if found:
-                    return new_idx, 'jumped'
-                output.append({'type': 'error', 'message': 'ELSE WITHOUT ENDIF'})
-                return current_pos_index, 'stop'
-
-            elif item_type != 'input_request':
-                # Regular output — filter system OK messages
-                if not item.get('source') == 'system':
-                    output.append(item)
-                    self.emit_output([item])
-                if item.get('type') == 'error':
-                    self.running = False
-                    self.call_stack.clear()
-                    self.for_stack.clear()
-                    return current_pos_index, 'stop'
-
-        return current_pos_index + 1, 'next'
-
-    def _execute_statements_loop(self, all_positions, start_index):
-        """Shared execution loop used by run_program, continue_program_execution,
-        and execute_cont.  Returns the accumulated output list."""
-        output = []
-        current_pos_index = start_index
-
-        while current_pos_index < len(all_positions) and self.running:
-            # Safety check
-            if self.safety_enabled:
-                self.iteration_count += 1
-                if self.iteration_count > self.max_iterations:
-                    output.append({'type': 'error', 'message': 'PROGRAM STOPPED - TOO MANY ITERATIONS'})
-                    self.running = False
-                    break
-
-            line_num, sub_index = all_positions[current_pos_index]
-            self.current_line = line_num
-            self.current_sub_line = sub_index
-            statement = self.expanded_program[(line_num, sub_index)]
-
-            result = self.process_statement(statement)
-
-            if result:
-                new_pos, action = self._handle_flow_control(
-                    result, current_pos_index, all_positions, output)
-                if action == 'return':
-                    return output
-                elif action == 'stop':
-                    self.running = False
-                    break
-                elif action == 'jumped':
-                    current_pos_index = new_pos
-                else:  # 'next'
-                    current_pos_index = new_pos
-            else:
-                current_pos_index += 1
-
-        return output
-
-    # ------------------------------------------------------------------
-    # Public execution entry points
-    # ------------------------------------------------------------------
-
+    # Program execution — delegated to ProgramExecutor
     def run_program(self, clear_variables=True):
-        if not self.program:
-            error = self.error_context.runtime_error(
-                "NO PROGRAM",
-                suggestions=[
-                    "Enter a program first using line numbers",
-                    'Example: 10 PRINT "HELLO"',
-                    'Use LOAD "filename" to load a program from disk'
-                ]
-            )
-            return [{'type': 'error', 'message': error.format_detailed()}]
+        return self.executor.run_program(clear_variables)
 
-        # Clear variables and arrays but keep program (like authentic BASIC)
-        # For temporary execution, we may want to preserve variables
-        if clear_variables:
-            self.clear_interpreter_state(clear_program=False)
-
-        output = []
-        self.running = True
-
-        # Pre-process DATA statements (already cleared by clear_interpreter_state above)
-        preprocessing_running = self.running
-        self.running = False  # Temporarily disable running flag for preprocessing
-        for line_num in sorted(self.program.keys()):
-            # Check if this line contains DATA statements
-            line_code = self.program[line_num].strip().upper()
-            if line_code.startswith('DATA '):
-                # Process the DATA statement
-                data_args = self.program[line_num][4:].strip()  # Remove 'DATA'
-                self.current_line = line_num
-                self.execute_data(data_args)
-        self.running = preprocessing_running  # Restore running flag
-        
-        all_positions = sorted(self.expanded_program.keys())
-        output = self._execute_statements_loop(all_positions, 0)
-        if not self.waiting_for_input and not self.waiting_for_pause_continuation:
-            self.running = False
-        return output
-    
     def continue_program_execution(self):
-        # Resume program execution after INPUT or PAUSE
-        if not hasattr(self, 'program_counter') or self.program_counter is None:
-            error = self.error_context.runtime_error(
-                "No program to continue",
-                suggestions=[
-                    'A program must be running to use CONT',
-                    'Run a program first with RUN',
-                    'Use CONT only after STOP or error interruption'
-                ]
-            )
-            return [{'type': 'error', 'message': error.format_detailed()}]
-        
-        # Clear pause continuation state if that's why we're continuing
-        if hasattr(self, 'waiting_for_pause_continuation') and self.waiting_for_pause_continuation:
-            self.waiting_for_pause_continuation = False
-        
-        self.running = True
-        all_positions = sorted(self.expanded_program.keys())
-
-        try:
-            start_index = all_positions.index(self.program_counter)
-        except ValueError:
-            self.running = False
-            self.program_counter = None
-            return []
-
-        output = self._execute_statements_loop(all_positions, start_index)
-        if not self.waiting_for_input and not self.waiting_for_pause_continuation:
-            self.running = False
-            self.program_counter = None
-        return output
+        return self.executor.continue_program_execution()
 
     def split_statements(self, code):
         """Split a line into statements on colons, but respect quoted strings"""
@@ -1405,38 +810,7 @@ class CoCoBasic:
         return [{'type': 'text', 'text': 'BREAK IN ' + str(self.current_line)}]
     
     def execute_cont(self, args):
-        # CONT command - continue execution after STOP
-        if self.stopped_position is None:
-            error = self.error_context.runtime_error(
-                "Cannot continue - no program was stopped",
-                suggestions=[
-                    'Use CONT only after a program has been stopped',
-                    'Program must be paused with STOP or Ctrl+C',
-                    'Run a new program with RUN command'
-                ]
-            )
-            return [{'type': 'error', 'message': error.format_detailed()}]
-        
-        stopped_line, stopped_sub_line = self.stopped_position
-
-        self.running = True
-        all_positions = sorted(self.expanded_program.keys())
-
-        # Find the position after where we stopped
-        continue_pos = None
-        for i, (ln, si) in enumerate(all_positions):
-            if (ln == stopped_line and si > stopped_sub_line) or ln > stopped_line:
-                continue_pos = i
-                break
-
-        if continue_pos is None:
-            self.running = False
-            return [{'type': 'text', 'text': 'READY'}]
-
-        output = self._execute_statements_loop(all_positions, continue_pos)
-        self.running = False
-        self.stopped_position = None
-        return output
+        return self.executor.execute_cont(args)
     
     def execute_data(self, args):
         # DATA command - store data values in program
@@ -2275,9 +1649,6 @@ class CoCoBasic:
             code = self.program[old_line]
             
             # Update GOTO, GOSUB, and THEN line references in the code
-            # This is a simple implementation - more sophisticated parsing would be better
-            import re
-            
             # Pattern to match GOTO, GOSUB, THEN followed by a line number
             pattern = r'\b(GOTO|GOSUB|THEN)\s+(\d+)\b'
             
@@ -2338,7 +1709,8 @@ class CoCoBasic:
             return [{'type': 'text', 'text': 'SAFETY ON - ITERATION LIMITS ENABLED'}]
         elif args == 'OFF':
             self.safety_enabled = False
-            return [{'type': 'text', 'text': 'SAFETY OFF - ITERATION LIMITS DISABLED'}]
+            return [{'type': 'text', 'text': 'SAFETY OFF - ITERATION LIMITS DISABLED'},
+                    {'type': 'text', 'text': f'(HARD CAP AT {self.max_absolute_iterations:,} ITERATIONS STILL ACTIVE)'}]
         else:
             error = self.error_context.syntax_error(
                 "Invalid SAFETY command syntax",

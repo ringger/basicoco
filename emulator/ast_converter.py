@@ -5,6 +5,7 @@ This module converts complex single-line BASIC control structures into their
 multi-line equivalents using the AST parser infrastructure.
 """
 
+import re
 from typing import List, Optional, Union
 from .ast_parser import (
     ASTNode, IfStatementNode, ForStatementNode, WhileStatementNode,
@@ -518,7 +519,6 @@ def _parse_ast_for_statement(statement: str, parser, converter) -> Optional[List
         body_part = statement[colon_pos + 1:].strip()
 
         # Parse the FOR header using regex to extract components
-        import re
         match = re.match(r'FOR\s+(\w+)\s*=\s*(.+?)\s+TO\s+(.+?)(?:\s+STEP\s+(.+?))?$', for_header, re.IGNORECASE)
         if not match:
             return None
@@ -741,7 +741,6 @@ def _parse_single_line_for(statement: str, parser, converter) -> Optional[List[s
     # If no NEXT found, add it
     if not next_found:
         # Extract variable name from FOR header
-        import re
         match = re.match(r'FOR\s+(\w+)', for_header, re.IGNORECASE)
         if match:
             var_name = match.group(1)
