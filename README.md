@@ -108,7 +108,7 @@ trs80/
 ├── emulator/
 │   ├── core.py             # Main CoCoBasic interpreter
 │   ├── parser.py           # Command parsing and tokenization
-│   ├── ast_parser.py       # AST parsing for expressions and control structures
+│   ├── ast_parser.py       # AST parser, node types, and ASTEvaluator for command execution
 │   ├── ast_converter.py    # Single-line to multi-line control structure conversion
 │   ├── expressions.py      # Expression evaluation
 │   ├── functions.py        # BASIC function implementations
@@ -116,8 +116,8 @@ trs80/
 │   ├── error_context.py    # Educational error reporting
 │   ├── output_manager.py   # Output streaming
 │   ├── graphics.py         # Graphics commands and MC6847 VDG emulation
-│   ├── variables.py        # Variable and array management
-│   └── io.py               # Input/output commands
+│   ├── variables.py        # Variable/array management (DIM, array access)
+│   └── io.py               # I/O helpers (print formatting, argument splitting)
 ├── programs/               # BASIC program files (.bas)
 ├── templates/              # HTML templates (dual monitor interface)
 ├── static/                 # CSS, JavaScript, audio support
@@ -129,7 +129,7 @@ trs80/
 
 ## Testing
 
-519 tests passing, 32 skipped (WebSocket tests require a running server).
+619 tests passing, 32 skipped (WebSocket tests require a running server).
 
 ```bash
 # Run all tests
