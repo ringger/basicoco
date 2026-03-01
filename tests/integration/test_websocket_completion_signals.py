@@ -255,7 +255,7 @@ class TestWebSocketCompletionSignals:
             return
         
         # Create file to kill in server's working directory (not test temp directory)
-        server_programs_dir = '/home/ringger/trs80/programs'
+        server_programs_dir = os.path.join(os.path.dirname(__file__), '..', '..', 'programs')
         os.makedirs(server_programs_dir, exist_ok=True)
         with open(f'{server_programs_dir}/kill_test.bas', 'w') as f:
             f.write('10 PRINT "DELETE ME"\n')
@@ -286,7 +286,7 @@ class TestWebSocketCompletionSignals:
             return
         
         # Create file to kill in server's working directory
-        server_programs_dir = '/home/ringger/trs80/programs'
+        server_programs_dir = os.path.join(os.path.dirname(__file__), '..', '..', 'programs')
         os.makedirs(server_programs_dir, exist_ok=True)
         filepath = f'{server_programs_dir}/cancel_test.bas'
         with open(filepath, 'w') as f:
@@ -314,7 +314,7 @@ class TestWebSocketCompletionSignals:
             return
         
         # Create file to kill in server's working directory
-        server_programs_dir = '/home/ringger/trs80/programs'
+        server_programs_dir = os.path.join(os.path.dirname(__file__), '..', '..', 'programs')
         os.makedirs(server_programs_dir, exist_ok=True)
         filepath = f'{server_programs_dir}/delete_test.bas'
         with open(filepath, 'w') as f:

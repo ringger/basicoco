@@ -4,7 +4,8 @@ Test the emulator directly to see if output callbacks work
 """
 
 import sys
-sys.path.append('/home/ringger/trs80')
+import os
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
 from emulator.core import CoCoBasic
 
 def debug_output_callback(output):

@@ -80,9 +80,9 @@ Monitors server logs in real-time using `tail -f`.
 ```
 === TRS-80 BASIC Emulator Server Log ===
 Started at: Mon Sep  9 11:47:28 UTC 2025
-Working directory: /home/ringger/trs80
+Working directory: /path/to/trs80
 Python version: Python 3.12.3
-Virtual environment: /home/ringger/trs80/venv
+Virtual environment: /path/to/trs80/venv
 =========================================
 
  * Serving Flask app 'app'

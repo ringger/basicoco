@@ -50,3 +50,10 @@ Thumbs.db
 # Temporary files
 *.tmp
 *.temp
+
+# Test artifacts
+.coverage
+htmlcov/
+
+# Server logs
+logs/

@@ -1,10 +1,14 @@
 from flask import Flask, render_template, request
 from flask_socketio import SocketIO, emit
 from emulator.core import CoCoBasic
+import logging
+import os
 import uuid
 
+logger = logging.getLogger(__name__)
+
 app = Flask(__name__)
-app.config['SECRET_KEY'] = 'trs80-secret-key'
+app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', os.urandom(24).hex())
 socketio = SocketIO(app, cors_allowed_origins="*")
 
 # Session management for multiple tabs/programs
@@ -36,13 +40,12 @@ client_sessions = {}
 @socketio.on('connect')
 def handle_connect():
     """Handle client connection and assign session ID"""
-    print(f"New client connecting: {request.sid}")
+    logger.debug("New client connecting: %s", request.sid)
     session_id = str(uuid.uuid4())
     client_sessions[request.sid] = session_id
-    print(f"Client connected: {request.sid} with session {session_id}")
-    print(f"Sending session_id event with data: {{'session_id': session_id}}")
+    logger.debug("Client connected: %s with session %s", request.sid, session_id)
     emit('session_id', {'session_id': session_id})
-    print("Session ID emitted successfully")
+    logger.debug("Session ID emitted successfully")
 
 @socketio.on('disconnect')
 def handle_disconnect():
@@ -51,7 +54,7 @@ def handle_disconnect():
         session_id = client_sessions[request.sid]
         session_manager.remove_session(session_id)
         del client_sessions[request.sid]
-        print(f"Client disconnected: {request.sid}")
+        logger.debug("Client disconnected: %s", request.sid)
 
 @app.route('/')
 def index():
@@ -69,16 +72,16 @@ def handle_command(data):
     command = data.get('command', '')
     tab_id = data.get('tabId', 'main')
     
-    print(f"Executing command '{command}' for client {request.sid}")
+    logger.debug("Executing command '%s' for client %s", command, request.sid)
     
     # Get session for this client
     session_id = client_sessions.get(request.sid)
     if not session_id:
-        print(f"Session not found for client {request.sid}. Available sessions: {list(client_sessions.keys())}")
+        logger.warning("Session not found for client %s. Available sessions: %s", request.sid, list(client_sessions.keys()))
         emit('output', [{'type': 'error', 'message': 'Session not found'}])
         return
     
-    print(f"Using session {session_id} for tab {tab_id}")
+    logger.debug("Using session %s for tab %s", session_id, tab_id)
     
     # Get BASIC interpreter for this session/tab
     basic = session_manager.get_session(session_id, tab_id)
@@ -105,9 +108,9 @@ def handle_command(data):
     else:
         # Execute immediate command
         try:
-            print(f"About to execute command: {command}")
+            logger.debug("About to execute command: %s", command)
             output = basic.process_command(command)
-            print(f"Command execution returned: {output}")
+            logger.debug("Command execution returned: %s", output)
             emit('output', output)
             
             # Only send completion signal if command actually finished (no pause or input request)
@@ -117,9 +120,7 @@ def handle_command(data):
                 emit('output', [{'type': 'command_complete'}])
                 
         except Exception as e:
-            print(f"Command execution error: {str(e)}")
-            import traceback
-            traceback.print_exc()
+            logger.error("Command execution error: %s", e, exc_info=True)
             emit('output', [{'type': 'error', 'message': f'Error: {str(e)}'}])
             emit('output', [{'type': 'command_complete'}])
 
@@ -361,12 +362,10 @@ def handle_continue_execution(data=None):
         else:
             # Silently ignore stray continue_execution calls (likely from cancelled pause timers)
             # This prevents confusing error messages when Ctrl+C interrupts a pause
-            print(f"Ignoring stray continue_execution call for session {session_id}, tab {tab_id}")
+            logger.debug("Ignoring stray continue_execution call for session %s, tab %s", session_id, tab_id)
             emit('output', [{'type': 'command_complete'}])
     except Exception as e:
-        print(f"Continue execution error: {str(e)}")
-        import traceback
-        traceback.print_exc()
+        logger.error("Continue execution error: %s", e, exc_info=True)
         emit('output', [{'type': 'error', 'message': f'Continue execution error: {str(e)}'}])
 
 @socketio.on('break_execution')
@@ -398,7 +397,7 @@ def handle_break_execution(data=None):
         
         # Send appropriate response based on whether something was actually interrupted
         if was_running:
-            print(f"Program execution interrupted with Ctrl+C for session {session_id}, tab {tab_id}")
+            logger.debug("Program execution interrupted with Ctrl+C for session %s, tab %s", session_id, tab_id)
             emit('output', [
                 {'type': 'text', 'text': '^C'},
                 {'type': 'text', 'text': 'BREAK'},
@@ -410,10 +409,9 @@ def handle_break_execution(data=None):
             emit('output', [{'type': 'command_complete'}])
         
     except Exception as e:
-        print(f"Break execution error: {str(e)}")
-        import traceback
-        traceback.print_exc()
+        logger.error("Break execution error: %s", e, exc_info=True)
 
 
 if __name__ == '__main__':
-    socketio.run(app, debug=True, host='0.0.0.0', port=5000, allow_unsafe_werkzeug=True)
+    debug = os.environ.get('DEBUG', 'false').lower() == 'true'
+    socketio.run(app, debug=debug, host='0.0.0.0', port=5000, allow_unsafe_werkzeug=True)
