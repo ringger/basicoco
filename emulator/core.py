@@ -74,7 +74,7 @@ class CoCoBasic:
         self.expression_evaluator = ExpressionEvaluator(self)
 
         # AST-based execution: commands in this set use AST parse+visit instead of registry
-        self._ast_migrated_commands = {'END', 'GOTO'}
+        self._ast_migrated_commands = {'END', 'GOTO', 'LET'}
         self._ast_evaluator = None  # Lazy-initialized ASTEvaluator
 
         # Initialize command registry
@@ -1251,6 +1251,14 @@ class CoCoBasic:
                 # Avoid misidentifying comparisons (IF X=5, etc.)
                 lhs = code_stripped.split('=', 1)[0]
                 if not any(op in lhs for op in ['<', '>', '!']):
+                    # Don't treat keyword statements as assignments
+                    # (e.g., FOR I = 1 TO 10 contains '=' but isn't assignment)
+                    if first_word in self.command_registry.commands or first_word in self.command_registry.aliases:
+                        return None
+                    # First token must start with a letter to be a variable name
+                    lhs_stripped = lhs.strip()
+                    if not lhs_stripped or not lhs_stripped[0].isalpha():
+                        return None
                     first_word = 'LET'
                 else:
                     return None
@@ -1262,7 +1270,11 @@ class CoCoBasic:
             if self._ast_evaluator is None:
                 from .ast_parser import ASTEvaluator
                 self._ast_evaluator = ASTEvaluator(self)
-            return self._ast_evaluator.visit(ast_node)
+            result = self._ast_evaluator.visit(ast_node)
+            # Ensure result is a list (statement results must be List[Dict])
+            if not isinstance(result, list):
+                return None  # Not a valid statement result, fall back
+            return result
         except Exception:
             return None  # Fall back to registry
 

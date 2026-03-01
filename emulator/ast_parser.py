@@ -1631,20 +1631,49 @@ class ASTEvaluator(ASTVisitor):
 
     def visit_assignment(self, node: AssignmentNode) -> Any:
         """Visit assignment statement"""
-        # Evaluate the value
         value = self.visit(node.value)
 
-        # Get target variable name
-        if hasattr(node.target, 'name'):
+        if isinstance(node.target, ArrayAccessNode):
+            # Array element assignment: A(5) = 42
+            array_name = node.target.array_name.upper()
+            # Check reserved function names
+            if array_name in self.emulator.get_reserved_function_names():
+                error = self.emulator.error_context.syntax_error(
+                    f"Cannot assign to reserved function name: {array_name}",
+                    self.emulator.current_line,
+                    suggestions=[
+                        'Choose a different variable name',
+                        'Reserved names include built-in functions',
+                        'Example: Use DATA instead of SIN'
+                    ]
+                )
+                return [{'type': 'error', 'message': error.format_detailed()}]
+            try:
+                indices = [int(self.visit(idx)) for idx in node.target.indices]
+            except (ValueError, TypeError) as e:
+                return [{'type': 'error', 'message': f'Invalid array index: {e}'}]
+            error = self.emulator.variable_manager.set_array_element(array_name, indices, value)
+            if error:
+                return [{'type': 'error', 'message': error}]
+        elif hasattr(node.target, 'name'):
             var_name = node.target.name.upper()
+            # Check reserved function names
+            if var_name in self.emulator.get_reserved_function_names():
+                error = self.emulator.error_context.syntax_error(
+                    f"Cannot assign to reserved function name: {var_name}",
+                    self.emulator.current_line,
+                    suggestions=[
+                        'Choose a different variable name',
+                        'Reserved names include built-in functions',
+                        'Example: Use DATA instead of SIN'
+                    ]
+                )
+                return [{'type': 'error', 'message': error.format_detailed()}]
+            self.emulator.variables[var_name] = value
         else:
-            # For complex targets, convert back to string
-            var_name = str(node.target)
+            var_name = str(node.target).upper()
+            self.emulator.variables[var_name] = value
 
-        # Set variable in emulator
-        self.emulator.variables[var_name] = value
-
-        # Return empty result (assignments don't produce output)
         return []
 
     def visit_end_statement(self, node: EndStatementNode) -> Any:

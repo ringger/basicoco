@@ -124,3 +124,48 @@ class TestGotoMigration:
         result = basic._try_ast_execute('GOTO -5')
         if result is not None:
             assert any(item.get('type') == 'error' for item in result)
+
+
+class TestLetMigration:
+    """Phase 3: LET (assignment) command via AST execution"""
+
+    def test_let_is_migrated(self, basic):
+        """LET should be in the migrated commands set"""
+        assert 'LET' in basic._ast_migrated_commands
+
+    def test_let_simple_variable(self, basic, helpers):
+        """LET X = 5 should set variable"""
+        basic.process_command('LET X = 5')
+        helpers.assert_variable_equals(basic, 'X', 5)
+
+    def test_implicit_assignment(self, basic, helpers):
+        """X = 5 (without LET) should work via AST"""
+        basic.process_command('X = 42')
+        helpers.assert_variable_equals(basic, 'X', 42)
+
+    def test_string_assignment(self, basic, helpers):
+        """String variable assignment should work"""
+        basic.process_command('A$ = "HELLO"')
+        helpers.assert_variable_equals(basic, 'A$', 'HELLO')
+
+    def test_expression_assignment(self, basic, helpers):
+        """Assignment with expression should evaluate"""
+        basic.process_command('X = 3 + 4 * 5')
+        helpers.assert_variable_equals(basic, 'X', 23)
+
+    def test_array_assignment(self, basic, helpers):
+        """Array assignment should work through AST"""
+        basic.process_command('DIM A(10)')
+        basic.process_command('A(5) = 42')
+        helpers.assert_array_element_equals(basic, 'A', [5], 42)
+
+    def test_assignment_in_program(self, basic, helpers):
+        """Assignment in program execution should work"""
+        program = [
+            '10 X = 10',
+            '20 Y = X * 2',
+            '30 PRINT Y',
+        ]
+        results = helpers.execute_program(basic, program)
+        output = helpers.get_text_output(results)
+        assert any('20' in t for t in output)
