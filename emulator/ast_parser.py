@@ -1521,8 +1521,18 @@ class ASTEvaluator(ASTVisitor):
     
     def visit_exit_for_statement(self, node: ExitForStatementNode) -> Any:
         """Visit EXIT FOR statement - signal to exit current FOR loop"""
-        # Return a special signal that can be caught by the execution engine
-        return [{'type': 'exit_for'}]
+        if not self.emulator.for_stack:
+            error = self.emulator.error_context.syntax_error(
+                "EXIT FOR without matching FOR",
+                self.emulator.current_line,
+                suggestions=[
+                    'EXIT FOR can only be used inside a FOR loop',
+                    'Check that FOR loops are properly nested',
+                    'Example: FOR I=1 TO 10 ... EXIT FOR ... NEXT I'
+                ]
+            )
+            return [{'type': 'error', 'message': error.format_detailed()}]
+        return [{'type': 'exit_for_loop'}]
     
     def visit_if_statement(self, node: IfStatementNode) -> Any:
         """Visit IF statement - evaluate condition and execute appropriate branch"""
@@ -1780,12 +1790,47 @@ class ASTEvaluator(ASTVisitor):
         return [{'type': 'jump_return', 'line': return_line, 'sub_line': return_sub_line}]
 
     def visit_for_statement(self, node: ForStatementNode) -> Any:
-        """Visit FOR statement"""
-        # FOR loops require complex state management
-        # For now, return a command that indicates FOR loop processing needed
-        var_name = node.variable.name if hasattr(node.variable, 'name') else str(node.variable)
-        start_val = self.visit(node.start_value)
-        end_val = self.visit(node.end_value)
-        step_val = self.visit(node.step_value) if node.step_value else 1
+        """Visit FOR statement - initialize loop variable and push to for_stack"""
+        var_name = node.variable.name.upper() if hasattr(node.variable, 'name') else str(node.variable).upper()
 
-        return [{'type': 'for_loop', 'variable': var_name, 'start': start_val, 'end': end_val, 'step': step_val}]
+        try:
+            start_val = self.visit(node.start_value)
+            end_val = self.visit(node.end_value)
+            step_val = self.visit(node.step_value) if node.step_value else 1
+        except (ValueError, TypeError) as e:
+            return [{'type': 'error', 'message': str(e)}]
+
+        # Ensure numeric values
+        try:
+            start_val = float(start_val) if isinstance(start_val, str) else start_val
+            end_val = float(end_val) if isinstance(end_val, str) else end_val
+            step_val = float(step_val) if isinstance(step_val, str) else step_val
+        except (ValueError, TypeError):
+            error = self.emulator.error_context.type_error(
+                "FOR loop values must be numeric",
+                "number",
+                "non-numeric expression",
+                suggestions=[
+                    "Use numeric expressions: FOR I = 1 TO 10",
+                    "Variables must contain numbers: LET N = 5; FOR I = 1 TO N",
+                    "Check that all expressions evaluate to numbers"
+                ]
+            )
+            return [{'type': 'error', 'message': error.format_detailed()}]
+
+        # Check if loop should execute at all
+        if ((step_val > 0 and start_val > end_val) or
+            (step_val < 0 and start_val < end_val)):
+            self.emulator.variables[var_name] = start_val
+            return [{'type': 'skip_for_loop', 'var': var_name}]
+
+        self.emulator.variables[var_name] = start_val
+        self.emulator.for_stack.append({
+            'var': var_name,
+            'end': end_val,
+            'step': step_val,
+            'line': self.emulator.current_line,
+            'sub_line': self.emulator.current_sub_line
+        })
+
+        return []

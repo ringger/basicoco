@@ -314,3 +314,69 @@ class TestGosubReturnMigration:
         assert any('BEFORE' in t for t in output)
         assert any('SUB' in t for t in output)
         assert any('AFTER' in t for t in output)
+
+
+class TestForExitForMigration:
+    """Phase 7-8: FOR and EXIT FOR commands via AST execution"""
+
+    def test_for_is_migrated(self, basic):
+        """FOR should be in the migrated commands set"""
+        assert 'FOR' in basic._ast_migrated_commands
+
+    def test_exit_is_migrated(self, basic):
+        """EXIT should be in the migrated commands set"""
+        assert 'EXIT' in basic._ast_migrated_commands
+
+    def test_for_via_ast_sets_variable(self, basic):
+        """FOR should set the loop variable to start value"""
+        basic.current_line = 10
+        basic.current_sub_line = 0
+        result = basic._try_ast_execute('FOR I = 1 TO 10')
+        assert result == []
+        assert basic.variables['I'] == 1
+        assert len(basic.for_stack) == 1
+        assert basic.for_stack[0]['var'] == 'I'
+        assert basic.for_stack[0]['end'] == 10
+        assert basic.for_stack[0]['step'] == 1
+
+    def test_for_with_step(self, basic):
+        """FOR with STEP should set step value"""
+        basic.current_line = 10
+        basic.current_sub_line = 0
+        result = basic._try_ast_execute('FOR I = 0 TO 100 STEP 5')
+        assert result == []
+        assert basic.for_stack[0]['step'] == 5
+
+    def test_for_skip_empty_loop(self, basic):
+        """FOR with start > end should skip loop"""
+        basic.current_line = 10
+        basic.current_sub_line = 0
+        result = basic._try_ast_execute('FOR I = 10 TO 1')
+        assert result is not None
+        assert any(item.get('type') == 'skip_for_loop' for item in result)
+
+    def test_for_in_program(self, basic, helpers):
+        """FOR/NEXT loop in program should execute correctly"""
+        program = [
+            '10 FOR I = 1 TO 3',
+            '20 PRINT I',
+            '30 NEXT I',
+        ]
+        results = helpers.execute_program(basic, program)
+        output = helpers.get_text_output(results)
+        assert any('1' in t for t in output)
+        assert any('3' in t for t in output)
+
+    def test_exit_for_signal(self, basic):
+        """EXIT FOR should return exit_for_loop signal"""
+        basic.current_line = 10
+        basic.current_sub_line = 0
+        basic._try_ast_execute('FOR I = 1 TO 10')
+        result = basic._try_ast_execute('EXIT FOR')
+        assert result == [{'type': 'exit_for_loop'}]
+
+    def test_exit_for_without_loop_error(self, basic):
+        """EXIT FOR without FOR should produce error"""
+        result = basic._try_ast_execute('EXIT FOR')
+        assert result is not None
+        assert any(item.get('type') == 'error' for item in result)
