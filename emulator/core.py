@@ -41,6 +41,9 @@ class CoCoBasic:
         self.current_sub_line = 0
         self.call_stack = []
         self.for_stack = []
+        self.if_stack = []
+        self.while_stack = []
+        self.do_stack = []
         self.graphics_mode = 0  # 0 = text mode, 1-4 = PMODE graphics
         self.screen_mode = 1    # Screen/color mode
         self.iteration_count = 0  # Safety counter for infinite loops
@@ -1224,12 +1227,6 @@ class CoCoBasic:
             self.program = {temp_line_num: '# AST Converted statements'}  # Placeholder only
             self.expanded_program = {}
 
-            # Initialize stacks if they don't exist
-            if not hasattr(self, 'for_stack'):
-                self.for_stack = []
-            if not hasattr(self, 'call_stack'):
-                self.call_stack = []
-
             self.for_stack.clear()
             self.call_stack.clear()
 
@@ -1474,10 +1471,6 @@ class CoCoBasic:
                 ]
             )
             return [{'type': 'error', 'message': error.format_detailed()}]
-        
-        # Initialize IF stack if needed
-        if not hasattr(self, 'if_stack'):
-            self.if_stack = []
         
         condition_result = self.evaluate_condition(condition.strip())
         
@@ -1822,6 +1815,9 @@ class CoCoBasic:
         self.arrays.clear()  # Clear all dimensioned arrays
         self.for_stack.clear()
         self.call_stack.clear()
+        self.if_stack.clear()
+        self.while_stack.clear()
+        self.do_stack.clear()
         self.data_statements.clear()
         self.data_pointer = 0
         self.running = False
@@ -2564,10 +2560,6 @@ class CoCoBasic:
     def execute_while(self, args):
         """WHILE statement - begin conditional loop"""
         # For now, implement legacy-style WHILE tracking
-        # Later we can enhance with AST parsing for multi-line support
-        if not hasattr(self, 'while_stack'):
-            self.while_stack = []
-        
         condition = args.strip()
         if self.evaluate_condition(condition):
             # Store the while condition and current position for loop jumping
@@ -2583,7 +2575,7 @@ class CoCoBasic:
     
     def execute_wend(self, args):
         """WEND statement - end WHILE loop"""
-        if not hasattr(self, 'while_stack') or not self.while_stack:
+        if not self.while_stack:
             error = self.error_context.syntax_error(
                 "WEND without matching WHILE",
                 self.current_line,
@@ -2641,9 +2633,6 @@ class CoCoBasic:
     
     def execute_do(self, args):
         """DO statement - begin DO/LOOP block"""
-        if not hasattr(self, 'do_stack'):
-            self.do_stack = []
-        
         # Parse DO [WHILE condition | UNTIL condition]
         args = args.strip()
         condition = None
@@ -2674,7 +2663,7 @@ class CoCoBasic:
     
     def execute_loop(self, args):
         """LOOP statement - end DO/LOOP block"""
-        if not hasattr(self, 'do_stack') or not self.do_stack:
+        if not self.do_stack:
             error = self.error_context.syntax_error(
                 "LOOP without matching DO",
                 self.current_line,
@@ -2725,7 +2714,7 @@ class CoCoBasic:
 
     def execute_else(self, args):
         """ELSE statement - alternative branch in multi-line IF"""
-        if not hasattr(self, 'if_stack') or not self.if_stack:
+        if not self.if_stack:
             error = self.error_context.syntax_error(
                 "ELSE without matching IF",
                 self.current_line,
@@ -2751,7 +2740,7 @@ class CoCoBasic:
     
     def execute_endif(self, args):
         """ENDIF statement - end multi-line IF block"""
-        if not hasattr(self, 'if_stack') or not self.if_stack:
+        if not self.if_stack:
             error = self.error_context.syntax_error(
                 "ENDIF without matching IF",
                 self.current_line,

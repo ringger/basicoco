@@ -244,21 +244,22 @@ class TestOutputManager:
         output_manager.text("Text 1")
         output_manager.error("Error 1")
         output_manager.text("Text 2")
+        time.sleep(0.05)  # Ensure a clear time gap
         start_time = time.time()
-        time.sleep(0.001)  # Small delay
+        time.sleep(0.05)  # Ensure warning timestamp is strictly after start_time
         output_manager.warning("Warning 1")
-        
+
         # Test get_recent_messages
         recent = output_manager.get_recent_messages(3)
         assert len(recent) == 3
         assert recent[-1].content == "Warning 1"
-        
+
         # Test get_messages_by_type
         text_messages = output_manager.get_messages_by_type(OutputType.TEXT)
         assert len(text_messages) == 2
         assert text_messages[0].content == "Text 1"
         assert text_messages[1].content == "Text 2"
-        
+
         # Test get_messages_since
         recent_messages = output_manager.get_messages_since(start_time)
         assert len(recent_messages) == 1
@@ -393,14 +394,15 @@ class TestOutputManager:
         # Add some messages
         output_manager.text("Message 1")
         output_manager.error("Error 1")
+        time.sleep(0.05)  # Ensure a clear time gap
         start_time = time.time()
-        time.sleep(0.001)
+        time.sleep(0.05)  # Ensure next message timestamp is strictly after start_time
         output_manager.text("Message 2")
-        
+
         # Test streaming all messages
         all_messages = list(output_manager.stream_messages())
         assert len(all_messages) >= 3
-        
+
         # Test streaming since timestamp
         recent_messages = list(output_manager.stream_messages(start_time))
         assert len(recent_messages) == 1
