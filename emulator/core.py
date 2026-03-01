@@ -74,7 +74,7 @@ class CoCoBasic:
         self.expression_evaluator = ExpressionEvaluator(self)
 
         # AST-based execution: commands in this set use AST parse+visit instead of registry
-        self._ast_migrated_commands = {'END', 'GOTO', 'LET', 'PRINT', 'GOSUB', 'RETURN', 'FOR', 'EXIT', 'WHILE', 'DO'}
+        self._ast_migrated_commands = {'END', 'GOTO', 'LET', 'PRINT', 'GOSUB', 'RETURN', 'FOR', 'EXIT', 'WHILE', 'DO', 'IF'}
         self._ast_evaluator = None  # Lazy-initialized ASTEvaluator
 
         # Initialize command registry

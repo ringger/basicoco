@@ -1536,9 +1536,8 @@ class ASTEvaluator(ASTVisitor):
     
     def visit_if_statement(self, node: IfStatementNode) -> Any:
         """Visit IF statement - evaluate condition and execute appropriate branch"""
-        # Evaluate condition
         condition_result = self.visit(node.condition)
-        
+
         # Convert to boolean (BASIC truth rules)
         if isinstance(condition_result, (int, float)):
             condition_true = condition_result != 0
@@ -1546,30 +1545,36 @@ class ASTEvaluator(ASTVisitor):
             condition_true = len(condition_result) > 0
         else:
             condition_true = bool(condition_result)
-        
-        # Execute appropriate branch
+
         if condition_true:
-            # Execute THEN branch
             result = self.visit(node.then_branch)
-            
-            # Handle special case: if THEN branch evaluates to a number, it's a line jump
+            # THEN with number = GOTO
             if isinstance(result, (int, float)) and not isinstance(result, bool):
                 line_num = int(result)
+                if line_num <= 0:
+                    error = self.emulator.error_context.runtime_error(
+                        f"Invalid line number {line_num}",
+                        self.emulator.current_line,
+                        suggestions=[
+                            "Line numbers must be positive integers",
+                            "Example: IF X > 5 THEN 100",
+                            "Check with LIST command to see available lines"
+                        ]
+                    )
+                    return [{'type': 'error', 'message': error.format_detailed()}]
                 return [{'type': 'jump', 'line': line_num}]
-            
-            return result
+            # None means visitor couldn't handle it — fall back to registry
+            if result is None:
+                return None
+            return result if isinstance(result, list) else []
         elif node.else_branch:
-            # Execute ELSE branch if condition is false and ELSE exists
             result = self.visit(node.else_branch)
-            
-            # Handle special case: if ELSE branch evaluates to a number, it's a line jump
             if isinstance(result, (int, float)) and not isinstance(result, bool):
-                line_num = int(result)
-                return [{'type': 'jump', 'line': line_num}]
-            
-            return result
+                return [{'type': 'jump', 'line': int(result)}]
+            if result is None:
+                return None
+            return result if isinstance(result, list) else []
         else:
-            # No ELSE branch and condition is false - do nothing
             return []
     
     def visit_block(self, node: BlockNode) -> Any:

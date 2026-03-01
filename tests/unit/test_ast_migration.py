@@ -467,3 +467,66 @@ class TestWhileDoMigration:
         output = helpers.get_text_output(results)
         assert any('1' in t for t in output)
         assert any('3' in t for t in output)
+
+
+class TestIfMigration:
+    """Phase 11: IF/THEN/ELSE command via AST execution"""
+
+    def test_if_is_migrated(self, basic):
+        """IF should be in the migrated commands set"""
+        assert 'IF' in basic._ast_migrated_commands
+
+    def test_if_true_executes_then(self, basic, helpers):
+        """IF with true condition should execute THEN branch"""
+        result = basic.process_command('IF 1=1 THEN PRINT "YES"')
+        output = helpers.get_text_output(result)
+        assert any('YES' in t for t in output)
+
+    def test_if_false_no_output(self, basic, helpers):
+        """IF with false condition should not execute THEN"""
+        result = basic.process_command('IF 1=0 THEN PRINT "NO"')
+        output = helpers.get_text_output(result)
+        assert not any('NO' in t for t in output)
+
+    def test_if_then_goto(self, basic, helpers):
+        """IF THEN with line number should GOTO"""
+        program = [
+            '10 IF 1=1 THEN 30',
+            '20 PRINT "SKIPPED"',
+            '30 PRINT "TARGET"',
+        ]
+        results = helpers.execute_program(basic, program)
+        output = helpers.get_text_output(results)
+        assert any('TARGET' in t for t in output)
+        assert not any('SKIPPED' in t for t in output)
+
+    def test_if_then_assignment(self, basic, helpers):
+        """IF THEN with assignment should work"""
+        basic.process_command('X = 5')
+        basic.process_command('IF 1=1 THEN X = 10')
+        helpers.assert_variable_equals(basic, 'X', 10)
+
+    def test_if_false_then_assignment(self, basic, helpers):
+        """IF false THEN assignment should not execute"""
+        basic.process_command('X = 5')
+        basic.process_command('IF 1=0 THEN X = 10')
+        helpers.assert_variable_equals(basic, 'X', 5)
+
+    def test_if_multiline_falls_back(self, basic):
+        """Multi-line IF (bare THEN) should fall back to registry"""
+        basic.current_line = 10
+        basic.current_sub_line = 0
+        basic.variables['X'] = 5
+        basic.process_command('IF X > 0 THEN')
+
+    def test_if_in_program(self, basic, helpers):
+        """IF/THEN in program should work"""
+        program = [
+            '10 X = 5',
+            '20 IF X > 3 THEN PRINT "BIG"',
+            '30 IF X < 3 THEN PRINT "SMALL"',
+        ]
+        results = helpers.execute_program(basic, program)
+        output = helpers.get_text_output(results)
+        assert any('BIG' in t for t in output)
+        assert not any('SMALL' in t for t in output)
