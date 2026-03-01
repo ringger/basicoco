@@ -1730,6 +1730,55 @@ class ASTEvaluator(ASTVisitor):
 
         return [{'type': 'jump', 'line': line_num}]
 
+    def visit_gosub_statement(self, node: GosubStatementNode) -> Any:
+        """Visit GOSUB statement"""
+        try:
+            target_line = self.visit(node.target_line)
+            line_num = int(target_line)
+        except (ValueError, TypeError) as e:
+            error = self.emulator.error_context.syntax_error(
+                "SYNTAX ERROR: Invalid GOSUB target",
+                self.emulator.current_line,
+                suggestions=[
+                    "Correct syntax: GOSUB line_number",
+                    "Example: GOSUB 1000 or GOSUB SUB_LINE where SUB_LINE is a variable",
+                    "Make sure target line contains a subroutine that ends with RETURN"
+                ]
+            )
+            return [{'type': 'error', 'message': error.format_detailed()}]
+
+        if line_num <= 0:
+            error = self.emulator.error_context.runtime_error(
+                f"Invalid subroutine line number {line_num}",
+                self.emulator.current_line,
+                suggestions=[
+                    "Line numbers must be positive integers",
+                    "Use line numbers that exist in your program",
+                    "Subroutine should end with RETURN statement"
+                ]
+            )
+            return [{'type': 'error', 'message': error.format_detailed()}]
+
+        self.emulator.call_stack.append((self.emulator.current_line, self.emulator.current_sub_line))
+        return [{'type': 'jump', 'line': line_num}]
+
+    def visit_return_statement(self, node: ReturnStatementNode) -> Any:
+        """Visit RETURN statement"""
+        if not self.emulator.call_stack:
+            error = self.emulator.error_context.runtime_error(
+                "RETURN WITHOUT GOSUB",
+                self.emulator.current_line,
+                suggestions=[
+                    "RETURN must be preceded by a GOSUB statement",
+                    "Example: GOSUB 1000: ... : 1000 RETURN",
+                    "Check that subroutines are called with GOSUB before RETURN"
+                ]
+            )
+            return [{'type': 'error', 'message': error.format_detailed()}]
+
+        return_line, return_sub_line = self.emulator.call_stack.pop()
+        return [{'type': 'jump_return', 'line': return_line, 'sub_line': return_sub_line}]
+
     def visit_for_statement(self, node: ForStatementNode) -> Any:
         """Visit FOR statement"""
         # FOR loops require complex state management

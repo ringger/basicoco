@@ -245,3 +245,72 @@ class TestPrintMigration:
         output = helpers.get_text_output(results)
         assert any('LINE1' in t for t in output)
         assert any('LINE2' in t for t in output)
+
+
+class TestGosubReturnMigration:
+    """Phase 5-6: GOSUB and RETURN commands via AST execution"""
+
+    def test_gosub_is_migrated(self, basic):
+        """GOSUB should be in the migrated commands set"""
+        assert 'GOSUB' in basic._ast_migrated_commands
+
+    def test_return_is_migrated(self, basic):
+        """RETURN should be in the migrated commands set"""
+        assert 'RETURN' in basic._ast_migrated_commands
+
+    def test_gosub_via_ast_returns_jump(self, basic):
+        """GOSUB should push call stack and return jump signal"""
+        basic.current_line = 10
+        basic.current_sub_line = 0
+        result = basic._try_ast_execute('GOSUB 100')
+        assert result == [{'type': 'jump', 'line': 100}]
+        assert len(basic.call_stack) == 1
+        assert basic.call_stack[0] == (10, 0)
+
+    def test_return_via_ast_pops_stack(self, basic):
+        """RETURN should pop call stack and return jump_return"""
+        basic.call_stack.append((10, 0))
+        result = basic._try_ast_execute('RETURN')
+        assert result == [{'type': 'jump_return', 'line': 10, 'sub_line': 0}]
+        assert len(basic.call_stack) == 0
+
+    def test_return_without_gosub_error(self, basic):
+        """RETURN without GOSUB should produce error"""
+        result = basic._try_ast_execute('RETURN')
+        assert result is not None
+        assert any(item.get('type') == 'error' for item in result)
+
+    def test_gosub_invalid_target_error(self, basic):
+        """GOSUB with invalid target should produce error"""
+        basic.variables['A$'] = "HELLO"
+        result = basic._try_ast_execute('GOSUB A$')
+        if result is not None:
+            assert any(item.get('type') == 'error' for item in result)
+
+    def test_gosub_return_in_program(self, basic, helpers):
+        """GOSUB/RETURN in program should work correctly"""
+        program = [
+            '10 GOSUB 30',
+            '20 END',
+            '30 PRINT "SUB"',
+            '40 RETURN',
+        ]
+        results = helpers.execute_program(basic, program)
+        output = helpers.get_text_output(results)
+        assert any('SUB' in t for t in output)
+
+    def test_gosub_return_preserves_flow(self, basic, helpers):
+        """After RETURN, execution should continue after GOSUB"""
+        program = [
+            '10 PRINT "BEFORE"',
+            '20 GOSUB 50',
+            '30 PRINT "AFTER"',
+            '40 END',
+            '50 PRINT "SUB"',
+            '60 RETURN',
+        ]
+        results = helpers.execute_program(basic, program)
+        output = helpers.get_text_output(results)
+        assert any('BEFORE' in t for t in output)
+        assert any('SUB' in t for t in output)
+        assert any('AFTER' in t for t in output)
