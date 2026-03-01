@@ -772,7 +772,7 @@ def register_all_functions(registry):
 
 
 # ============================================================================
-# Future Phase 2 Functions (Ready to implement)
+# Additional String Functions
 # ============================================================================
 
 def fn_instr(evaluator, args: List[Any]) -> int:

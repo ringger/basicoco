@@ -1278,9 +1278,6 @@ class CoCoBasic:
     
     
     
-    # All function evaluation now handled by ExpressionEvaluator
-    # Old function methods removed - see expressions.py and functions.py
-    
     def evaluate_expression(self, expr, line=None):
         """Delegate expression evaluation to the ExpressionEvaluator"""
         try:
@@ -1293,7 +1290,7 @@ class CoCoBasic:
             raise ValueError(str(e))
 
     def execute_for(self, args):
-        """Legacy FOR implementation - kept for reference"""
+        """Execute FOR loop statement"""
         # FOR I=1 TO 10 [STEP 1] - handle multi-line FOR loops
         # Single-line FOR loops are now handled by AST converter
         for_part = args.strip()
@@ -1363,8 +1360,6 @@ class CoCoBasic:
 
         return []
     
-    # Removed _execute_single_line_for method - now handled by AST converter
-    
     def execute_next(self, args):
         if not self.for_stack:
             error = self.error_context.runtime_error(
@@ -1401,7 +1396,7 @@ class CoCoBasic:
             return []
     
     def execute_if(self, args):
-        """Legacy IF implementation - kept for reference"""
+        """Execute IF/THEN/ELSE statement"""
         # IF condition THEN [action | multi-line] - now using AST parser
         if 'THEN' not in args.upper():
             error = self.error_context.syntax_error(
@@ -1518,7 +1513,7 @@ class CoCoBasic:
         return False
     
     def execute_goto(self, args):
-        """Legacy GOTO implementation - kept for reference"""
+        """Execute GOTO statement"""
         self.error_context.set_context(self.current_line, f"GOTO {args}")
 
         if not args.strip():
@@ -1578,7 +1573,7 @@ class CoCoBasic:
             return [{'type': 'error', 'message': str(e)}]
 
     def execute_gosub(self, args):
-        """Legacy GOSUB implementation - kept for reference"""
+        """Execute GOSUB statement"""
         self.error_context.set_context(self.current_line, f"GOSUB {args}")
 
         if not args.strip():
@@ -1624,7 +1619,7 @@ class CoCoBasic:
             return [{'type': 'error', 'message': error.format_detailed()}]
     
     def execute_return(self, args):
-        """Legacy RETURN implementation - kept for reference"""
+        """Execute RETURN statement"""
         if not self.call_stack:
             error = self.error_context.runtime_error(
                 "RETURN WITHOUT GOSUB",
@@ -1792,7 +1787,7 @@ class CoCoBasic:
         return [{'type': 'text', 'text': 'READY'}]
     
     def execute_end(self, args):
-        """Legacy END implementation - kept for reference"""
+        """Execute END statement"""
         # END command - end program execution silently
         self.running = False
         # Clear stopped position since END terminates completely
