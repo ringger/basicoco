@@ -675,11 +675,8 @@ class CoCoBasic:
 
         output = []
         self.running = True
-        self.iteration_count = 0
-        
-        # Pre-process DATA statements - collect all DATA from program lines
-        self.data_statements.clear()
-        self.data_pointer = 0
+
+        # Pre-process DATA statements (already cleared by clear_interpreter_state above)
         preprocessing_running = self.running
         self.running = False  # Temporarily disable running flag for preprocessing
         for line_num in sorted(self.program.keys()):
@@ -1790,15 +1787,8 @@ class CoCoBasic:
         self.graphics_mode = 0  # Reset to text mode
 
     def execute_new(self):
-        # NEW command - clear program and variables
+        """NEW command - clear program and variables"""
         self.clear_interpreter_state(clear_program=True)
-        self.input_prompt = None
-        self.current_input_index = 0
-        self.current_line = 0
-        self.current_sub_line = 0
-        self.iteration_count = 0
-        # Don't clear keyboard buffer - preserve keys for INKEY$
-        self.graphics_mode = 0  # Reset to text mode
         return [{'type': 'text', 'text': 'READY'}]
     
     def execute_end(self, args):
