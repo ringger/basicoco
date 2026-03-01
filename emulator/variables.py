@@ -266,21 +266,3 @@ class VariableManager:
         """Clear all variables and arrays"""
         self.emulator.variables.clear()
         self.emulator.arrays.clear()
-    
-    def format_number_for_output(self, value):
-        """Format number for display output"""
-        if isinstance(value, str):
-            return value
-        elif isinstance(value, int):
-            return f" {value} "
-        elif isinstance(value, float):
-            if value.is_integer():
-                return f" {int(value)} "
-            else:
-                # Format float with appropriate precision
-                if abs(value) >= 1e6 or (abs(value) < 1e-3 and value != 0):
-                    return f" {value:.6E} "
-                else:
-                    return f" {value:.6G} "
-        else:
-            return str(value)

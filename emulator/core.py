@@ -9,7 +9,6 @@ import re
 from .parser import BasicParser
 from .graphics import BasicGraphics
 from .variables import VariableManager
-from .io import IOHandler
 from .commands import CommandRegistry
 from .expressions import ExpressionEvaluator
 from .output_manager import StreamingOutputManager, LegacyOutputAdapter, OutputType
@@ -68,7 +67,6 @@ class CoCoBasic:
         # Initialize graphics, variables, and I/O modules
         self.graphics = BasicGraphics(self)
         self.variable_manager = VariableManager(self)
-        self.io_handler = IOHandler(self)
         
         # Initialize expression evaluator
         self.expression_evaluator = ExpressionEvaluator(self)
@@ -1994,8 +1992,6 @@ class CoCoBasic:
         # Let each module register its own commands
         self.graphics.register_commands(self.command_registry)  
         self.variable_manager.register_commands(self.command_registry)
-        self.io_handler.register_commands(self.command_registry)
-        
         # Core commands - control flow
         # Note: IF, GOTO, GOSUB, RETURN, FOR, WHILE, EXIT, DO, END are handled by AST execution
         self.command_registry.register('ON', self.execute_on,

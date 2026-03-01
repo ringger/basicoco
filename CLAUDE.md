@@ -103,7 +103,7 @@ Error types: `syntax_error()`, `runtime_error()`, `type_error()`, `arithmetic_er
 | Expression evaluation | `expressions.py` | `evaluate_expression()`, `evaluate_condition()` — used by both AST visitors and execute_* methods |
 | AST parsing + execution | `ast_parser.py` | Parser, node types, and `ASTEvaluator` all in one file |
 | Single-line → multi-line conversion | `ast_converter.py` | Converts `IF A THEN B: C` → multi-line before execution |
-| Print formatting | `io.py` | Only `_format_print_value()` remains; the module is nearly empty |
+| Print value formatting | `ast_parser.py` | `ASTEvaluator._format_print_value()` static method |
 
 ## Testing Patterns
 

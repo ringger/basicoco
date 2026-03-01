@@ -1349,6 +1349,19 @@ class ASTEvaluator(ASTVisitor):
     def __init__(self, emulator):
         self.emulator = emulator
     
+    @staticmethod
+    def _format_print_value(value):
+        """Format a value for PRINT output"""
+        if isinstance(value, str):
+            return value
+        elif isinstance(value, (int, float)):
+            if isinstance(value, float) and value.is_integer():
+                return str(int(value))
+            else:
+                return str(value)
+        else:
+            return str(value)
+
     def visit_number(self, node: LiteralNode) -> Union[int, float]:
         """Visit number literal"""
         return node.value
@@ -1631,7 +1644,7 @@ class ASTEvaluator(ASTVisitor):
             # Evaluate expression
             try:
                 value = self.visit(expr)
-                output_parts.append(self.emulator.io_handler._format_print_value(value))
+                output_parts.append(self._format_print_value(value))
             except Exception as e:
                 error = self.emulator.error_context.runtime_error(
                     f"Error evaluating PRINT expression: {e}",

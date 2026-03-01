@@ -122,8 +122,7 @@ trs80/
 │   ├── error_context.py    # Educational error reporting
 │   ├── output_manager.py   # Output streaming
 │   ├── graphics.py         # Graphics commands and MC6847 VDG emulation
-│   ├── variables.py        # Variable/array management (DIM, array access)
-│   └── io.py               # I/O helpers (print formatting)
+│   └── variables.py        # Variable/array management (DIM, array access)
 ├── programs/               # BASIC program files (.bas)
 ├── templates/              # HTML templates (dual monitor interface)
 ├── static/                 # CSS, JavaScript, audio support
