@@ -219,6 +219,8 @@ class ProgramExecutor:
                     emu.running = False
                     emu.call_stack.clear()
                     emu.for_stack.clear()
+                    emu.while_stack.clear()
+                    emu.do_stack.clear()
                     return current_pos_index, 'stop'
 
         return current_pos_index + 1, 'next'

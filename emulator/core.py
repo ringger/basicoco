@@ -131,6 +131,12 @@ class CoCoBasic:
         """Alias for evaluate_expression (compatibility with old ExpressionEvaluator API)."""
         return self.evaluate_expression(expr, line)
 
+    def _remove_expanded_lines(self, line_num):
+        """Remove all expanded_program entries for a given line number."""
+        keys = [k for k in self.expanded_program if k[0] == line_num]
+        for k in keys:
+            del self.expanded_program[k]
+
     @staticmethod
     def _system_ok():
         """Return a system OK acknowledgment (not user-generated output)."""
@@ -161,10 +167,7 @@ class CoCoBasic:
             else:  # Empty code - delete the line
                 if line_num in self.program:
                     del self.program[line_num]
-                # Remove from expanded program
-                keys_to_remove = [key for key in self.expanded_program.keys() if key[0] == line_num]
-                for key in keys_to_remove:
-                    del self.expanded_program[key]
+                self._remove_expanded_lines(line_num)
             return self._system_ok()
 
         # Try command registry first (plugin-like architecture)
@@ -1508,10 +1511,7 @@ class CoCoBasic:
                 for line_num in list(self.program.keys()):
                     if start_line <= line_num <= end_line:
                         del self.program[line_num]
-                        # Remove from expanded program
-                        keys_to_remove = [key for key in self.expanded_program.keys() if key[0] == line_num]
-                        for key in keys_to_remove:
-                            del self.expanded_program[key]
+                        self._remove_expanded_lines(line_num)
                         lines_deleted += 1
                 
                 if lines_deleted == 0:
@@ -1525,10 +1525,7 @@ class CoCoBasic:
                 
                 if line_num in self.program:
                     del self.program[line_num]
-                    # Remove from expanded program
-                    keys_to_remove = [key for key in self.expanded_program.keys() if key[0] == line_num]
-                    for key in keys_to_remove:
-                        del self.expanded_program[key]
+                    self._remove_expanded_lines(line_num)
                     return [{'type': 'text', 'text': f'DELETED LINE {line_num}'}]
                 else:
                     return [{'type': 'text', 'text': f'LINE {line_num} NOT FOUND'}]
@@ -1646,44 +1643,8 @@ class CoCoBasic:
         
         # Add renumbered lines with updated GOTO/GOSUB/THEN targets
         for old_line, new_line in line_mapping.items():
-            code = self.program[old_line]
-            
-            # Update GOTO, GOSUB, and THEN line references in the code
-            # Pattern to match GOTO, GOSUB, THEN followed by a line number
-            pattern = r'\b(GOTO|GOSUB|THEN)\s+(\d+)\b'
-            
-            def replace_line_ref(match):
-                keyword = match.group(1)
-                target = int(match.group(2))
-                if target in line_mapping:
-                    return f'{keyword} {line_mapping[target]}'
-                return match.group(0)
-            
-            updated_code = re.sub(pattern, replace_line_ref, code, flags=re.IGNORECASE)
-            
-            # Also handle ON...GOTO and ON...GOSUB with comma-separated line numbers
-            on_pattern = r'\b(ON\s+.*?\s+(?:GOTO|GOSUB))\s+([\d,\s]+)\b'
-            
-            def replace_on_refs(match):
-                prefix = match.group(1)
-                targets = match.group(2)
-                # Split by comma and update each line number
-                parts = []
-                for part in targets.split(','):
-                    part = part.strip()
-                    if part.isdigit():
-                        target = int(part)
-                        if target in line_mapping:
-                            parts.append(str(line_mapping[target]))
-                        else:
-                            parts.append(part)
-                    else:
-                        parts.append(part)
-                return f'{prefix} {",".join(parts)}'
-            
-            updated_code = re.sub(on_pattern, replace_on_refs, updated_code, flags=re.IGNORECASE)
-            
-            new_program[new_line] = updated_code
+            new_program[new_line] = self._update_line_references(
+                self.program[old_line], line_mapping)
         
         # Replace the program
         self.program = new_program
@@ -1694,7 +1655,42 @@ class CoCoBasic:
             self.expand_line_to_sublines(line_num, self.program[line_num])
         
         return [{'type': 'text', 'text': f'RENUMBERED {len(line_mapping)} LINES'}]
-    
+
+    @staticmethod
+    def _update_line_references(code, line_mapping):
+        """Update GOTO/GOSUB/THEN line number targets in a line of code."""
+        pattern = r'\b(GOTO|GOSUB|THEN)\s+(\d+)\b'
+
+        def replace_line_ref(match):
+            keyword = match.group(1)
+            target = int(match.group(2))
+            if target in line_mapping:
+                return f'{keyword} {line_mapping[target]}'
+            return match.group(0)
+
+        updated = re.sub(pattern, replace_line_ref, code, flags=re.IGNORECASE)
+
+        # Also handle ON...GOTO and ON...GOSUB with comma-separated line numbers
+        on_pattern = r'\b(ON\s+.*?\s+(?:GOTO|GOSUB))\s+([\d,\s]+)\b'
+
+        def replace_on_refs(match):
+            prefix = match.group(1)
+            targets = match.group(2)
+            parts = []
+            for part in targets.split(','):
+                part = part.strip()
+                if part.isdigit():
+                    target = int(part)
+                    if target in line_mapping:
+                        parts.append(str(line_mapping[target]))
+                    else:
+                        parts.append(part)
+                else:
+                    parts.append(part)
+            return f'{prefix} {",".join(parts)}'
+
+        return re.sub(on_pattern, replace_on_refs, updated, flags=re.IGNORECASE)
+
     def execute_safety(self, args):
         """SAFETY statement - enable or disable iteration safety limits"""
         args = args.strip().upper()

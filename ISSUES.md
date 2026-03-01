@@ -23,6 +23,10 @@
 - [ ] USR — user-defined machine language function (same)
 - [ ] SGN — sign function
 
+### Refactoring Opportunities
+
+- [ ] Split ast_parser.py (1925 lines) into three modules: `ast_nodes.py` (node classes + enums, ~240 lines), `ast_parser.py` (parser, ~1090 lines), `ast_evaluator.py` (visitor + evaluator, ~575 lines). Only 3 consumers import from it. Clean separation of concerns.
+
 ## Completed
 
 ### DRY Refactoring (March 2026)
