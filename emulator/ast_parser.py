@@ -1648,8 +1648,10 @@ class ASTEvaluator(ASTVisitor):
         return []
 
     def visit_end_statement(self, node: EndStatementNode) -> Any:
-        """Visit END statement"""
-        return [{'type': 'end'}]
+        """Visit END statement - stop program execution"""
+        self.emulator.running = False
+        self.emulator.stopped_position = None
+        return []
 
     def visit_goto_statement(self, node: GotoStatementNode) -> Any:
         """Visit GOTO statement"""
