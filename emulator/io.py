@@ -22,11 +22,6 @@ class IOHandler:
         registry.register('PRINT', self.execute_print)
     
     def execute_input(self, args):
-        """Execute INPUT statement using legacy implementation"""
-        return self._legacy_execute_input(args)
-
-    def _legacy_execute_input(self, args):
-        """Legacy INPUT implementation - kept for reference"""
         try:
             # INPUT can have optional prompt: INPUT "Enter value"; variable1, variable2, variable3
             # Or just: INPUT variable1, variable2, variable3
@@ -114,11 +109,6 @@ class IOHandler:
             return [{'type': 'error', 'message': error.format_detailed()}]
     
     def execute_print(self, args):
-        """Execute PRINT statement using legacy implementation"""
-        return self._legacy_execute_print(args)
-
-    def _legacy_execute_print(self, args):
-        """Legacy PRINT implementation - kept for reference"""
         try:
             if not args:
                 # Just print a blank line

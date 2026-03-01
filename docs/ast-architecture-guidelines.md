@@ -98,7 +98,7 @@ def parse_and_convert_single_line(statement):
 def execute_for(self, args):
     # Traditional stateful execution
     # Manages for_stack, variables, program_counter
-    return self._legacy_execute_for(args)
+    return self.execute_for(args)
 ```
 
 **Pros:**

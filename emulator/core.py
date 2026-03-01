@@ -656,27 +656,6 @@ class CoCoBasic:
         # Use BasicParser for normal statements
         return BasicParser.expand_line_to_sublines(line_num, code, self.expanded_program)
 
-    def _run_program_via_ast(self):
-        """Execute program using AST parser and PROGRAM node"""
-        self.running = True
-        self.iteration_count = 0
-
-        # Parse entire program into AST
-        from .ast_parser import ASTEvaluator
-        evaluator = ASTEvaluator(self)
-        program_node = self.expression_evaluator.ast_parser.parse_program(self.program)
-
-        # Execute via AST visitor
-        result = evaluator.visit(program_node)
-
-        # Convert result to expected format
-        if isinstance(result, list):
-            return result
-        elif result is not None:
-            return [result]
-        else:
-            return []
-
     def run_program(self, clear_variables=True):
         if not self.program:
             error = self.error_context.runtime_error(
@@ -693,13 +672,6 @@ class CoCoBasic:
         # For temporary execution, we may want to preserve variables
         if clear_variables:
             self.clear_interpreter_state(clear_program=False)
-
-        # Temporarily disabled AST-based execution due to format compatibility issues
-        # try:
-        #     return self._run_program_via_ast()
-        # except Exception:
-        #     # Fall back to legacy line-by-line execution
-        #     pass
 
         output = []
         self.running = True
@@ -1324,10 +1296,6 @@ class CoCoBasic:
             raise ValueError(str(e))
 
     def execute_for(self, args):
-        """Execute FOR statement using legacy implementation"""
-        return self._legacy_execute_for(args)
-
-    def _legacy_execute_for(self, args):
         """Legacy FOR implementation - kept for reference"""
         # FOR I=1 TO 10 [STEP 1] - handle multi-line FOR loops
         # Single-line FOR loops are now handled by AST converter
@@ -1436,10 +1404,6 @@ class CoCoBasic:
             return []
     
     def execute_if(self, args):
-        """Execute IF statement using legacy implementation"""
-        return self._legacy_execute_if(args)
-
-    def _legacy_execute_if(self, args):
         """Legacy IF implementation - kept for reference"""
         # IF condition THEN [action | multi-line] - now using AST parser
         if 'THEN' not in args.upper():
@@ -1557,10 +1521,6 @@ class CoCoBasic:
         return False
     
     def execute_goto(self, args):
-        """Execute GOTO statement using legacy implementation"""
-        return self._legacy_execute_goto(args)
-
-    def _legacy_execute_goto(self, args):
         """Legacy GOTO implementation - kept for reference"""
         self.error_context.set_context(self.current_line, f"GOTO {args}")
 
@@ -1621,10 +1581,6 @@ class CoCoBasic:
             return [{'type': 'error', 'message': str(e)}]
 
     def execute_gosub(self, args):
-        """Execute GOSUB statement using legacy implementation"""
-        return self._legacy_execute_gosub(args)
-
-    def _legacy_execute_gosub(self, args):
         """Legacy GOSUB implementation - kept for reference"""
         self.error_context.set_context(self.current_line, f"GOSUB {args}")
 
@@ -1671,10 +1627,6 @@ class CoCoBasic:
             return [{'type': 'error', 'message': error.format_detailed()}]
     
     def execute_return(self, args):
-        """Execute RETURN statement using legacy implementation"""
-        return self._legacy_execute_return(args)
-
-    def _legacy_execute_return(self, args):
         """Legacy RETURN implementation - kept for reference"""
         if not self.call_stack:
             error = self.error_context.runtime_error(
@@ -1850,10 +1802,6 @@ class CoCoBasic:
         return [{'type': 'text', 'text': 'READY'}]
     
     def execute_end(self, args):
-        """Execute END statement using legacy implementation"""
-        return self._legacy_execute_end(args)
-
-    def _legacy_execute_end(self, args):
         """Legacy END implementation - kept for reference"""
         # END command - end program execution silently
         self.running = False
