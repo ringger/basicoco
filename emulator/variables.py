@@ -262,22 +262,6 @@ class VariableManager:
         else:
             return 0   # Numeric variables default to 0
     
-    def _is_valid_variable_name(self, name):
-        """Check if variable name is valid"""
-        # Remove $ suffix for string variables
-        base_name = name.rstrip('$')
-        
-        # Must start with letter
-        if not base_name[0].isalpha():
-            return False
-        
-        # Can contain letters and numbers
-        for char in base_name[1:]:
-            if not (char.isalnum()):
-                return False
-        
-        return True
-    
     def clear_variables(self):
         """Clear all variables and arrays"""
         self.emulator.variables.clear()
