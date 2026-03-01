@@ -59,5 +59,6 @@ The following files were removed as they were redundant with existing unit/integ
 - **`test_enhanced_errors.py`** - Functionality covered by `tests/unit/test_error_context.py` and `tests/unit/test_error_handling.py`
 - **`test_help_command.py`** - Functionality covered by `tests/unit/test_command_registry.py`
 - **`test_streaming_output.py`** - Functionality covered by `tests/unit/test_output_manager.py`
+- **`test_old_code_paths.py`** - Referenced legacy functions that no longer exist after AST migration
 
 The development test scripts provide fast iteration feedback while the comprehensive test suites ensure production quality.
