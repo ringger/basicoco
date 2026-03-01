@@ -1,44 +1,17 @@
-# TRS-80 Color Computer BASIC Emulator
+# TRS-80 Color Computer BASIC Environment
 
-A TRS-80 Color Computer BASIC interpreter targeting Extended Color BASIC (CoCo 1/2), with a dual monitor web interface, standalone CLI client, MC6847 VDG-inspired graphics, and 145+ educational error messages.
+An educational BASIC programming environment inspired by the TRS-80 Color Computer. Type BASIC, see what happens, and learn from mistakes — every error message tells you what went wrong and how to fix it.
+
+This is not a hardware emulator. If you want to run real CoCo software, see [Related Projects](#related-projects). This project is for learning BASIC in a CoCo-flavored dialect with a modern interface and helpful feedback.
 
 ![Python](https://img.shields.io/badge/Python-3.8%2B-blue)
 ![License](https://img.shields.io/badge/License-MIT-blue)
 
-## Features
+## Why This Exists
 
-### BASIC Language Support
-- **Core Commands**: NEW, RUN, LIST, END, STOP, CONT, CLEAR, LOAD, SAVE, FILES, KILL
-- **I/O**: PRINT (with separators), INPUT (with prompts, multi-variable), CLS, INKEY$
-- **Variables and Math**: Numeric and string variables, operators (+, -, *, /, ^, comparisons)
-- **Control Flow**: FOR/NEXT (with STEP), IF/THEN/ELSE/ENDIF, GOTO, GOSUB/RETURN, ON GOTO/GOSUB
-- **Data Processing**: DATA/READ/RESTORE
-- **Math Functions**: ABS, INT, SQR, SIN, COS, TAN, ATN, EXP, LOG, RND
-- **String Functions**: LEN, LEFT$, RIGHT$, MID$, CHR$, ASC, STR$, VAL, STRING$, INSTR, SGN
-- **Arrays**: DIM with multi-dimensional support (DIM A(10) creates indices 0-10, as on the real CoCo)
-- **Single-Line Statements**: Complex single-line forms like `IF A=1 THEN FOR I=1 TO 3: PRINT I: NEXT I`
+The original TRS-80 Color Computer responded to mistakes with `?SN ERROR` — two cryptic characters and a question mark. Forty years later, we can do better.
 
-#### Modern Extensions (not in original Extended Color BASIC)
-- **MOD** operator for modular arithmetic
-- **EXIT FOR** to break out of FOR/NEXT loops early
-- **WHILE/WEND** and **DO/LOOP** (with WHILE/UNTIL) structured loop constructs
-- **PAUSE** *n* — delay execution for *n* seconds (real CoCo used busy loops or TIMER)
-
-### Graphics and Sound
-- **Graphics Modes**: PMODE 0-4 with MC6847 VDG-inspired rendering
-- **Drawing**: PSET, PRESET, LINE, CIRCLE, PAINT (flood fill), GET/PUT (sprites), DRAW (turtle graphics)
-- **Color**: 8-color CoCo palette (green, yellow, blue, red, buff, cyan, magenta, orange) plus black background
-- **Sound**: SOUND command with Web Audio API tone generation
-- **Display**: SCREEN, PCLS, color set selection
-
-### Interfaces
-- **Dual Monitor Web UI**: Split-screen with persistent REPL (left) and dedicated graphics display (right), resizable panels, multi-tab support with independent sessions
-- **CLI Client**: Terminal-based interface with real-time streaming output
-- **Rainbow Cursor**: Authentic TRS-80 CoCo color cycling
-- **Keyboard**: Command line editing with Emacs bindings, Ctrl+C interrupt, tab completion
-
-### Educational Error Messages
-145+ context-aware error messages that teach BASIC programming:
+This environment keeps the CoCo BASIC dialect but replaces the frustration with 145+ educational error messages:
 
 ```
 DIM A(
@@ -55,6 +28,8 @@ PRINT SQR(-4)
 >   - Use ABS() if you want the square root of the absolute value
 >   - Example: SQR(ABS(-9)) returns 3
 ```
+
+The dual-monitor web interface puts your REPL and graphics side by side — something the original hardware couldn't do with a single composite video output.
 
 ## Quick Start
 
@@ -105,6 +80,70 @@ RUN
 
 Programs can be saved as `.bas` files in the `programs/` directory and loaded with `LOAD "filename"`.
 
+## Language
+
+The dialect is based on Extended Color BASIC as shipped with the CoCo 1 and CoCo 2, with modern quality-of-life additions.
+
+### From Extended Color BASIC
+- **Core**: NEW, RUN, LIST, END, STOP, CONT, CLEAR, LOAD, SAVE, FILES, KILL
+- **I/O**: PRINT (with separators), INPUT (with prompts, multi-variable), CLS, INKEY$
+- **Variables**: Numeric and string variables, operators (+, -, *, /, ^, comparisons)
+- **Control Flow**: FOR/NEXT (with STEP), IF/THEN, GOTO, GOSUB/RETURN, ON GOTO/GOSUB
+- **Data**: DATA/READ/RESTORE
+- **Math**: ABS, INT, SQR, SIN, COS, TAN, ATN, EXP, LOG, RND
+- **Strings**: LEN, LEFT$, RIGHT$, MID$, CHR$, ASC, STR$, VAL, STRING$, INSTR, SGN
+- **Arrays**: DIM with multi-dimensional support (DIM A(10) creates indices 0-10, as on the real CoCo)
+- **Graphics**: PMODE, SCREEN, PCLS, PSET, PRESET, LINE, CIRCLE, PAINT, GET/PUT, DRAW
+- **Sound**: SOUND command (note: accepts frequency in Hz rather than the CoCo's 1-255 pitch table)
+
+### Modern Extensions
+These were not in Extended Color BASIC but make the environment more learner-friendly:
+
+- **MOD** operator for modular arithmetic
+- **EXIT FOR** to break out of FOR/NEXT loops early
+- **WHILE/WEND** and **DO/LOOP** (with WHILE/UNTIL) structured loop constructs
+- **IF/THEN/ELSE/ENDIF** multi-line conditional blocks
+- **PAUSE** *n* — delay execution for *n* seconds (real CoCo used busy loops)
+- **Single-line compound statements** like `IF A=1 THEN FOR I=1 TO 3: PRINT I: NEXT I`
+
+### Not Yet Implemented
+PEEK/POKE, VARPTR, MEM, TIMER, FRE, RANDOMIZE, OPEN/CLOSE, FIELD, GET/PUT (file), ON ERROR GOTO, HEX$, OCT$, PCLEAR, PPOINT, TRON/TROFF, EXEC, USR
+
+## Interfaces
+
+- **Dual Monitor Web UI**: Split-screen with persistent REPL (left) and dedicated graphics display (right), resizable panels, multi-tab support with independent sessions
+- **CLI Client**: Terminal-based interface with real-time streaming output
+- **Rainbow Cursor**: CoCo-style color cycling
+- **Keyboard**: Command line editing with Emacs bindings, Ctrl+C interrupt, tab completion
+
+## Differences from Real Hardware
+
+This is a BASIC interpreter, not a hardware emulator. It doesn't emulate the 6809 CPU, MC6847 VDG, or memory map. Notable differences:
+
+- **Error messages** are educational rather than authentic (`?SN ERROR`)
+- **Graphics** are VDG-inspired but simplified — no CSS-based 4-color set switching, approximate PMODE 0/2 resolutions
+- **SOUND** accepts frequency in Hz (1-4095) rather than the CoCo's pitch table values (1-255)
+- **PRINT** spacing doesn't exactly match hardware behavior (number padding, 16-column comma zones)
+- **Modern extensions** (MOD, EXIT FOR, WHILE/WEND, DO/LOOP, PAUSE) are additions beyond the original ROM
+- Can't run real CoCo binaries, cassette images, or disk images
+
+## Related Projects
+
+If you're looking for authentic hardware emulation or other BASIC environments:
+
+### CoCo Hardware Emulators
+- **[XRoar](http://www.6809.org.uk/xroar/)** — The standard Dragon/CoCo emulator. Cycle-accurate 6809 emulation, runs real ROM images and software. Available as [XRoar Online](https://colorcomputerarchive.com/xroar-online/) in the browser via WebAssembly.
+- **[trs80gp](http://48k.ca/trs80gp.html)** — Emulates nearly every TRS-80 variant including CoCo 1/2/3.
+- **[Color Computer Archive](https://colorcomputerarchive.com/repo/Emulators/)** — Repository of CoCo emulators, ROM images, and software.
+
+### Other BASIC Interpreters
+- **[EndBASIC](https://www.endbasic.dev/)** — Educational BASIC in the browser (Rust/WASM). Modern dialect with a retro-styled terminal.
+- **[RetroBASIC](https://github.com/maurymarkowitz/RetroBASIC)** — C-based interpreter that runs 1970s/80s BASIC programs across many dialects (MS-BASIC, Dartmouth, HP).
+
+### Community
+- **[CoCopedia](https://www.cocopedia.com/wiki/index.php/Emulators)** — The Color Computer wiki with comprehensive emulator listings.
+- **[Glenside Color Computer Club](https://www.glensideccc.com/)** — Active CoCo community with online emulator links.
+
 ## Architecture
 
 ```
@@ -121,7 +160,7 @@ trs80/
 │   ├── commands.py         # Command registry
 │   ├── error_context.py    # Educational error reporting
 │   ├── output_manager.py   # Output streaming
-│   ├── graphics.py         # Graphics commands and MC6847 VDG emulation
+│   ├── graphics.py         # Graphics commands and VDG-inspired emulation
 │   └── variables.py        # Variable/array management (DIM, array access)
 ├── programs/               # BASIC program files (.bas)
 ├── templates/              # HTML templates (dual monitor interface)
@@ -131,6 +170,8 @@ trs80/
 │   └── integration/        # Integration and e2e tests
 └── dev_tests/              # Development utilities and smoke tests
 ```
+
+The interpreter is implemented in Python and is designed to be readable. If you're interested in how interpreters work — AST parsing, expression evaluation, control flow stacks — the codebase is a working example at a manageable scale.
 
 ## Testing
 
@@ -150,41 +191,6 @@ python -m pytest tests/unit/ -v
 python dev_tests/smoke_test.py --quick
 ```
 
-## Authenticity Notes
-
-This emulator targets **Extended Color BASIC** as shipped with the TRS-80 Color Computer 1 and 2, with some simplifications and modern extensions:
-
-- `DIM A(10)` creates 11 elements (indices 0-10), matching real CoCo behavior
-- Authentic error message style (SYNTAX ERROR, OUT OF DATA, etc.) enhanced with educational suggestions
-- MC6847 VDG-inspired graphics modes and color palette
-- PRINT comma and semicolon separators (comma advances output position; semicolon concatenates)
-
-**Known differences from hardware:**
-- SOUND accepts frequency in Hz (1-4095) rather than the CoCo's 1-255 pitch table values
-- Graphics color selection is simplified from the MC6847's CSS-based 4-color set switching
-- PMODE 0 and PMODE 2 resolutions are approximate
-- Modern extensions (MOD, EXIT FOR, WHILE/WEND, DO/LOOP, PAUSE) are additions beyond the original ROM
-
-## Roadmap
-
-### Disk BASIC File Operations
-- OPEN/CLOSE for sequential and random access files
-- FIELD, GET, PUT for random file access
-
-### System Functions and Memory Simulation
-- PEEK/POKE with simulated TRS-80 memory map
-- VARPTR, MEM, TIMER, FRE(0), RANDOMIZE
-- Machine language: EXEC, USR, LOADM, SAVEM
-
-### Enhanced Disk BASIC Commands
-- MERGE, RENAME, COPY, CLOADM/CSAVEM
-
-### Error Handling and Recovery
-- ON ERROR GOTO / RESUME, ERR, ERL
-
-### Not Yet Implemented
-HEX$, OCT$, PCLEAR, PPOINT, EOF, LOC, LOF, FREE, BACKUP, DSKINI, VERIFY, EDIT, LLIST, TRON/TROFF
-
 ## Contributing
 
 1. Fork the repository
@@ -201,4 +207,4 @@ MIT License. See [LICENSE](LICENSE) for details.
 
 - Original TRS-80 Color Computer designers at Tandy/Radio Shack
 - Microsoft Color BASIC / Extended Color BASIC language specification
-- MC6847 VDG chip documentation
+- The CoCo community for keeping this platform alive four decades on
