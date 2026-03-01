@@ -185,8 +185,6 @@ This emulator targets **Extended Color BASIC** as shipped with the TRS-80 Color 
 ### Not Yet Implemented
 HEX$, OCT$, PCLEAR, PPOINT, EOF, LOC, LOF, FREE, BACKUP, DSKINI, VERIFY, EDIT, LLIST, TRON/TROFF
 
-See [CHANGELOG.md](CHANGELOG.md) for release history.
-
 ## Contributing
 
 1. Fork the repository
