@@ -1265,6 +1265,19 @@ class CoCoBasic:
             else:
                 return None
 
+        # Validate IF statements require THEN keyword
+        if first_word == 'IF' and 'THEN' not in code_upper:
+            error = self.error_context.syntax_error(
+                "SYNTAX ERROR: Missing THEN in IF statement",
+                self.current_line,
+                suggestions=[
+                    "Correct syntax: IF condition THEN action",
+                    'Example: IF A > 5 THEN PRINT "BIG"',
+                    "IF statements must include THEN keyword"
+                ]
+            )
+            return [{'type': 'error', 'message': error.format_detailed()}]
+
         try:
             ast_node = self.expression_evaluator.ast_parser.parse_statement(code_stripped)
             if self._ast_evaluator is None:
@@ -1275,12 +1288,44 @@ class CoCoBasic:
             if not isinstance(result, list):
                 return None  # Not a valid statement result, fall back
             return result
-        except Exception:
+        except Exception as e:
+            error_msg = str(e)
+            # For migrated commands, return parse/execution errors instead of falling through
+            if first_word in self._ast_migrated_commands and error_msg:
+                error = self.error_context.syntax_error(
+                    f"SYNTAX ERROR: {error_msg}",
+                    self.current_line,
+                    suggestions=[
+                        f'Check {first_word} syntax',
+                        'Use HELP to see command syntax',
+                        'Check BASIC reference for proper syntax'
+                    ]
+                )
+                return [{'type': 'error', 'message': error.format_detailed()}]
             return None  # Fall back to registry
 
     def process_statement(self, code):
         if not code.strip():
             return []
+
+        # Handle multi-line IF (bare "IF condition THEN" without action)
+        code_upper = code.strip().upper()
+        if code_upper.startswith('IF ') and code_upper.endswith('THEN'):
+            condition = code.strip()[3:]  # Remove 'IF '
+            condition = condition[:condition.upper().rfind('THEN')].strip()
+            if condition:
+                condition_result = self.evaluate_condition(condition)
+                if_info = {
+                    'condition_met': condition_result,
+                    'line': self.current_line,
+                    'sub_line': self.current_sub_line,
+                    'in_else': False
+                }
+                self.if_stack.append(if_info)
+                if not condition_result:
+                    return [{'type': 'skip_if_block'}]
+                else:
+                    return []
 
         # Try AST execution for migrated commands
         ast_result = self._try_ast_execute(code)
@@ -1291,11 +1336,6 @@ class CoCoBasic:
         result = self.command_registry.execute(code.strip())
         if result is not None:
             return result
-        
-        # Fallback: check for variable assignment
-        if '=' in code and not any(op in code.split('=')[0] for op in ['<', '>', '!', '=']):
-            # Variable assignment without LET - delegate to VariableManager
-            return self.variable_manager.execute_let(code)
         
         # If nothing matches, it's a syntax error
         if self.current_line == 0 or not self.running:
@@ -1341,77 +1381,6 @@ class CoCoBasic:
             # For other exceptions, convert to ValueError for backward compatibility
             raise ValueError(str(e))
 
-    def execute_for(self, args):
-        """Execute FOR loop statement"""
-        # FOR I=1 TO 10 [STEP 1] - handle multi-line FOR loops
-        # Single-line FOR loops are now handled by AST converter
-        for_part = args.strip()
-
-        # Set error context for FOR command
-        self.error_context.set_context(self.current_line, f"FOR {for_part}")
-
-        # Better pattern that looks for the word TO, not individual letters
-        match = re.match(r'(\w+)\s*=\s*(.+?)\s+TO\s+(.+?)(?:\s+STEP\s+(.+?))?$', for_part, re.IGNORECASE)
-        if not match:
-            error = self.error_context.syntax_error(
-                "SYNTAX ERROR: Invalid FOR statement",
-                self.current_line,
-                suggestions=[
-                    "Correct syntax: FOR variable = start TO end [STEP increment]",
-                    "Example: FOR I = 1 TO 10 or FOR X = 0 TO 100 STEP 5",
-                    "Variable name must be a single letter or word"
-                ]
-            )
-            return [{'type': 'error', 'message': error.format_detailed()}]
-
-        var_name = match.group(1).strip()
-
-        # Evaluate expressions with enhanced error handling
-        try:
-            start_val = self.evaluate_expression(match.group(2).strip(), self.current_line)
-            end_val = self.evaluate_expression(match.group(3).strip(), self.current_line)
-            step_val = self.evaluate_expression(match.group(4).strip(), self.current_line) if match.group(4) else 1
-        except ValueError as e:
-            # Enhanced error already formatted, just pass it through
-            return [{'type': 'error', 'message': str(e)}]
-
-        # Ensure numeric values for comparison
-        try:
-            start_val = float(start_val) if isinstance(start_val, str) else start_val
-            end_val = float(end_val) if isinstance(end_val, str) else end_val
-            step_val = float(step_val) if isinstance(step_val, str) else step_val
-        except (ValueError, TypeError):
-            error = self.error_context.type_error(
-                "FOR loop values must be numeric",
-                "number",
-                "non-numeric expression",
-                suggestions=[
-                    "Use numeric expressions: FOR I = 1 TO 10",
-                    "Variables must contain numbers: LET N = 5; FOR I = 1 TO N",
-                    "Check that all expressions evaluate to numbers"
-                ]
-            )
-            return [{'type': 'error', 'message': error.format_detailed()}]
-
-        # Check if loop should execute at all
-        if ((step_val > 0 and start_val > end_val) or
-            (step_val < 0 and start_val < end_val)):
-            # Skip the loop entirely - jump to NEXT and pop it
-            self.variables[var_name] = start_val  # Still set the variable
-            # Return a jump to find and skip past the matching NEXT
-            return [{'type': 'skip_for_loop', 'var': var_name}]
-
-        self.variables[var_name] = start_val
-        self.for_stack.append({
-            'var': var_name,
-            'end': end_val,
-            'step': step_val,
-            'line': self.current_line,
-            'sub_line': self.current_sub_line
-        })
-
-        return []
-    
     def execute_next(self, args):
         if not self.for_stack:
             error = self.error_context.runtime_error(
@@ -1447,99 +1416,6 @@ class CoCoBasic:
             self.for_stack.pop()
             return []
     
-    def execute_if(self, args):
-        """Execute IF/THEN/ELSE statement"""
-        # IF condition THEN [action | multi-line] - now using AST parser
-        if 'THEN' not in args.upper():
-            error = self.error_context.syntax_error(
-                "SYNTAX ERROR: Missing THEN in IF statement",
-                self.current_line,
-                suggestions=[
-                    "Correct syntax: IF condition THEN action",
-                    'Example: IF A > 5 THEN PRINT "BIG"',
-                    "IF statements must include THEN keyword"
-                ]
-            )
-            return [{'type': 'error', 'message': error.format_detailed()}]
-
-        # Find THEN (case-insensitive)
-        then_pos = args.upper().find('THEN')
-        condition = args[:then_pos].strip()
-        then_part = args[then_pos + 4:].strip()  # Skip 'THEN'
-        
-        # Check for empty condition
-        if not condition:
-            error = self.error_context.syntax_error(
-                "SYNTAX ERROR: Empty condition in IF statement",
-                self.current_line,
-                suggestions=[
-                    "Provide a condition to test",
-                    'Example: IF A = 5 THEN PRINT "EQUAL"',
-                    "Condition can use operators: =, <>, <, >, <=, >="
-                ]
-            )
-            return [{'type': 'error', 'message': error.format_detailed()}]
-        
-        condition_result = self.evaluate_condition(condition.strip())
-        
-        # Handle both single-line and multi-line IF statements
-        # Complex single-line IF statements (with colons) are handled by AST converter in process_line()
-        # Simple single-line IF statements (without colons) are handled here
-        if then_part and then_part.upper() != 'THEN':
-            # Single-line IF with action in THEN clause
-            if ':' in then_part:
-                # Complex single-line IF with multiple statements - should be handled by AST converter
-                # If we get here, it means the AST converter didn't catch it, so provide fallback
-                return self.process_line(then_part)
-            else:
-                # Simple single-line IF - handle directly
-                if condition_result:
-                    # Handle THEN clause - check if it's a line number or statement
-                    then_upper = then_part.upper().strip()
-
-                    # Check if it starts with a BASIC keyword
-                    basic_keywords = ['PRINT', 'LET', 'GOTO', 'GOSUB', 'RETURN', 'END', 'STOP',
-                                    'IF', 'FOR', 'NEXT', 'DIM', 'INPUT', 'READ', 'DATA',
-                                    'RESTORE', 'ON', 'DEF', 'PAUSE', 'NEW', 'LIST', 'RUN',
-                                    'EXIT', 'DO', 'LOOP', 'WHILE', 'WEND', 'ELSE', 'ENDIF']
-
-                    starts_with_keyword = any(then_upper.startswith(keyword) for keyword in basic_keywords)
-
-                    # Check if it looks like an assignment
-                    is_assignment = ('=' in then_part and
-                                   not any(op in then_part for op in ['>=', '<=', '<>', '==']) and
-                                   not then_part.strip().startswith('='))
-
-                    if starts_with_keyword or is_assignment:
-                        # Execute as statement
-                        return self.process_line(then_part)
-                    else:
-                        # Try to parse as line number - use GOTO
-                        try:
-                            int(self.evaluate_expression(then_part))
-                            return self.execute_goto(then_part)
-                        except (ValueError, TypeError):
-                            # If not a number, treat as statement
-                            return self.process_line(then_part)
-                else:
-                    # Condition false - do nothing
-                    return []
-
-        # Multi-line IF - push to stack
-        if_info = {
-            'condition_met': condition_result,
-            'line': self.current_line,
-            'sub_line': self.current_sub_line,
-            'in_else': False
-        }
-        self.if_stack.append(if_info)
-
-        # If condition is false, skip to ELSE or ENDIF
-        if not condition_result:
-            return [{'type': 'skip_if_block'}]
-        else:
-            return []  # Continue with THEN block
-    
     def evaluate_condition(self, condition):
         # Simple condition evaluation
         operators = ['>=', '<=', '<>', '=', '>', '<']
@@ -1564,51 +1440,6 @@ class CoCoBasic:
         
         return False
     
-    def execute_goto(self, args):
-        """Execute GOTO statement"""
-        self.error_context.set_context(self.current_line, f"GOTO {args}")
-
-        if not args.strip():
-            error = self.error_context.syntax_error(
-                "SYNTAX ERROR: Missing line number",
-                self.current_line,
-                suggestions=[
-                    "Correct syntax: GOTO line_number",
-                    "Example: GOTO 100",
-                    "Specify the line number to jump to"
-                ]
-            )
-            return [{'type': 'error', 'message': error.format_detailed()}]
-
-        try:
-            line_num = int(self.evaluate_expression(args.strip(), self.current_line))
-            if line_num <= 0:
-                error = self.error_context.runtime_error(
-                    f"Invalid line number {line_num}",
-                    self.current_line,
-                    suggestions=[
-                        "Line numbers must be positive integers",
-                        "Use line numbers that exist in your program",
-                        "Check with LIST command to see available lines"
-                    ]
-                )
-                return [{'type': 'error', 'message': error.format_detailed()}]
-            return [{'type': 'jump', 'line': line_num}]
-        except ValueError as e:
-            # Enhanced error from expression evaluation
-            return [{'type': 'error', 'message': str(e)}]
-        except (TypeError, KeyError) as e:
-            error = self.error_context.syntax_error(
-                "SYNTAX ERROR: Invalid GOTO target",
-                self.current_line,
-                suggestions=[
-                    "Correct syntax: GOTO line_number",
-                    "Example: GOTO 100 or GOTO L where L is a numeric variable",
-                    "Line number must be a positive integer"
-                ]
-            )
-            return [{'type': 'error', 'message': error.format_detailed()}]
-
     def _execute_via_ast(self, statement: str):
         """Execute a statement using AST parser and visitor"""
         try:
@@ -1624,77 +1455,6 @@ class CoCoBasic:
             # Return error if AST execution fails
             return [{'type': 'error', 'message': str(e)}]
 
-    def execute_gosub(self, args):
-        """Execute GOSUB statement"""
-        self.error_context.set_context(self.current_line, f"GOSUB {args}")
-
-        if not args.strip():
-            error = self.error_context.syntax_error(
-                "SYNTAX ERROR: Missing line number",
-                self.current_line,
-                suggestions=[
-                    "Correct syntax: GOSUB line_number",
-                    "Example: GOSUB 1000",
-                    "Specify the line number of the subroutine to call"
-                ]
-            )
-            return [{'type': 'error', 'message': error.format_detailed()}]
-
-        try:
-            line_num = int(self.evaluate_expression(args.strip(), self.current_line))
-            if line_num <= 0:
-                error = self.error_context.runtime_error(
-                    f"Invalid subroutine line number {line_num}",
-                    self.current_line,
-                    suggestions=[
-                        "Line numbers must be positive integers",
-                        "Use line numbers that exist in your program",
-                        "Subroutine should end with RETURN statement"
-                    ]
-                )
-                return [{'type': 'error', 'message': error.format_detailed()}]
-            self.call_stack.append((self.current_line, self.current_sub_line))
-            return [{'type': 'jump', 'line': line_num}]
-        except ValueError as e:
-            # Enhanced error from expression evaluation
-            return [{'type': 'error', 'message': str(e)}]
-        except (TypeError, KeyError) as e:
-            error = self.error_context.syntax_error(
-                "SYNTAX ERROR: Invalid GOSUB target",
-                self.current_line,
-                suggestions=[
-                    "Correct syntax: GOSUB line_number",
-                    "Example: GOSUB 1000 or GOSUB SUB_LINE where SUB_LINE is a variable",
-                    "Make sure target line contains a subroutine that ends with RETURN"
-                ]
-            )
-            return [{'type': 'error', 'message': error.format_detailed()}]
-    
-    def execute_return(self, args):
-        """Execute RETURN statement"""
-        if not self.call_stack:
-            error = self.error_context.runtime_error(
-                "RETURN WITHOUT GOSUB",
-                self.current_line,
-                suggestions=[
-                    "RETURN must be preceded by a GOSUB statement",
-                    "Example: GOSUB 1000: ... : 1000 RETURN",
-                    "Check that subroutines are called with GOSUB before RETURN"
-                ]
-            )
-            return [{'type': 'error', 'message': error.format_detailed()}]
-
-        return_line, return_sub_line = self.call_stack.pop()
-
-        # Return to the sub-line after the GOSUB call
-        return [{'type': 'jump_return', 'line': return_line, 'sub_line': return_sub_line}]
-    
-    
-    
-    
-    
-    
-    
     def execute_sound(self, args):
         # SOUND frequency,duration
         self.error_context.set_context(self.current_line, f"SOUND {args}")
@@ -1837,14 +1597,6 @@ class CoCoBasic:
         """NEW command - clear program and variables"""
         self.clear_interpreter_state(clear_program=True)
         return [{'type': 'text', 'text': 'READY'}]
-    
-    def execute_end(self, args):
-        """Execute END statement"""
-        # END command - end program execution silently
-        self.running = False
-        # Clear stopped position since END terminates completely
-        self.stopped_position = None
-        return []  # No output for END
     
     def execute_stop(self, args):
         # STOP command - stop program execution with message (allows CONT)
@@ -2237,11 +1989,11 @@ class CoCoBasic:
         # Set context for error reporting
         self.error_context.set_context(self.current_line, f"ON {expr_part} {command} {line_part}")
         
-        # Use command registry dispatch instead of hardcoded logic
+        # Dispatch via process_statement (AST-first execution)
         if command == 'GOTO':
-            return self.command_registry.execute(f"GOTO {target_line}")
+            return self.process_statement(f"GOTO {target_line}")
         elif command == 'GOSUB':
-            return self.command_registry.execute(f"GOSUB {target_line}")
+            return self.process_statement(f"GOSUB {target_line}")
         
         error = self.error_context.syntax_error(
             "Invalid ON statement syntax", 
@@ -2268,79 +2020,31 @@ class CoCoBasic:
         self.io_handler.register_commands(self.command_registry)
         
         # Core commands - control flow
-        self.command_registry.register('IF', self.execute_if, 
-                                     category='control',
-                                     description="Conditional execution of statements",
-                                     syntax="IF condition THEN statement [ELSE statement]",
-                                     examples=["IF A > 5 THEN PRINT \"BIG\"", "IF X = 0 THEN GOTO 100 ELSE PRINT X"])
-        
-        self.command_registry.register('GOTO', self.execute_goto,
-                                     category='control', 
-                                     description="Jump to specified line number",
-                                     syntax="GOTO line_number",
-                                     examples=["GOTO 100", "GOTO START_LINE"])
-        
-        self.command_registry.register('GOSUB', self.execute_gosub,
-                                     category='control',
-                                     description="Call subroutine at specified line",
-                                     syntax="GOSUB line_number", 
-                                     examples=["GOSUB 1000", "GOSUB SUBROUTINE_LINE"])
-        
+        # Note: IF, GOTO, GOSUB, RETURN, FOR, WHILE, EXIT, DO, END are handled by AST execution
         self.command_registry.register('ON', self.execute_on,
                                      category='control',
                                      description="Multi-way branch based on expression value",
                                      syntax="ON expression GOTO/GOSUB line1,line2,...",
                                      examples=["ON X GOTO 100,200,300", "ON A+1 GOSUB 1000,2000,3000"])
-        
-        self.command_registry.register('RETURN', self.execute_return,
-                                     category='control',
-                                     description="Return from subroutine",
-                                     syntax="RETURN",
-                                     examples=["RETURN"])
-        
-        self.command_registry.register('FOR', self.execute_for,
-                                     category='control',
-                                     description="Begin FOR loop with counter variable",
-                                     syntax="FOR variable = start TO end [STEP increment]",
-                                     examples=["FOR I = 1 TO 10", "FOR X = 0 TO 100 STEP 5"])
-        
+
         self.command_registry.register('NEXT', self.execute_next,
-                                     category='control', 
+                                     category='control',
                                      description="End FOR loop and increment counter",
                                      syntax="NEXT [variable]",
                                      examples=["NEXT", "NEXT I", "NEXT X"])
-        
-        # Phase 3: Enhanced Control Flow Commands
-        self.command_registry.register('WHILE', self.execute_while,
-                                     category='control',
-                                     description="Begin WHILE loop with condition",
-                                     syntax="WHILE condition",
-                                     examples=["WHILE X > 0", "WHILE A$ <> \"QUIT\""])
-        
+
         self.command_registry.register('WEND', self.execute_wend,
                                      category='control',
                                      description="End WHILE loop",
                                      syntax="WEND",
                                      examples=["WEND"])
-        
-        self.command_registry.register('EXIT', self.execute_exit,
-                                     category='control',
-                                     description="Exit from current loop early",
-                                     syntax="EXIT FOR",
-                                     examples=["EXIT FOR"])
-        
-        self.command_registry.register('DO', self.execute_do,
-                                     category='control',
-                                     description="Begin DO loop block",
-                                     syntax="DO [WHILE condition | UNTIL condition]",
-                                     examples=["DO", "DO WHILE X > 0", "DO UNTIL Y = 10"])
-        
+
         self.command_registry.register('LOOP', self.execute_loop,
                                      category='control',
                                      description="End DO loop block",
                                      syntax="LOOP [WHILE condition | UNTIL condition]",
                                      examples=["LOOP", "LOOP WHILE X > 0", "LOOP UNTIL Y = 10"])
-        
+
         self.command_registry.register('ELSE', self.execute_else,
                                      category='control',
                                      description="Alternative branch in IF statement",
@@ -2358,12 +2062,6 @@ class CoCoBasic:
                                      description="Stop program execution",
                                      syntax="STOP",
                                      examples=["STOP"])
-        
-        self.command_registry.register('END', self.execute_end,
-                                     category='control',
-                                     description="End program execution", 
-                                     syntax="END",
-                                     examples=["END"])
         
         self.command_registry.register('CONT', self.execute_cont,
                                      category='system',
@@ -2541,23 +2239,7 @@ class CoCoBasic:
         return output
     
 
-    # Phase 3: Enhanced Control Flow Methods
-    def execute_while(self, args):
-        """WHILE statement - begin conditional loop"""
-        # For now, implement legacy-style WHILE tracking
-        condition = args.strip()
-        if self.evaluate_condition(condition):
-            # Store the while condition and current position for loop jumping
-            self.while_stack.append({
-                'condition': condition,
-                'line': self.current_line,
-                'sub_line': self.current_sub_line
-            })
-            return []  # Continue with next statement
-        else:
-            # Skip to matching WEND
-            return [{'type': 'skip_while_loop'}]
-    
+    # Enhanced Control Flow Methods
     def execute_wend(self, args):
         """WEND statement - end WHILE loop"""
         if not self.while_stack:
@@ -2575,15 +2257,12 @@ class CoCoBasic:
         # Get the current WHILE loop
         while_info = self.while_stack[-1]
 
-        # Re-evaluate the condition (AST node or string)
-        if 'condition_ast' in while_info:
-            if self._ast_evaluator is None:
-                from .ast_parser import ASTEvaluator
-                self._ast_evaluator = ASTEvaluator(self)
-            result = self._ast_evaluator.visit(while_info['condition_ast'])
-            condition_true = bool(result) if isinstance(result, (int, float)) else result != 0
-        else:
-            condition_true = self.evaluate_condition(while_info['condition'])
+        # Re-evaluate the condition using stored AST node
+        if self._ast_evaluator is None:
+            from .ast_parser import ASTEvaluator
+            self._ast_evaluator = ASTEvaluator(self)
+        result = self._ast_evaluator.visit(while_info['condition_ast'])
+        condition_true = bool(result) if isinstance(result, (int, float)) else result != 0
         if condition_true:
             # Continue loop - jump back to after the WHILE statement
             return [{'type': 'jump_after_while', 
@@ -2593,66 +2272,6 @@ class CoCoBasic:
             # Exit loop
             self.while_stack.pop()
             return []
-    
-    def execute_exit(self, args):
-        """EXIT statement - exit from current loop"""
-        args = args.strip().upper()
-        if args == 'FOR':
-            # Exit current FOR loop - don't pop here, do it in the jump handler
-            if self.for_stack:
-                return [{'type': 'exit_for_loop'}]
-            else:
-                error = self.error_context.syntax_error(
-                    "EXIT FOR without matching FOR",
-                    self.current_line,
-                    suggestions=[
-                        'EXIT FOR can only be used inside a FOR loop',
-                        'Check that FOR loops are properly nested',
-                        'Example: FOR I=1 TO 10 ... EXIT FOR ... NEXT I'
-                    ]
-                )
-                return [{'type': 'error', 'message': error.format_detailed()}]
-        else:
-            error = self.error_context.syntax_error(
-                "Invalid EXIT statement", 
-                self.current_line,
-                suggestions=[
-                    'Correct syntax: EXIT FOR',
-                    'EXIT can only be used to exit FOR loops',
-                    'Use RETURN to exit subroutines or END to stop program'
-                ]
-            )
-            return [{'type': 'error', 'message': error.format_detailed()}]
-    
-    def execute_do(self, args):
-        """DO statement - begin DO/LOOP block"""
-        # Parse DO [WHILE condition | UNTIL condition]
-        args = args.strip()
-        condition = None
-        condition_type = None
-        
-        if args.upper().startswith('WHILE '):
-            condition = args[6:].strip()
-            condition_type = 'WHILE'
-            # Evaluate condition at top
-            if not self.evaluate_condition(condition):
-                return [{'type': 'skip_do_loop'}]
-        elif args.upper().startswith('UNTIL '):
-            condition = args[6:].strip()
-            condition_type = 'UNTIL'
-            # Evaluate condition at top
-            if self.evaluate_condition(condition):
-                return [{'type': 'skip_do_loop'}]
-        
-        # Store DO loop info
-        self.do_stack.append({
-            'condition': condition,
-            'condition_type': condition_type,
-            'line': self.current_line,
-            'sub_line': self.current_sub_line
-        })
-        
-        return []
     
     def execute_loop(self, args):
         """LOOP statement - end DO/LOOP block"""
@@ -2690,7 +2309,7 @@ class CoCoBasic:
         # Evaluate loop continuation
         should_continue = False
         if condition_ast is not None:
-            # AST-based condition evaluation
+            # AST-based condition evaluation (condition from DO statement)
             if self._ast_evaluator is None:
                 from .ast_parser import ASTEvaluator
                 self._ast_evaluator = ASTEvaluator(self)
@@ -2701,6 +2320,7 @@ class CoCoBasic:
             elif condition_type == 'UNTIL':
                 should_continue = not condition_true
         elif condition:
+            # String-based condition (from LOOP WHILE/UNTIL syntax)
             if condition_type == 'WHILE':
                 should_continue = self.evaluate_condition(condition)
             elif condition_type == 'UNTIL':

@@ -158,10 +158,10 @@ class TestErrorRecovery:
         """Test recovery from syntax errors"""
         # Test various syntax errors and runtime errors
         error_tests = [
-            ('FOR I = 1 TO', 'Invalid FOR statement'),  # Incomplete FOR
-            ('IF THEN 10', 'Empty condition'),  # Missing condition
+            ('FOR I = 1 TO', 'Unexpected end of expression'),  # Incomplete FOR
+            ('IF THEN 10', 'Unexpected token'),  # Missing condition
             ('DIM A()', 'Invalid array declaration'),  # Empty dimensions
-            ('GOSUB', 'Missing line number'),  # Missing line number
+            ('GOSUB', 'Unexpected end of expression'),  # Missing line number
             ('NEXT I', 'NEXT WITHOUT FOR'),  # NEXT without matching FOR (runtime error)
         ]
         

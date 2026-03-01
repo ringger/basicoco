@@ -1206,15 +1206,13 @@ class ASTParser:
         expressions = []
         separators = []
 
-        # Handle empty PRINT
-        if not self._current_token() or self._current_token()['type'] in ['KEYWORD', 'PUNCTUATION']:
-            if self._current_token() and self._current_token()['value'] in [';', ',']:
-                self._advance()  # consume separator
-                return PrintStatementNode(
-                    expressions=expressions,
-                    separators=[],
-                    location=self._make_location(print_token)
-                )
+        # Handle empty PRINT (but '(' starts an expression, not end-of-statement)
+        if not self._current_token() or (
+            self._current_token()['type'] == 'KEYWORD'
+        ) or (
+            self._current_token()['type'] == 'PUNCTUATION'
+            and self._current_token()['value'] not in ['(', ';', ',', '-', '+']
+        ):
             return PrintStatementNode(
                 expressions=expressions,
                 separators=[],

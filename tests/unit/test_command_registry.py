@@ -376,10 +376,10 @@ class TestCommandRegistry:
         assert len(commands) > 0
         
         # Test some known commands are registered
-        assert 'PRINT' in commands
-        assert 'IF' in commands
-        assert 'FOR' in commands
+        # Note: PRINT, IF, FOR, GOTO, etc. are now handled by AST execution, not the registry
         assert 'HELP' in commands
+        assert 'DIM' in commands
+        assert 'NEXT' in commands
         
         # Test HELP command functionality
         help_handler = basic.command_registry.get_handler('HELP')

@@ -23,8 +23,8 @@ class TestErrorHandling:
         # Missing TO in FOR statement
         helpers.assert_error_output(basic, 'FOR I = 1 5', 'SYNTAX ERROR')
         
-        # Invalid assignment
-        helpers.assert_error_output(basic, '= 5', 'Empty variable name')
+        # Invalid assignment (no variable name)
+        helpers.assert_error_output(basic, '= 5', 'Unrecognized command')
 
     def test_unmatched_parentheses(self, basic, helpers):
         """Test handling of unmatched parentheses"""

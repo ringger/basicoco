@@ -19,7 +19,7 @@ class VariableManager:
     def register_commands(self, registry):
         """Register variable and array commands with the command registry"""
         registry.register('DIM', self.execute_dim)
-        registry.register('LET', self.execute_let)
+        # Note: LET is now handled by AST execution
     
     def execute_dim(self, args):
         """Execute DIM command to dimension arrays"""
@@ -148,109 +148,6 @@ class VariableManager:
                     'Check DIM syntax and array declarations',
                     'Example: DIM A(10), B$(5,10)',
                     'Ensure all expressions are valid'
-                ]
-            )
-            return [{'type': 'error', 'message': error.format_detailed()}]
-    
-    def execute_let(self, args):
-        try:
-            # Handle both "LET X = 5" and "X = 5"
-            if '=' not in args:
-                error = self.emulator.error_context.syntax_error(
-                    "Missing assignment operator in LET statement",
-                    self.emulator.current_line,
-                    suggestions=[
-                        'Correct syntax: LET variable = expression',
-                        'Example: LET X = 5 or X = 10',
-                        'Assignment requires = operator'
-                    ]
-                )
-                return [{'type': 'error', 'message': error.format_detailed()}]
-
-            var_name, expression = args.split('=', 1)
-            var_name = var_name.strip().upper()
-            expression = expression.strip()
-            
-            # Validate variable name is not empty
-            if not var_name:
-                error = self.emulator.error_context.syntax_error(
-                    "Empty variable name in assignment",
-                    self.emulator.current_line,
-                    suggestions=[
-                        'Variable name cannot be empty',
-                        'Example: X = 5 not = 5',
-                        'Specify a valid variable name before ='
-                    ]
-                )
-                return [{'type': 'error', 'message': error.format_detailed()}]
-            
-            # Check if this is an array assignment
-            if '(' in var_name and var_name.endswith(')'):
-                # Array assignment - A(5) = 42
-                array_part = var_name[:var_name.find('(')]
-                indices_str = var_name[var_name.find('(')+1:-1]
-                
-                # Check if array name conflicts with reserved function names
-                if array_part in self.emulator.get_reserved_function_names():
-                    error = self.emulator.error_context.syntax_error(
-                        f"Cannot assign to reserved function name: {array_part}",
-                        self.emulator.current_line,
-                        suggestions=[
-                            'Choose a different variable name',
-                            'Reserved names include built-in functions',
-                            'Example: Use DATA instead of SIN'
-                        ]
-                    )
-                    return [{'type': 'error', 'message': error.format_detailed()}]
-                
-                # Parse indices
-                indices = [int(self.emulator.evaluate_expression(idx.strip())) for idx in indices_str.split(',')]
-                
-                # Evaluate the expression value
-                if expression.startswith('"') and expression.endswith('"'):
-                    value = expression[1:-1]  # String value
-                else:
-                    value = self.emulator.evaluate_expression(expression)
-                
-                # Set array element
-                error = self.set_array_element(array_part, indices, value)
-                if error:
-                    return [{'type': 'error', 'message': error}]
-                
-                return [{'type': 'text', 'text': 'OK'}]
-            else:
-                # Regular variable assignment
-                # Check if variable name conflicts with reserved function names
-                if var_name in self.emulator.get_reserved_function_names():
-                    error = self.emulator.error_context.syntax_error(
-                        f"Cannot assign to reserved function name: {var_name}",
-                        self.emulator.current_line,
-                        suggestions=[
-                            'Choose a different variable name',
-                            'Reserved names include built-in functions',
-                            'Example: Use DATA instead of SIN'
-                        ]
-                    )
-                    return [{'type': 'error', 'message': error.format_detailed()}]
-                
-                # Evaluate the expression
-                if expression.startswith('"') and expression.endswith('"'):
-                    value = expression[1:-1]  # String literal
-                else:
-                    value = self.emulator.evaluate_expression(expression)
-                
-                # Store the variable
-                self.emulator.variables[var_name] = value
-                
-                return [{'type': 'text', 'text': 'OK'}]
-                
-        except Exception as e:
-            error = self.emulator.error_context.runtime_error(
-                f"Unexpected error in assignment: {str(e)}",
-                suggestions=[
-                    'Check assignment syntax and expression',
-                    'Example: X = 5 or A$(1) = "hello"',
-                    'Ensure all variables and expressions are valid'
                 ]
             )
             return [{'type': 'error', 'message': error.format_detailed()}]
