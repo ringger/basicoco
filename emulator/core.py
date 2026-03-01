@@ -1474,7 +1474,7 @@ class CoCoBasic:
                         try:
                             int(self.evaluate_expression(then_part))
                             return self.execute_goto(then_part)
-                        except:
+                        except (ValueError, TypeError):
                             # If not a number, treat as statement
                             return self.process_line(then_part)
                 else:
@@ -1553,7 +1553,7 @@ class CoCoBasic:
         except ValueError as e:
             # Enhanced error from expression evaluation
             return [{'type': 'error', 'message': str(e)}]
-        except Exception as e:
+        except (TypeError, KeyError) as e:
             error = self.error_context.syntax_error(
                 "SYNTAX ERROR: Invalid GOTO target",
                 self.current_line,
@@ -1614,7 +1614,7 @@ class CoCoBasic:
         except ValueError as e:
             # Enhanced error from expression evaluation
             return [{'type': 'error', 'message': str(e)}]
-        except Exception as e:
+        except (TypeError, KeyError) as e:
             error = self.error_context.syntax_error(
                 "SYNTAX ERROR: Invalid GOSUB target",
                 self.current_line,
@@ -1701,7 +1701,7 @@ class CoCoBasic:
         except ValueError as e:
             # Enhanced error from expression evaluation
             return [{'type': 'error', 'message': str(e)}]
-        except Exception as e:
+        except TypeError as e:
             error = self.error_context.runtime_error(
                 "Invalid SOUND parameters",
                 self.current_line,
@@ -1753,7 +1753,7 @@ class CoCoBasic:
                 # Direct command execution - just return pause instruction
                 return [{'type': 'pause', 'duration': pause_time}]
             
-        except Exception as e:
+        except (ValueError, TypeError) as e:
             # Return proper error without masking the exception
             return [{'type': 'error', 'message': f'PAUSE command error: {type(e).__name__}: {e}'}]
     
@@ -2104,7 +2104,7 @@ class CoCoBasic:
                 ]
             )
             return [{'type': 'error', 'message': error.format_detailed()}]
-        except Exception:
+        except (IndexError, TypeError, KeyError):
             error = self.error_context.runtime_error(
                 "Array index out of bounds",
                 suggestions=[
@@ -2114,7 +2114,7 @@ class CoCoBasic:
                 ]
             )
             return [{'type': 'error', 'message': error.format_detailed()}]
-    
+
     def execute_restore(self, args):
         # RESTORE command - reset data pointer to beginning
         self.data_pointer = 0
@@ -2164,7 +2164,7 @@ class CoCoBasic:
             value = self.evaluate_expression(expr_part, self.current_line)
             # Convert to integer and ensure it's 1-based
             index = int(value)
-        except Exception as e:
+        except (ValueError, TypeError) as e:
             error = self.error_context.runtime_error(
                 f"ON expression error: {str(e)}",
                 suggestions=["Ensure the expression evaluates to a number",
@@ -2179,7 +2179,7 @@ class CoCoBasic:
             for part in line_parts:
                 if part:
                     line_numbers.append(int(self.evaluate_expression(part, self.current_line)))
-        except Exception as e:
+        except (ValueError, TypeError) as e:
             error = self.error_context.syntax_error(
                 f"INVALID line numbers in ON statement: {str(e)}",
                 self.current_line,
@@ -2807,9 +2807,9 @@ class CoCoBasic:
                 ]
             )
             return [{'type': 'error', 'message': error.format_detailed()}]
-        except Exception as e:
+        except (TypeError, KeyError) as e:
             return [{'type': 'error', 'message': f'DELETE ERROR: {str(e)}'}]
-    
+
     def execute_renum(self, args):
         """RENUM statement - renumber program lines"""
         # Parse arguments: RENUM [new_start],[increment],[old_start]
