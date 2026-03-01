@@ -44,7 +44,9 @@ python app.py
 
 Then open `http://localhost:5000` for the dual monitor interface.
 
-For the CLI client, start the server in one terminal and run `python cli_client.py` in another.
+For a standalone terminal REPL (no server needed): `python basicoco.py`
+
+For the CLI client (requires server): start the server in one terminal and run `python cli_client.py` in another.
 
 ## Usage Examples
 
@@ -91,7 +93,7 @@ The dialect is based on Extended Color BASIC as shipped with the CoCo 1 and CoCo
 - **Control Flow**: FOR/NEXT (with STEP), IF/THEN, GOTO, GOSUB/RETURN, ON GOTO/GOSUB
 - **Data**: DATA/READ/RESTORE
 - **Math**: ABS, INT, SQR, SIN, COS, TAN, ATN, EXP, LOG, RND
-- **Strings**: LEN, LEFT$, RIGHT$, MID$, CHR$, ASC, STR$, VAL, STRING$, INSTR, SGN
+- **Strings**: LEN, LEFT$, RIGHT$, MID$, CHR$, ASC, STR$, VAL, STRING$, INSTR, SPACE$
 - **Arrays**: DIM with multi-dimensional support (DIM A(10) creates indices 0-10, as on the real CoCo)
 - **Graphics**: PMODE, SCREEN, PCLS, PSET, PRESET, LINE, CIRCLE, PAINT, GET/PUT, DRAW
 - **Sound**: SOUND command (note: accepts frequency in Hz rather than the CoCo's 1-255 pitch table)
@@ -107,7 +109,7 @@ These were not in Extended Color BASIC but make the environment more learner-fri
 - **Single-line compound statements** like `IF A=1 THEN FOR I=1 TO 3: PRINT I: NEXT I`
 
 ### Not Yet Implemented
-PEEK/POKE, VARPTR, MEM, TIMER, FRE, RANDOMIZE, OPEN/CLOSE, FIELD, GET/PUT (file), ON ERROR GOTO, HEX$, OCT$, PCLEAR, PPOINT, TRON/TROFF, EXEC, USR
+See [ISSUES.md](ISSUES.md) for the full list. Highlights: SGN, RANDOMIZE, ON ERROR GOTO, PEEK/POKE, file I/O (OPEN/CLOSE/FIELD), HEX$, OCT$, TRON/TROFF.
 
 ## Interfaces
 
@@ -155,27 +157,27 @@ basicoco/
 │   ├── parser.py           # Command parsing and tokenization
 │   ├── ast_parser.py       # AST parser, node types, and ASTEvaluator for command execution
 │   ├── ast_converter.py    # Single-line to multi-line control structure conversion
-│   ├── expressions.py      # Expression evaluation
+│   ├── expressions.py      # Function registry
 │   ├── functions.py        # BASIC function implementations
 │   ├── commands.py         # Command registry
 │   ├── error_context.py    # Educational error reporting
 │   ├── output_manager.py   # Output streaming
 │   ├── graphics.py         # Graphics commands and VDG-inspired emulation
 │   └── variables.py        # Variable/array management (DIM, array access)
+├── basicoco.py             # Standalone CLI REPL (no server needed)
 ├── programs/               # BASIC program files (.bas)
 ├── templates/              # HTML templates (dual monitor interface)
 ├── static/                 # CSS, JavaScript, audio support
-├── tests/
-│   ├── unit/               # Unit tests
-│   └── integration/        # Integration and e2e tests
-└── dev_tests/              # Development utilities and smoke tests
+└── tests/
+    ├── unit/               # Unit tests
+    └── integration/        # Integration and e2e tests
 ```
 
 The interpreter is implemented in Python and is designed to be readable. If you're interested in how interpreters work — AST parsing, expression evaluation, control flow stacks — the codebase is a working example at a manageable scale.
 
 ## Testing
 
-619 tests passing, 32 skipped (WebSocket tests require a running server).
+673 tests passing.
 
 ```bash
 # Run all tests
@@ -186,9 +188,6 @@ python -m pytest --cov=emulator --cov-report=term-missing
 
 # Run unit tests only
 python -m pytest tests/unit/ -v
-
-# Quick smoke test
-python dev_tests/smoke_test.py --quick
 ```
 
 ## Contributing
