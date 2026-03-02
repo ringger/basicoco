@@ -63,6 +63,7 @@ class CoCoBasic:
 
         # TIMER pseudo-variable (increments at 60 Hz like real CoCo)
         self.timer_epoch = time.time()
+        self.trace_mode = False  # TRON/TROFF trace mode
 
         # ON ERROR GOTO state
         self.on_error_goto_line = None    # Handler line number, or None
@@ -810,7 +811,7 @@ class CoCoBasic:
         self.program_counter = None
         self.stopped_position = None  # Clear stopped position
 
-        # Reset TIMER
+        # Reset TIMER (trace_mode intentionally NOT reset — persists across RUN like real CoCo)
         self.timer_epoch = time.time()
 
         # Clear ON ERROR GOTO state
@@ -833,6 +834,7 @@ class CoCoBasic:
     def execute_new(self):
         """NEW command - clear program and variables"""
         self.clear_interpreter_state(clear_program=True)
+        self.trace_mode = False
         return text_response('READY')
     
     def execute_stop(self, args):
@@ -844,6 +846,16 @@ class CoCoBasic:
     
     def execute_cont(self, args):
         return self.executor.execute_cont(args)
+
+    def _execute_tron(self):
+        """TRON — enable trace mode."""
+        self.trace_mode = True
+        return []
+
+    def _execute_troff(self):
+        """TROFF — disable trace mode."""
+        self.trace_mode = False
+        return []
 
     def execute_resume(self, args):
         """RESUME [NEXT | line] — resume after ON ERROR GOTO handler."""
@@ -1179,6 +1191,18 @@ class CoCoBasic:
                                      description="Continue program after STOP",
                                      syntax="CONT",
                                      examples=["CONT"])
+
+        self.command_registry.register('TRON', lambda args: self._execute_tron(),
+                                     category='system',
+                                     description="Enable trace mode (print line numbers during execution)",
+                                     syntax="TRON",
+                                     examples=["TRON"])
+
+        self.command_registry.register('TROFF', lambda args: self._execute_troff(),
+                                     category='system',
+                                     description="Disable trace mode",
+                                     syntax="TROFF",
+                                     examples=["TROFF"])
 
         self.command_registry.register('RESUME', self.execute_resume,
                                      category='flow',

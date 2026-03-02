@@ -303,6 +303,9 @@ class ProgramExecutor:
             emu.current_sub_line = sub_index
             statement = emu.expanded_program[(line_num, sub_index)]
 
+            if emu.trace_mode and sub_index == 0:
+                output.append({'type': 'text', 'text': f'[{line_num}]'})
+
             result = emu.process_statement(statement)
 
             if result:

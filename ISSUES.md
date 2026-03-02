@@ -5,7 +5,6 @@
 Prioritized by how often real CoCo BASIC programs need them.
 
 **Medium — useful but less common:**
-- [ ] TRON/TROFF — trace on/off for debugging (helpful for learners)
 - [ ] OPEN/CLOSE/PRINT#/INPUT# — sequential file I/O
 - [ ] PCLEAR — allocate graphics pages
 - [ ] PPOINT — read pixel color as a function; collision detection in games

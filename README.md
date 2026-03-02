@@ -87,7 +87,7 @@ Programs can be saved as `.bas` files in the `programs/` directory and loaded wi
 The dialect is based on Extended Color BASIC as shipped with the CoCo 1 and CoCo 2, with modern quality-of-life additions.
 
 ### From Extended Color BASIC
-- **Core**: NEW, RUN, LIST, END, STOP, CONT, CLEAR, LOAD, SAVE, FILES, KILL
+- **Core**: NEW, RUN, LIST, END, STOP, CONT, CLEAR, LOAD, SAVE, FILES, KILL, TRON/TROFF
 - **I/O**: PRINT (with separators), INPUT (with prompts, multi-variable), CLS, INKEY$
 - **Variables**: Numeric and string variables, operators (+, -, *, /, ^, comparisons)
 - **Control Flow**: FOR/NEXT (with STEP), IF/THEN, GOTO, GOSUB/RETURN, ON GOTO/GOSUB, ON ERROR GOTO/RESUME
@@ -109,7 +109,7 @@ These were not in Extended Color BASIC but make the environment more learner-fri
 - **Single-line compound statements** like `IF A=1 THEN FOR I=1 TO 3: PRINT I: NEXT I`
 
 ### Not Yet Implemented
-See [ISSUES.md](ISSUES.md) for the full list. Highlights: PEEK/POKE, file I/O (OPEN/CLOSE/FIELD), TRON/TROFF.
+See [ISSUES.md](ISSUES.md) for the full list. Highlights: PEEK/POKE, file I/O (OPEN/CLOSE/FIELD).
 
 ## Interfaces
 
@@ -179,7 +179,7 @@ The interpreter is implemented in Python and is designed to be readable. If you'
 
 ## Testing
 
-919 tests passing.
+933 tests passing.
 
 ```bash
 # Run all tests
