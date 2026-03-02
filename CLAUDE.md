@@ -30,6 +30,16 @@ AST visitors push; registry closing commands pop:
 | `do_stack` | `visit_do_statement` | `execute_loop` |
 | `if_stack` | `visit_if_statement` / multi-line IF handler | `execute_else`, `execute_endif` |
 
+## IF/THEN/ELSE Handling
+
+Three paths handle IF statements:
+
+1. **Single-line IF** (`IF cond THEN action`) — AST parser evaluates directly in `visit_if_statement()`. No stack involved.
+2. **Multi-line IF** (bare `IF cond THEN`) — detected in `process_statement()`, pushes to `if_stack`. `skip_if_block` directive tells executor to skip via `_skip_if_or_else_block()`.
+3. **AST-converted single-line** (e.g., `IF A=1 THEN B=2: C=3`) — AST converter expands to `IF cond THEN` / body / `ENDIF` sublines, which then follow the multi-line path.
+
+Nesting: `_skip_if_or_else_block()` counts nested IFs by checking `stmt.startswith('IF ')` (not substring match, to avoid false positives from strings like `PRINT "IF THEN"`). GOTO out of an IF block leaves a stale if_stack entry — cleared on next RUN by `clear_all_stacks()`.
+
 ## INPUT Protocol
 
 INPUT pauses execution by returning `{'type': 'input_request', ...}`. Variable targets are described by dicts: `{'name': 'V', 'array': True, 'indices': [1]}` or `{'name': 'X', 'array': False}`. After storing the value via `store_input_value(var_desc, value)`, call `continue_program_execution()` to resume.
@@ -69,6 +79,7 @@ Never duplicate this logic — always call through to `BasicParser`.
 - `functions.py` owns all BASIC functions — never duplicate elsewhere
 - Graphics commands go in `graphics.py`, DIM/arrays in `variables.py`
 - Graphics helpers: `_eval_int(expr)` for expression→int, `_syntax_error(msg, suggestions)` for error responses
+- LINE coordinate pair syntax: `CommandRegistry.is_coordinate_pair_syntax()` and `parse_line_coordinates()` handle `(x1,y1)-(x2,y2)` with optional spaces around the dash
 - System OK messages use `_system_ok()` (tagged with `'source': 'system'`)
 - File-creating tests must use autouse temp directory fixtures — never write to real `programs/`
 - All errors use `error_context.syntax_error()` / `runtime_error()` with 2-3 suggestions

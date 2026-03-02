@@ -303,9 +303,132 @@ class TestIfThenComprehensive:
             '50 ENDIF',
             '60 PRINT B'
         ]
-        
+
         results = helpers.execute_program(basic, program)
         text_outputs = helpers.get_text_output(results)
-        
+
         assert 'INSIDE IF' in ' '.join(text_outputs)
         assert '99' in ' '.join(text_outputs)
+
+
+class TestNestedIfElseEndif:
+    """Tests for nested multi-line IF/ELSE/ENDIF blocks.
+
+    Regression tests for a bug where a false inner single-line IF
+    (expanded to IF/ENDIF by the AST converter) caused the outer
+    ELSE block to execute incorrectly because skip_if_block jumped
+    past ENDIF without popping the if_stack.
+    """
+
+    def test_false_inner_if_does_not_enter_outer_else(self, basic, helpers):
+        """When outer IF is true and inner IF is false (no ELSE),
+        the outer ELSE body must NOT execute."""
+        program = [
+            '10 R$ = ""',
+            '20 A = 75',
+            '30 IF A >= 65 AND A <= 90 THEN',
+            '40 IF A > 90 THEN A = A - 26',
+            '50 R$ = R$ + CHR$(A)',
+            '60 ELSE',
+            '70 R$ = R$ + "X"',
+            '80 ENDIF',
+            '90 PRINT R$',
+        ]
+        results = helpers.execute_program(basic, program)
+        text = helpers.get_text_output(results)
+        # R$ should be exactly "K" (CHR$(75)), not "KX"
+        assert 'K' in text
+        assert 'X' not in ' '.join(text)
+
+    def test_true_inner_if_does_not_enter_outer_else(self, basic, helpers):
+        """When outer IF is true and inner IF is also true,
+        the outer ELSE body must NOT execute."""
+        program = [
+            '10 R$ = ""',
+            '20 A = 95',
+            '30 IF A >= 65 AND A <= 90 + 10 THEN',
+            '40 IF A > 90 THEN A = A - 26',
+            '50 R$ = R$ + CHR$(A)',
+            '60 ELSE',
+            '70 R$ = R$ + "X"',
+            '80 ENDIF',
+            '90 PRINT R$',
+        ]
+        results = helpers.execute_program(basic, program)
+        text = helpers.get_text_output(results)
+        # A=95, inner IF is true so A=95-26=69, CHR$(69)="E"
+        assert 'E' in text
+        assert 'X' not in ' '.join(text)
+
+    def test_false_outer_if_skips_to_else(self, basic, helpers):
+        """When outer IF is false, it should skip to ELSE and execute that."""
+        program = [
+            '10 R$ = ""',
+            '20 A = 50',
+            '30 IF A >= 65 AND A <= 90 THEN',
+            '40 IF A > 90 THEN A = A - 26',
+            '50 R$ = R$ + CHR$(A)',
+            '60 ELSE',
+            '70 R$ = "ELSE"',
+            '80 ENDIF',
+            '90 PRINT R$',
+        ]
+        results = helpers.execute_program(basic, program)
+        text = helpers.get_text_output(results)
+        assert 'ELSE' in text
+
+    def test_nested_if_in_for_loop(self, basic, helpers):
+        """Nested IF inside FOR loop should work correctly each iteration."""
+        program = [
+            '10 R$ = ""',
+            '20 FOR I = 1 TO 3',
+            '30 IF I <= 2 THEN',
+            '40 IF I = 1 THEN R$ = R$ + "A"',
+            '50 IF I = 2 THEN R$ = R$ + "B"',
+            '60 ELSE',
+            '70 R$ = R$ + "C"',
+            '80 ENDIF',
+            '90 NEXT I',
+            '100 PRINT R$',
+        ]
+        results = helpers.execute_program(basic, program)
+        text = helpers.get_text_output(results)
+        assert 'ABC' in text
+
+    def test_print_with_if_then_in_string(self, basic, helpers):
+        """PRINT "IF...THEN" inside an IF block must not confuse nesting."""
+        program = [
+            '10 IF 0=1 THEN',
+            '20 PRINT "IF YOU THEN DO THIS"',
+            '30 ELSE',
+            '40 PRINT "CORRECT"',
+            '50 ENDIF',
+        ]
+        results = helpers.execute_program(basic, program)
+        text = helpers.get_text_output(results)
+        errors = helpers.get_error_messages(results)
+        assert errors == []
+        assert 'CORRECT' in text
+
+    def test_cipher_pattern(self, basic, helpers):
+        """Full Caesar cipher pattern — the original failing scenario."""
+        program = [
+            '5 T$ = "HELLO"',
+            '6 S = 3',
+            '7 R$ = ""',
+            '10 FOR I = 1 TO LEN(T$)',
+            '20 CH$ = MID$(T$, I, 1)',
+            '30 A = ASC(CH$)',
+            '40 IF A >= 65 AND A <= 90 THEN',
+            '50 A = A + S',
+            '60 IF A > 90 THEN A = A - 26',
+            '70 R$ = R$ + CHR$(A)',
+            '80 ELSE',
+            '90 R$ = R$ + CH$',
+            '100 ENDIF',
+            '110 NEXT I',
+            '120 PRINT R$',
+        ]
+        results = helpers.execute_program(basic, program)
+        text = helpers.get_text_output(results)
+        assert 'KHOOR' in text

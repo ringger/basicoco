@@ -222,12 +222,17 @@ class BasicGraphics:
             return err
 
         # Parse LINE (x1,y1)-(x2,y2)[,color] or LINE x1,y1,x2,y2[,color]
-        if '-(' in args:
-            # Standard syntax: LINE (x1,y1)-(x2,y2)[,color]
+        if CommandRegistry.is_coordinate_pair_syntax(args):
+            # Standard syntax: LINE (x1,y1)-(x2,y2)[,PSET|PRESET|color]
             color_part = None
+            mode = 'PSET'  # default draw mode
             if ',' in args and args.rfind(',') > args.rfind(')'):
-                line_spec, color_part = args.rsplit(',', 1)
-                color_part = color_part.strip()
+                line_spec, trailing = args.rsplit(',', 1)
+                trailing = trailing.strip().upper()
+                if trailing in ('PSET', 'PRESET'):
+                    mode = trailing
+                elif trailing:
+                    color_part = trailing
             else:
                 line_spec = args
 
@@ -242,7 +247,7 @@ class BasicGraphics:
             if color_part:
                 color = self._eval_int(color_part)
 
-            return [{'type': 'line', 'x1': x1, 'y1': y1, 'x2': x2, 'y2': y2, 'color': color}]
+            return [{'type': 'line', 'x1': x1, 'y1': y1, 'x2': x2, 'y2': y2, 'color': color, 'mode': mode}]
         else:
             # Space-separated syntax: LINE x1,y1,x2,y2[,color]
             parts = self._split_arguments_respecting_parentheses(args)

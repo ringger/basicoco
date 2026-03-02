@@ -107,3 +107,75 @@ class TestCoordinateExpressions:
         result = basic.process_command('PSET(INT(128), INT(96))')
         errors = helpers.get_error_messages(result)
         assert errors == []
+
+
+class TestLineCoordinatePairSyntax:
+    """Test LINE command with (x1,y1)-(x2,y2) coordinate pair syntax.
+
+    Regression tests for a bug where spaces around the dash separator
+    (e.g. '(0,96) - (255,96)') were not recognized.
+    """
+
+    def _setup_graphics(self, basic):
+        basic.process_command('PMODE 4,1')
+
+    def test_line_compact_syntax(self, basic, helpers):
+        """LINE (x1,y1)-(x2,y2) with no spaces around dash."""
+        self._setup_graphics(basic)
+        result = basic.process_command('LINE (0,96)-(255,96)')
+        errors = helpers.get_error_messages(result)
+        assert errors == []
+        assert any(item.get('type') == 'line' for item in result)
+
+    def test_line_spaces_around_dash(self, basic, helpers):
+        """LINE (x1,y1) - (x2,y2) with spaces around dash."""
+        self._setup_graphics(basic)
+        result = basic.process_command('LINE (0, 96) - (255, 96)')
+        errors = helpers.get_error_messages(result)
+        assert errors == []
+        line_item = next(item for item in result if item.get('type') == 'line')
+        assert line_item['x1'] == 0
+        assert line_item['y1'] == 96
+        assert line_item['x2'] == 255
+        assert line_item['y2'] == 96
+
+    def test_line_with_pset_mode(self, basic, helpers):
+        """LINE (x1,y1)-(x2,y2), PSET mode flag."""
+        self._setup_graphics(basic)
+        result = basic.process_command('LINE (10,10)-(50,50), PSET')
+        errors = helpers.get_error_messages(result)
+        assert errors == []
+        line_item = next(item for item in result if item.get('type') == 'line')
+        assert line_item['mode'] == 'PSET'
+
+    def test_line_with_preset_mode(self, basic, helpers):
+        """LINE (x1,y1)-(x2,y2), PRESET mode flag."""
+        self._setup_graphics(basic)
+        result = basic.process_command('LINE (10,10)-(50,50), PRESET')
+        errors = helpers.get_error_messages(result)
+        assert errors == []
+        line_item = next(item for item in result if item.get('type') == 'line')
+        assert line_item['mode'] == 'PRESET'
+
+    def test_line_with_color_number(self, basic, helpers):
+        """LINE (x1,y1)-(x2,y2), color as a number."""
+        self._setup_graphics(basic)
+        result = basic.process_command('LINE (10,10)-(50,50), 3')
+        errors = helpers.get_error_messages(result)
+        assert errors == []
+        line_item = next(item for item in result if item.get('type') == 'line')
+        assert line_item['color'] == 3
+
+    def test_line_spaces_with_expressions(self, basic, helpers):
+        """LINE with variable expressions and spaces around dash."""
+        self._setup_graphics(basic)
+        basic.process_command('X1 = 10')
+        basic.process_command('Y1 = 20')
+        result = basic.process_command('LINE (X1, Y1) - (X1+50, Y1+50)')
+        errors = helpers.get_error_messages(result)
+        assert errors == []
+        line_item = next(item for item in result if item.get('type') == 'line')
+        assert line_item['x1'] == 10
+        assert line_item['y1'] == 20
+        assert line_item['x2'] == 60
+        assert line_item['y2'] == 70

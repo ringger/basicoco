@@ -467,6 +467,30 @@ class TestFunction:
         result = basic.expression_evaluator.evaluate('INSTR(S$, "WORLD")')  # S$ = "HELLO WORLD"
         assert result == 7
 
+    def test_instr_three_arg_form(self, basic, helpers):
+        """Test INSTR with 3 arguments: INSTR(start, string, search)"""
+        # Start from position 1 (same as 2-arg)
+        result = basic.expression_evaluator.evaluate('INSTR(1, "HELLO WORLD", "WORLD")')
+        assert result == 7
+
+        # Start from position after the match — should not find it
+        result = basic.expression_evaluator.evaluate('INSTR(8, "HELLO WORLD", "WORLD")')
+        assert result == 0
+
+        # Start from position of the match — should find it
+        result = basic.expression_evaluator.evaluate('INSTR(7, "HELLO WORLD", "WORLD")')
+        assert result == 7
+
+        # Find second occurrence by starting after the first
+        result = basic.expression_evaluator.evaluate('INSTR(1, "ABCABC", "ABC")')
+        assert result == 1
+        result = basic.expression_evaluator.evaluate('INSTR(2, "ABCABC", "ABC")')
+        assert result == 4
+
+        # Start position 0 should be treated as 1
+        result = basic.expression_evaluator.evaluate('INSTR(0, "HELLO", "H")')
+        assert result == 1
+
     def test_space_function(self, basic, helpers):
         """Test SPACE$ function for generating spaces"""
         # Basic space generation

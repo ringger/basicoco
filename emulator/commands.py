@@ -201,26 +201,33 @@ class CommandRegistry:
         # Split by commas and return coordinate parts for evaluation
         return [part.strip() for part in coord_str.split(',')]
     
+    # Pattern matching (x1,y1)-(x2,y2) with optional spaces around the dash
+    _COORD_PAIR_RE = re.compile(r'\)\s*-\s*\(')
+
+    @staticmethod
+    def is_coordinate_pair_syntax(args: str) -> bool:
+        """Check if args use (x1,y1)-(x2,y2) coordinate pair syntax."""
+        return bool(CommandRegistry._COORD_PAIR_RE.search(args))
+
     @staticmethod
     def parse_line_coordinates(line_spec: str) -> tuple:
         """
         Parse LINE coordinate specification like "(10,20)-(30,40)"
-        
+        or "(10, 20) - (30, 40)" with optional spaces around the dash.
+
         Returns (start_coords, end_coords) as string tuples for evaluation
         """
-        if '-(' not in line_spec:
-            raise ValueError("Invalid LINE specification - missing -(")
-        
-        start_part, end_part = line_spec.split('-(', 1)
-        
-        # Remove trailing ) from end_part
-        if end_part.endswith(')'):
-            end_part = end_part[:-1]
-        
+        match = CommandRegistry._COORD_PAIR_RE.search(line_spec)
+        if not match:
+            raise ValueError("Invalid LINE specification - expected (x1,y1)-(x2,y2)")
+
+        start_part = line_spec[:match.start() + 1]  # up to and including the first ')'
+        end_part = line_spec[match.end() - 1:]       # from the second '(' onward
+
         # Parse start coordinates
         start_coords = CommandRegistry.parse_coordinates(start_part)
         end_coords = CommandRegistry.parse_coordinates(end_part)
-        
+
         return start_coords, end_coords
     
     def list_commands(self) -> List[str]:

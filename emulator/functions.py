@@ -369,12 +369,23 @@ def register_all_functions(registry):
 # ============================================================================
 
 def fn_instr(evaluator, args: List[Any]) -> int:
-    """INSTR(string, search) - find position of substring (1-based)"""
-    _check_args(evaluator, 'INSTR', args, 2, 'INSTR(string, search)')
-    string_val = str(args[0])
-    search_val = str(args[1])
-    
-    pos = string_val.find(search_val)
+    """INSTR([start,] string, search) - find position of substring (1-based)"""
+    if len(args) == 2:
+        start_pos = 1
+        string_val = str(args[0])
+        search_val = str(args[1])
+    elif len(args) == 3:
+        start_pos = _to_int(evaluator, args[0], 'INSTR')
+        string_val = str(args[1])
+        search_val = str(args[2])
+    else:
+        error = evaluator.error_context.syntax_error(
+            f"INSTR requires 2 or 3 arguments, got {len(args)}",
+            suggestions=["Correct syntax: INSTR([start,] string, search)"])
+        raise ValueError(error.format_detailed())
+    if start_pos < 1:
+        start_pos = 1
+    pos = string_val.find(search_val, start_pos - 1)
     return pos + 1 if pos >= 0 else 0  # BASIC uses 1-based indexing, 0 = not found
 
 

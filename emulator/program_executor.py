@@ -79,16 +79,14 @@ class ProgramExecutor:
         nest_level = 0
         for pos_idx in range(current_pos_index + 1, len(all_positions)):
             stmt = emu.expanded_program.get(all_positions[pos_idx], '').strip().upper()
-            if 'IF' in stmt and 'THEN' in stmt:
+            if stmt.startswith('IF ') and 'THEN' in stmt:
                 nest_level += 1
             elif stop_at_else and stmt.startswith('ELSE') and nest_level == 0:
                 return pos_idx, True
             elif stmt.startswith('ENDIF'):
                 if nest_level == 0:
-                    if stop_at_else:
-                        return pos_idx + 1, True
-                    else:
-                        return pos_idx, True
+                    # Always land ON the ENDIF so execute_endif can pop if_stack
+                    return pos_idx, True
                 else:
                     nest_level -= 1
         return current_pos_index, False
