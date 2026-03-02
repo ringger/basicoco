@@ -5,10 +5,8 @@ This module contains the main CoCoBasic class that implements the BASIC interpre
 The class has been extracted from the monolithic app.py file to improve maintainability.
 """
 
-import os
 import random
 import re
-import time
 from .parser import BasicParser
 from .graphics import BasicGraphics
 from .variables import VariableManager
@@ -113,26 +111,6 @@ class CoCoBasic:
         """Emit debug output using the new system"""
         self.output_manager.debug(message, source=source, line_number=self.current_line)
     
-    @property 
-    def key_buffer(self):
-        """Compatibility property for tests"""
-        return self.keyboard_buffer
-    
-    @key_buffer.setter
-    def key_buffer(self, value):
-        """Compatibility property for tests"""
-        self.keyboard_buffer = value
-
-    @property
-    def expression_evaluator(self):
-        """Compatibility property — expression evaluation now lives on CoCoBasic directly."""
-        return self
-
-    def evaluate(self, expr, line=1):
-        """Alias for evaluate_expression (compatibility with old ExpressionEvaluator API)."""
-        return self.evaluate_expression(expr, line)
-
-    @staticmethod
     @staticmethod
     def _split_args(args):
         """Split arguments by comma, respecting parentheses."""

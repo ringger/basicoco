@@ -21,7 +21,7 @@ class TestInkeyCommand:
     def test_inkey_empty_buffer(self, basic, helpers):
         """Test INKEY$ with empty key buffer"""
         # Clear any existing keys
-        basic.key_buffer = []
+        basic.keyboard_buffer = []
         
         # Should return empty string
         result = basic.process_command('PRINT INKEY$')
@@ -30,7 +30,7 @@ class TestInkeyCommand:
     def test_inkey_with_keys_in_buffer(self, basic, helpers):
         """Test INKEY$ with keys in buffer"""
         # Add keys to buffer manually
-        basic.key_buffer = ['A', 'B', 'C']
+        basic.keyboard_buffer = ['A', 'B', 'C']
         
         # First call should return 'A'
         result1 = basic.process_command('PRINT INKEY$')
@@ -51,7 +51,7 @@ class TestInkeyCommand:
     def test_inkey_variable_assignment(self, basic, helpers):
         """Test assigning INKEY$ result to variable"""
         # Add key to buffer
-        basic.key_buffer = ['X']
+        basic.keyboard_buffer = ['X']
         
         # Assign to variable
         basic.process_command('K$ = INKEY$')
@@ -64,7 +64,7 @@ class TestInkeyCommand:
         assert any('NO KEY' in item.get('text', '') for item in result if item.get('type') == 'text')
         
         # Test with key in buffer
-        basic.key_buffer = ['Y']
+        basic.keyboard_buffer = ['Y']
         result = basic.process_command('IF INKEY$ <> "" THEN PRINT "KEY PRESSED"')
         assert any('KEY PRESSED' in item.get('text', '') for item in result if item.get('type') == 'text')
 
@@ -78,7 +78,7 @@ class TestInkeyCommand:
         ]
         
         # Add some keys to buffer
-        basic.key_buffer = ['1', '2']
+        basic.keyboard_buffer = ['1', '2']
         
         results = helpers.execute_program(basic, program)
         
@@ -89,24 +89,24 @@ class TestInkeyCommand:
         # Should run without errors
         assert len(errors) == 0, f"Program should run without errors: {errors}"
 
-    def test_inkey_buffer_management(self, basic, helpers):
+    def test_inkeyboard_buffer_management(self, basic, helpers):
         """Test that INKEY$ properly manages the key buffer"""
         # Start with known state
-        basic.key_buffer = ['A', 'B', 'C']
-        initial_length = len(basic.key_buffer)
+        basic.keyboard_buffer = ['A', 'B', 'C']
+        initial_length = len(basic.keyboard_buffer)
         
         # Call INKEY$ - should remove one key
         basic.process_command('K$ = INKEY$')
-        assert len(basic.key_buffer) == initial_length - 1
+        assert len(basic.keyboard_buffer) == initial_length - 1
         
         # Call again - should remove another key
         basic.process_command('K$ = INKEY$')
-        assert len(basic.key_buffer) == initial_length - 2
+        assert len(basic.keyboard_buffer) == initial_length - 2
 
     def test_inkey_with_parentheses(self, basic, helpers):
         """Test INKEY$() syntax variation"""
         # Add key to buffer
-        basic.key_buffer = ['Z']
+        basic.keyboard_buffer = ['Z']
         
         # Test with parentheses
         result = basic.process_command('PRINT INKEY$()')
@@ -117,7 +117,7 @@ class TestInkeyCommand:
         special_chars = [' ', '!', '@', '#', '$', '%']
         
         for char in special_chars:
-            basic.key_buffer = [char]
+            basic.keyboard_buffer = [char]
             basic.process_command('K$ = INKEY$')
             helpers.assert_variable_equals(basic, 'K$', char)
 
@@ -134,7 +134,7 @@ class TestInkeyCommand:
         ]
         
         # Test with no key pressed
-        basic.key_buffer = []
+        basic.keyboard_buffer = []
         results1 = helpers.execute_program(basic, program)
         text_outputs1 = helpers.get_text_output(results1)
         
@@ -145,7 +145,7 @@ class TestInkeyCommand:
         # Test with key pressed early
         basic.process_command('NEW')  # Clear program state
         helpers.load_program(basic, program)
-        basic.key_buffer = ['Q']
+        basic.keyboard_buffer = ['Q']
         results2 = basic.process_command('RUN')
         text_outputs2 = helpers.get_text_output(results2)
         
@@ -157,13 +157,13 @@ class TestInkeyCommand:
         """Test multiple consecutive INKEY$ calls"""
         # Fill buffer with multiple keys
         keys = ['Q', 'W', 'E', 'R', 'T', 'Y']
-        basic.key_buffer = keys.copy()
+        basic.keyboard_buffer = keys.copy()
         
         # Call INKEY$ multiple times in one statement
         result = basic.process_command('PRINT INKEY$; INKEY$; INKEY$')
         
         # Should have consumed multiple keys
-        assert len(basic.key_buffer) < len(keys)
+        assert len(basic.keyboard_buffer) < len(keys)
 
     def test_inkey_case_sensitivity(self, basic, helpers):
         """Test INKEY$ case sensitivity"""
@@ -171,27 +171,27 @@ class TestInkeyCommand:
         test_cases = ['a', 'A', 'z', 'Z']
         
         for char in test_cases:
-            basic.key_buffer = [char]
+            basic.keyboard_buffer = [char]
             basic.process_command('K$ = INKEY$')
             helpers.assert_variable_equals(basic, 'K$', char)
             
             # Buffer should be empty after retrieval
-            assert len(basic.key_buffer) == 0
+            assert len(basic.keyboard_buffer) == 0
 
     def test_inkey_numeric_keys(self, basic, helpers):
         """Test INKEY$ with numeric key input"""
         numeric_keys = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9']
         
         for key in numeric_keys:
-            basic.key_buffer = [key]
+            basic.keyboard_buffer = [key]
             result = basic.process_command('PRINT INKEY$')
             assert any(key in item.get('text', '') for item in result if item.get('type') == 'text')
 
     def test_inkey_empty_after_clear(self, basic, helpers):
         """Test INKEY$ returns empty after buffer is manually cleared"""
         # Add keys then clear
-        basic.key_buffer = ['A', 'B', 'C']
-        basic.key_buffer.clear()
+        basic.keyboard_buffer = ['A', 'B', 'C']
+        basic.keyboard_buffer.clear()
         
         # Should return empty
         result = basic.process_command('PRINT INKEY$')
@@ -202,7 +202,7 @@ class TestInkeyCommand:
         # Set up test data
         basic.process_command('N = 16')
         basic.process_command('S$ = "HELLO"')
-        basic.key_buffer = ['X']
+        basic.keyboard_buffer = ['X']
         
         # Test INKEY$ variations (with and without parentheses)
         result1 = basic.process_command('K1$ = INKEY$')

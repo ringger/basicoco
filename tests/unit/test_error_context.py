@@ -278,7 +278,7 @@ class TestErrorContext:
         # This tests that the enhanced error system works with the expression evaluator
         try:
             # This should trigger enhanced error reporting
-            result = basic.expression_evaluator.evaluate("", line=42)
+            result = basic.evaluate_expression("", line=42)
         except ValueError as e:
             error_msg = str(e)
             assert "line 42" in error_msg  # Should include line number

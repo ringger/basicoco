@@ -101,10 +101,7 @@ class BasicParser:
         statements = BasicParser.split_on_delimiter(code)
         for i, statement in enumerate(statements):
             expanded_program[(line_num, i)] = statement
-    
-    # Removed unused parse_function_arguments method - function argument parsing
-    # is now handled by the AST parser and expression evaluator
-    
+
     @staticmethod
     def parse_draw_commands(draw_string):
         """Parse DRAW command string into individual drawing commands"""

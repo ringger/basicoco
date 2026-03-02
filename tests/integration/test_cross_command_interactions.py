@@ -21,20 +21,20 @@ class TestCrossCommandInteraction:
     def test_inkey_with_program_vs_immediate_mode(self, basic, helpers):
         """Test INKEY$ behavior in program vs immediate mode"""
         # Test immediate mode
-        basic.key_buffer = ['X']
+        basic.keyboard_buffer = ['X']
         result1 = basic.process_command('PRINT INKEY$')
         text1 = helpers.get_text_output(result1)
         assert 'X' in text1
-        assert len(basic.key_buffer) == 0
+        assert len(basic.keyboard_buffer) == 0
         
-        # Test program mode (separate test since execute_program calls NEW which clears key_buffer)
+        # Test program mode (separate test since execute_program calls NEW which clears keyboard_buffer)
         program = ['10 PRINT INKEY$']
         helpers.load_program(basic, program)
-        basic.key_buffer = ['Y']  # Set key buffer after loading program
+        basic.keyboard_buffer = ['Y']  # Set key buffer after loading program
         results2 = basic.process_command('RUN')
         text2 = helpers.get_text_output(results2)
         assert 'Y' in ' '.join(text2)
-        assert len(basic.key_buffer) == 0
+        assert len(basic.keyboard_buffer) == 0
 
     def test_array_access_in_different_contexts(self, basic, helpers):
         """Test array access in various command contexts"""

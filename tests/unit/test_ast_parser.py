@@ -225,7 +225,7 @@ class TestASTParser:
         
         for expr in test_expressions:
             # Get legacy result
-            legacy_result = basic.expression_evaluator.evaluate(expr)
+            legacy_result = basic.evaluate_expression(expr)
             
             # Get AST result
             ast = self.parser.parse_expression(expr)
@@ -291,25 +291,25 @@ class TestASTParser:
     def test_ast_parser_integration(self, basic, helpers):
         """Test AST parser integration"""
         # Test that AST parsing works correctly
-        result = basic.expression_evaluator.evaluate("2 + 3 * 4")
+        result = basic.evaluate_expression("2 + 3 * 4")
         assert result == 14
         
         # Test with variables
-        result = basic.expression_evaluator.evaluate("A + B")
+        result = basic.evaluate_expression("A + B")
         assert result == 15  # A=10, B=5
         
         # Test with function calls
-        result = basic.expression_evaluator.evaluate("ABS(-5)")
+        result = basic.evaluate_expression("ABS(-5)")
         assert result == 5
 
     def test_expression_consistency(self, basic, helpers):
         """Test that AST parsing handles all expression types consistently"""
         # Test complex expressions
-        result = basic.expression_evaluator.evaluate("A + B * 2 - 1")
+        result = basic.evaluate_expression("A + B * 2 - 1")
         assert result == 19  # 10 + 5*2 - 1 = 19
         
         # Test string operations
-        result = basic.expression_evaluator.evaluate('"HELLO" + " " + "WORLD"')
+        result = basic.evaluate_expression('"HELLO" + " " + "WORLD"')
         assert result == "HELLO WORLD"
 
     def test_performance_comparison(self, basic, helpers):
@@ -330,7 +330,7 @@ class TestASTParser:
         # Time AST parsing
         start_time = time.time()
         for expr in expressions:
-            basic.expression_evaluator.evaluate(expr)
+            basic.evaluate_expression(expr)
         ast_time = time.time() - start_time
         
         # AST parsing should be reasonably fast
