@@ -277,3 +277,98 @@ class TestCommandParsing:
 
         # Should parse and run without syntax errors
         assert len(errors) == 0, f"Program should parse without errors: {errors}"
+
+
+class TestRemEdgeCases:
+    """Test REM comment handling with colons and special content"""
+
+    def test_rem_with_multiple_colons(self, basic, helpers):
+        """REM with multiple colons should be stored as one statement"""
+        program = ['10 REM A:B:C:D:E']
+        helpers.load_program(basic, program)
+        sublines = [(k, v) for k, v in basic.expanded_program.items() if k[0] == 10]
+        assert len(sublines) == 1
+
+    def test_rem_with_command_keywords(self, basic, helpers):
+        """REM containing BASIC keywords should not execute them"""
+        program = [
+            '10 REM PRINT "SHOULD NOT PRINT": GOTO 100',
+            '20 PRINT "AFTER REM"',
+        ]
+        results = helpers.execute_program(basic, program)
+        text_outputs = helpers.get_text_output(results)
+        assert 'SHOULD NOT PRINT' not in text_outputs
+        assert 'AFTER REM' in text_outputs
+
+    def test_rem_immediate_mode_with_colons(self, basic, helpers):
+        """Immediate mode REM with colons should not split"""
+        result = basic.process_command('REM This: has: colons')
+        # Should not produce errors or execute "has" or "colons"
+        errors = helpers.get_error_messages(result)
+        assert len(errors) == 0
+
+    def test_rem_with_quotes_and_colons(self, basic, helpers):
+        """REM with quotes and colons should be a single comment"""
+        program = ['10 REM "quoted: value": more stuff']
+        helpers.load_program(basic, program)
+        sublines = [(k, v) for k, v in basic.expanded_program.items() if k[0] == 10]
+        assert len(sublines) == 1
+
+
+class TestQuotedStringEdgeCases:
+    """Test colon handling inside quoted strings"""
+
+    def test_multiple_quoted_colons_in_one_line(self, basic, helpers):
+        """Multiple quoted strings with colons should not split"""
+        result = basic.process_command('PRINT "A:B"; "C:D"')
+        text_outputs = helpers.get_text_output(result)
+        assert len(text_outputs) == 1
+        assert 'A:B' in text_outputs[0]
+        assert 'C:D' in text_outputs[0]
+
+    def test_colon_right_after_closing_quote(self, basic, helpers):
+        """Colon immediately after closing quote is a statement separator"""
+        basic.process_command('X = 0')
+        basic.process_command('PRINT "HELLO": X = 42')
+        helpers.assert_variable_equals(basic, 'X', 42)
+
+    def test_empty_string_before_colon(self, basic, helpers):
+        """Empty string before colon separator"""
+        basic.process_command('A$ = "": B = 99')
+        helpers.assert_variable_equals(basic, 'A$', '')
+        helpers.assert_variable_equals(basic, 'B', 99)
+
+    def test_colon_in_data_string(self, basic, helpers):
+        """DATA strings with colons should be read correctly"""
+        program = [
+            '10 DATA "TIME: 12:30"',
+            '20 READ A$',
+            '30 PRINT A$',
+        ]
+        results = helpers.execute_program(basic, program)
+        text_outputs = helpers.get_text_output(results)
+        assert any('TIME: 12:30' in output for output in text_outputs)
+
+
+class TestProcessCommandRouting:
+    """Test that process_command correctly routes multi-statement lines"""
+
+    def test_registry_command_with_colon_routes_to_process_line(self, basic, helpers):
+        """Registry commands with colons should be routed through process_line"""
+        basic.process_command('NEW')
+        basic.process_command('DIM A(5): A(0) = 42')
+        helpers.assert_array_element_equals(basic, 'A', [0], 42)
+
+    def test_single_registry_command_uses_registry(self, basic, helpers):
+        """Single registry commands should go through the registry directly"""
+        basic.process_command('NEW')
+        result = basic.process_command('DIM B(3)')
+        # Should work without errors
+        assert 'B' in basic.arrays
+
+    def test_multi_statement_with_mixed_command_types(self, basic, helpers):
+        """Multi-statement mixing AST and registry commands"""
+        basic.process_command('NEW')
+        basic.process_command('A = 5: DIM B(3): B(0) = A')
+        helpers.assert_variable_equals(basic, 'A', 5)
+        helpers.assert_array_element_equals(basic, 'B', [0], 5)

@@ -193,11 +193,17 @@ class CoCoBasic:
                 self._remove_expanded_lines(line_num)
             return self._system_ok()
 
+        # Multi-statement lines go straight to process_line (which splits them)
+        if not BasicParser.is_rem_line(command):
+            statements = BasicParser.split_on_delimiter(command)
+            if len(statements) > 1:
+                return self.process_line(command)
+
         # Try command registry first (plugin-like architecture)
         result = self.command_registry.execute(command)
         if result is not None:
             return result
-        
+
         # If no command was found, try to execute as a line of code
         return self.process_line(command)
     
@@ -309,59 +315,52 @@ class CoCoBasic:
     def continue_program_execution(self):
         return self.executor.continue_program_execution()
 
-    def split_statements(self, code):
-        """Split a line into statements on colons, but respect quoted strings"""
-        if BasicParser.is_rem_line(code):
-            return [code.strip()]
-        return BasicParser.split_on_delimiter(code)
-    
-    
     def process_line(self, code):
         """
-        Process a line of BASIC code, converting single-line control structures
-        to multi-line equivalents using the AST parser infrastructure.
+        Process a line of BASIC code. Multi-statement lines (colons) and
+        single-line control structures are expanded into temporary sublines
+        and executed via run_program, just like stored program lines.
         """
-        # First, check if this is a single-line control structure that needs conversion
+        # REM lines are never split
+        if BasicParser.is_rem_line(code):
+            return self.process_statement(code)
+
         code_upper = code.upper().strip()
 
-        # Enhanced detection of control structures with colons (single-line format)
+        # Try AST conversion for single-line control structures with colons
         control_keywords = ['IF ', 'FOR ', 'WHILE ', 'DO:', 'DO ']
         has_control = any(code_upper.startswith(kw) for kw in control_keywords)
         has_colons = ':' in code
 
         if has_control and has_colons:
-            # Try to convert single-line control structure to multi-line using AST parser
             try:
                 from .ast_converter import parse_and_convert_single_line
                 converted = parse_and_convert_single_line(code, self.ast_parser)
-
                 if converted:
-                    # For immediate mode, create a temporary program entry and reuse run_program logic
                     return self._execute_converted_as_temporary_program(converted)
             except Exception as e:
-                # Log debug info for AST conversion failures but continue with fallback
                 if hasattr(self, 'emit_debug'):
                     self.emit_debug(f"AST conversion failed for '{code}': {str(e)}")
-                # Fall back to original processing
 
-        # Original processing for non-control structures or if AST conversion failed
-        statements = self.split_statements(code)
-        if len(statements) > 1:
-            # Execute each statement and collect results
-            all_results = []
-            for statement in statements:
-                if statement.strip():  # Skip empty statements
-                    result = self.process_statement(statement)
-                    if result:
-                        all_results.extend(result)
-                        # Handle jumps in multi-statement lines
-                        for item in result:
-                            if isinstance(item, dict) and item.get('type') in ['jump', 'jump_return']:
-                                return all_results  # Return all accumulated results including jump
-            return all_results
-        else:
-            # Single statement
+        # Split on colons; single statements go straight to process_statement
+        statements = BasicParser.split_on_delimiter(code)
+        if len(statements) <= 1:
             return self.process_statement(code)
+
+        # Multi-statement immediate mode: execute each statement sequentially.
+        # Unlike control structures, plain multi-statement lines must surface
+        # jump directives and errors to the caller rather than consuming them
+        # internally via run_program().
+        all_results = []
+        for stmt in statements:
+            result = self.process_statement(stmt)
+            if result:
+                all_results.extend(result)
+                # Stop on jump directives or errors (like real CoCo BASIC)
+                for item in result:
+                    if isinstance(item, dict) and item.get('type') in ('jump', 'error'):
+                        return all_results
+        return all_results
 
     def _execute_converted_as_temporary_program(self, converted_statements):
         """

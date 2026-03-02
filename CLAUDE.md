@@ -38,6 +38,18 @@ INPUT pauses execution by returning `{'type': 'input_request', ...}`. Variable t
 
 `BasicParser` in `parser.py` owns all colon-splitting logic. Use `split_on_delimiter()` for simple splits and `split_on_delimiter_paren_aware()` when parenthesized groups must be respected. `is_rem_line()` guards against splitting REM comments. Never duplicate this logic — always call through to `BasicParser`.
 
+### Immediate mode flow
+
+`process_command()` detects multi-statement lines early (before the registry) and routes them to `process_line()`. `process_line()` then takes one of three paths:
+
+1. **REM** → `process_statement()` directly (never split).
+2. **Control structure + colons** (IF/FOR/WHILE/DO) → AST conversion → `_execute_converted_as_temporary_program()` → `run_program()`.
+3. **Plain multi-statement** → sequential `process_statement()` loop, stopping on jump or error.
+
+### Program storage flow
+
+`expand_line_to_sublines()` in `core.py` splits stored lines once at entry time. REM lines and single-line IF/THEN are kept whole; everything else is split via `BasicParser.split_on_delimiter()`.
+
 ## Naming
 
 - **`process_*`**: internal system (`process_command`, `process_statement`)

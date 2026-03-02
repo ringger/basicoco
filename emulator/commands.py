@@ -8,8 +8,6 @@ replacing the brittle hard-coded pattern matching with a registry-based system.
 import re
 from typing import List, Dict, Callable, Any, Optional
 
-from .parser import BasicParser
-
 
 class CommandRegistry:
     """
@@ -89,34 +87,27 @@ class CommandRegistry:
         return None
     
     def execute(self, line: str) -> Optional[List[Dict[str, Any]]]:
-        """Execute a command line using the registry"""
+        """Execute a single command line using the registry.
+
+        Multi-statement lines are already split by process_line before
+        reaching the registry, so no colon detection is needed here.
+        """
         if not line.strip():
             return []
-        
-        # Check if this is a multi-statement line (contains colons outside strings)
-        # If so, let it fall through to the core's multi-statement handling
-        if self._has_multi_statements(line):
-            return None
-        
+
         tokens = self.tokenize_command(line)
         if not tokens:
             return None
-        
+
         command = tokens[0].upper()
         handler = self.get_handler(command)
-        
+
         if handler:
             # Pass the rest of the line (after command) to the handler
             args = line[len(tokens[0]):].strip()
             return handler(args)
-        
+
         return None
-    
-    def _has_multi_statements(self, line: str) -> bool:
-        """Check if line contains multiple statements (colons outside strings)"""
-        if BasicParser.is_rem_line(line):
-            return False
-        return len(BasicParser.split_on_delimiter(line)) > 1
     
     @staticmethod
     def tokenize_command(line: str) -> List[str]:

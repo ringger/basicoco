@@ -264,3 +264,55 @@ class TestErrorRecovery:
         result = basic.process_command('PRINT "RECOVERY SUCCESSFUL"')
         text_outputs = helpers.get_text_output(result)
         assert any('RECOVERY SUCCESSFUL' in output for output in text_outputs)
+
+
+class TestMultiStatementErrorPropagation:
+    """Test that errors in multi-statement immediate mode lines stop subsequent statements"""
+
+    def test_error_stops_subsequent_statements(self, basic, helpers):
+        """Error in second statement should prevent third from executing"""
+        basic.process_command('NEW')
+        basic.process_command('A = 0')
+        basic.process_command('C = 0')
+        result = basic.process_command('A = 1: UNDIM(999) = 5: C = 99')
+
+        # A should be set (first statement ran)
+        helpers.assert_variable_equals(basic, 'A', 1)
+        # C should NOT be set to 99 (third statement should not run)
+        helpers.assert_variable_equals(basic, 'C', 0)
+        # Should have an error in results
+        errors = helpers.get_error_messages(result)
+        assert len(errors) > 0
+
+    def test_print_before_error_appears(self, basic, helpers):
+        """Output from statements before the error should still appear"""
+        basic.process_command('NEW')
+        result = basic.process_command('PRINT "BEFORE": UNDIM(999) = 5: PRINT "AFTER"')
+
+        text_outputs = helpers.get_text_output(result)
+        assert 'BEFORE' in text_outputs
+        assert 'AFTER' not in text_outputs
+        errors = helpers.get_error_messages(result)
+        assert len(errors) > 0
+
+    def test_jump_stops_subsequent_statements(self, basic, helpers):
+        """Jump directive in multi-statement line should stop remaining statements"""
+        basic.process_command('NEW')
+        basic.process_command('Z = 0')
+        result = basic.process_line('PRINT "HELLO": GOTO 100: Z = 99')
+
+        text_outputs = helpers.get_text_output(result)
+        assert 'HELLO' in text_outputs
+        # Z should not be set (statement after GOTO should not run)
+        helpers.assert_variable_equals(basic, 'Z', 0)
+        # Should have jump in results
+        has_jump = any(item.get('type') == 'jump' for item in result)
+        assert has_jump
+
+    def test_all_statements_run_when_no_error(self, basic, helpers):
+        """All statements should execute when there are no errors"""
+        basic.process_command('NEW')
+        basic.process_command('A = 5: B = 10: C = A + B')
+        helpers.assert_variable_equals(basic, 'A', 5)
+        helpers.assert_variable_equals(basic, 'B', 10)
+        helpers.assert_variable_equals(basic, 'C', 15)
