@@ -4,9 +4,6 @@
 
 Prioritized by how often real CoCo BASIC programs need them.
 
-**High — commonly used in programs:**
-- [ ] TIMER — system timer function (games, benchmarks, delays)
-
 **Medium — useful but less common:**
 - [ ] TRON/TROFF — trace on/off for debugging (helpful for learners)
 - [ ] OPEN/CLOSE/PRINT#/INPUT# — sequential file I/O

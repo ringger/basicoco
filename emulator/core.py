@@ -7,6 +7,7 @@ The class has been extracted from the monolithic app.py file to improve maintain
 
 import random
 import re
+import time
 from .parser import BasicParser
 from .graphics import BasicGraphics
 from .variables import VariableManager
@@ -59,6 +60,9 @@ class CoCoBasic:
         self.pause_duration = 0  # Duration of current pause
         self.program_counter = None  # For resuming execution after input
         self.stopped_position = None  # For CONT command - stores (line, sub_line) where STOP occurred
+
+        # TIMER pseudo-variable (increments at 60 Hz like real CoCo)
+        self.timer_epoch = time.time()
 
         # ON ERROR GOTO state
         self.on_error_goto_line = None    # Handler line number, or None
@@ -805,6 +809,9 @@ class CoCoBasic:
         self.pause_duration = 0
         self.program_counter = None
         self.stopped_position = None  # Clear stopped position
+
+        # Reset TIMER
+        self.timer_epoch = time.time()
 
         # Clear ON ERROR GOTO state
         self.on_error_goto_line = None

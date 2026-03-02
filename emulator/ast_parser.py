@@ -1409,6 +1409,9 @@ class ASTEvaluator(ASTVisitor):
             return self.emulator.error_number
         if var_name == 'ERL':
             return self.emulator.error_line
+        if var_name == 'TIMER':
+            import time
+            return int((time.time() - self.emulator.timer_epoch) * 60)
         if var_name in self.emulator.variables:
             return self.emulator.variables[var_name]
         return 0 if not var_name.endswith('$') else ""
@@ -1735,6 +1738,17 @@ class ASTEvaluator(ASTVisitor):
                 return error_response(err)
         elif hasattr(node.target, 'name'):
             var_name = node.target.name.upper()
+            if var_name == 'TIMER':
+                import time
+                try:
+                    ticks = int(value)
+                except (ValueError, TypeError):
+                    err = self.emulator.error_context.type_error(
+                        "TIMER value must be a number", "integer",
+                        f"{type(value).__name__}")
+                    return error_response(err)
+                self.emulator.timer_epoch = time.time() - ticks / 60.0
+                return []
             err = self.emulator.check_reserved_name(var_name)
             if err:
                 return err
