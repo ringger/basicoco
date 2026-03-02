@@ -56,6 +56,13 @@ class ProgramExecutor:
         else:
             emu.program_counter = None
 
+    def _find_position_index(self, pos, all_positions):
+        """Find the index of an exact (line, sub_line) position, or None."""
+        try:
+            return all_positions.index(pos)
+        except ValueError:
+            return None
+
     def _find_line_position(self, target_line, all_positions):
         """Find the first sub-line position for a given line number.
 
@@ -160,8 +167,9 @@ class ProgramExecutor:
 
             elif item_type == 'jump_after_for':
                 for_pos = (item['for_line'], item.get('for_sub_line', 0))
-                if for_pos in all_positions:
-                    return all_positions.index(for_pos) + 1, 'jumped'
+                idx = self._find_position_index(for_pos, all_positions)
+                if idx is not None:
+                    return idx + 1, 'jumped'
                 output.append({'type': 'error', 'message': f"UNDEFINED FOR LINE {item['for_line']}"})
                 return current_pos_index, 'stop'
 
@@ -194,8 +202,9 @@ class ProgramExecutor:
 
             elif item_type == 'jump_after_while':
                 pos = (item['while_line'], item['while_sub_line'])
-                if pos in all_positions:
-                    return all_positions.index(pos) + 1, 'jumped'
+                idx = self._find_position_index(pos, all_positions)
+                if idx is not None:
+                    return idx + 1, 'jumped'
                 return current_pos_index + 1, 'next'
 
             elif item_type == 'skip_do_loop':
@@ -207,8 +216,9 @@ class ProgramExecutor:
 
             elif item_type == 'jump_after_do':
                 pos = (item['do_line'], item['do_sub_line'])
-                if pos in all_positions:
-                    return all_positions.index(pos) + 1, 'jumped'
+                idx = self._find_position_index(pos, all_positions)
+                if idx is not None:
+                    return idx + 1, 'jumped'
                 return current_pos_index + 1, 'next'
 
             elif item_type == 'exit_for_loop':
@@ -237,15 +247,14 @@ class ProgramExecutor:
                 return current_pos_index, 'stop'
 
             elif item_type == 'resume':
-                pos = item['position']
-                if pos in all_positions:
-                    return all_positions.index(pos), 'jumped'
+                idx = self._find_position_index(item['position'], all_positions)
+                if idx is not None:
+                    return idx, 'jumped'
                 return current_pos_index + 1, 'next'
 
             elif item_type == 'resume_next':
-                pos = item['position']
-                if pos in all_positions:
-                    idx = all_positions.index(pos)
+                idx = self._find_position_index(item['position'], all_positions)
+                if idx is not None:
                     return idx + 1, 'next'
                 return current_pos_index + 1, 'next'
 

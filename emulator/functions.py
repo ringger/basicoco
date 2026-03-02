@@ -274,32 +274,30 @@ def fn_log(evaluator, args: List[Any]) -> float:
 # Conversion Functions
 # ============================================================================
 
-def fn_hex(evaluator, args: List[Any]) -> str:
-    """HEX$(n) - return hexadecimal string representation of number"""
-    _check_args(evaluator, 'HEX$', args, 1, 'HEX$(number)')
-    n = _to_int(evaluator, args[0], 'HEX$')
+def _fn_base_conversion(evaluator, args, func_name, fmt, examples):
+    """Shared implementation for HEX$ and OCT$ base conversion functions."""
+    _check_args(evaluator, func_name, args, 1, f'{func_name}(number)')
+    n = _to_int(evaluator, args[0], func_name)
     if n < 0 or n > 65535:
         error = evaluator.error_context.runtime_error(
-            f"HEX$ argument out of range (0-65535): {n}",
-            suggestions=["HEX$ accepts integers from 0 to 65535",
-                         'Example: HEX$(255) returns "FF"',
-                         'Example: HEX$(4096) returns "1000"'])
+            f"{func_name} argument out of range (0-65535): {n}",
+            suggestions=[f"{func_name} accepts integers from 0 to 65535"] + examples)
         raise ValueError(error.format_detailed())
-    return format(n, 'X')
+    return format(n, fmt)
+
+
+def fn_hex(evaluator, args: List[Any]) -> str:
+    """HEX$(n) - return hexadecimal string representation of number"""
+    return _fn_base_conversion(evaluator, args, 'HEX$', 'X',
+                               ['Example: HEX$(255) returns "FF"',
+                                'Example: HEX$(4096) returns "1000"'])
 
 
 def fn_oct(evaluator, args: List[Any]) -> str:
     """OCT$(n) - return octal string representation of number"""
-    _check_args(evaluator, 'OCT$', args, 1, 'OCT$(number)')
-    n = _to_int(evaluator, args[0], 'OCT$')
-    if n < 0 or n > 65535:
-        error = evaluator.error_context.runtime_error(
-            f"OCT$ argument out of range (0-65535): {n}",
-            suggestions=["OCT$ accepts integers from 0 to 65535",
-                         'Example: OCT$(255) returns "377"',
-                         'Example: OCT$(8) returns "10"'])
-        raise ValueError(error.format_detailed())
-    return format(n, 'o')
+    return _fn_base_conversion(evaluator, args, 'OCT$', 'o',
+                               ['Example: OCT$(255) returns "377"',
+                                'Example: OCT$(8) returns "10"'])
 
 
 def fn_asc(evaluator, args: List[Any]) -> int:
@@ -424,7 +422,11 @@ def fn_space(evaluator, args: List[Any]) -> str:
     _check_args(evaluator, 'SPACE$', args, 1, 'SPACE$(count)')
     n = _to_int(evaluator, args[0], 'SPACE$')
     if n < 0:
-        raise ValueError("SPACE$ argument must be non-negative")
+        error = evaluator.error_context.runtime_error(
+            f"SPACE$ count cannot be negative: {n}",
+            suggestions=["Use a positive number or zero",
+                         'Example: SPACE$(5) returns "     "'])
+        raise ValueError(error.format_detailed())
     return " " * n
 
 
@@ -433,7 +435,11 @@ def fn_string(evaluator, args: List[Any]) -> str:
     _check_args(evaluator, 'STRING$', args, 2, 'STRING$(count, char)')
     n = _to_int(evaluator, args[0], 'STRING$')
     if n < 0:
-        raise ValueError("STRING$ count must be non-negative")
+        error = evaluator.error_context.runtime_error(
+            f"STRING$ count cannot be negative: {n}",
+            suggestions=["Use a positive number or zero",
+                         'Example: STRING$(5, "*") returns "*****"'])
+        raise ValueError(error.format_detailed())
     char_arg = args[1]
     if isinstance(char_arg, (int, float)):
         char = chr(int(char_arg))

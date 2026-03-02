@@ -7,8 +7,6 @@ Tests individual command functionality in isolation.
 
 import sys
 import os
-import tempfile
-import shutil
 import pytest
 from pathlib import Path
 
@@ -19,34 +17,15 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
 
 class TestProgramManagementCommand:
     """Test program management commands"""
-    
+
     @pytest.fixture(autouse=True)
-    def temp_setup(self):
-        """Set up test environment with temporary directory for all tests.
-
-        Autouse ensures file operations never pollute the real programs/ directory.
-        """
-        temp_dir = tempfile.mkdtemp()
-        original_cwd = os.getcwd()
-
-        # Create a test programs directory
-        programs_dir = os.path.join(temp_dir, 'programs')
-        os.makedirs(programs_dir, exist_ok=True)
-
-        # Create some test program files
-        with open(os.path.join(programs_dir, 'test1.bas'), 'w') as f:
+    def temp_setup(self, temp_programs_dir):
+        """Use shared temp directory fixture, seeded with test .bas files."""
+        with open(os.path.join(temp_programs_dir, 'test1.bas'), 'w') as f:
             f.write('10 PRINT "TEST PROGRAM 1"\n')
-        with open(os.path.join(programs_dir, 'test2.bas'), 'w') as f:
+        with open(os.path.join(temp_programs_dir, 'test2.bas'), 'w') as f:
             f.write('10 PRINT "TEST PROGRAM 2"\n20 END\n')
-
-        # Change to temp directory so programs are saved here
-        os.chdir(temp_dir)
-
-        yield programs_dir
-
-        # Cleanup
-        os.chdir(original_cwd)
-        shutil.rmtree(temp_dir)
+        yield temp_programs_dir
 
 
     def test_basic_functionality(self, basic, helpers):

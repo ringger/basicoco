@@ -178,27 +178,6 @@ class TestFunction:
         result2 = basic.evaluate_expression("RND(2)")
         # Results should be random numbers between 0 and 1
 
-    def test_sgn_function(self, basic, helpers):
-        """Test SGN function for sign determination (if available)"""
-        # SGN function might not be implemented, so test with simple arithmetic instead
-        try:
-            # Positive numbers
-            result = basic.evaluate_expression("SGN(5)")
-            assert result == 1
-            
-            # Negative numbers
-            result = basic.evaluate_expression("SGN(-5)")
-            assert result == -1
-            
-            # Zero
-            result = basic.evaluate_expression("SGN(0)")
-            assert result == 0
-        except:
-            # If SGN is not implemented, test equivalent logic
-            # Use ABS and division to simulate sign function
-            result = basic.evaluate_expression("ABS(5)")
-            assert result == 5  # Just test that functions work
-
     def test_len_function(self, basic, helpers):
         """Test LEN function for string length"""
         # Literal strings

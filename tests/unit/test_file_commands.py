@@ -7,8 +7,6 @@ Tests the new CLI functionality added in Phase 1.
 
 import sys
 import os
-import tempfile
-import shutil
 import pytest
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..'))
 
@@ -24,24 +22,10 @@ class TestFileCommands:
         pytest.fail(f"Text '{text}' not found in output")
 
     @pytest.fixture(autouse=True)
-    def test_dir(self):
-        """Set up test environment with temporary directory for all tests.
-
-        Autouse ensures file operations never pollute the real programs/ directory.
-        """
-        test_directory = tempfile.mkdtemp(prefix='trs80_test_')
-        original_cwd = os.getcwd()
-        os.chdir(test_directory)
-
-        # Create programs directory
-        os.makedirs('programs', exist_ok=True)
-
-        yield test_directory
-
-        # Clean up after test
-        os.chdir(original_cwd)
-        if os.path.exists(test_directory):
-            shutil.rmtree(test_directory)
+    def test_dir(self, temp_programs_dir):
+        """Use shared temp directory fixture."""
+        self.programs_dir = temp_programs_dir
+        yield os.path.dirname(temp_programs_dir)  # parent of programs/
 
     def test_basic_functionality(self, basic, helpers):
         """Test basic functionality to ensure test framework works"""

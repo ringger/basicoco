@@ -13,10 +13,14 @@ from .error_context import error_response
 _split_args = BasicParser.split_args  # Shared comma-split helper
 
 
-def _graphics_command(command_name):
+def _graphics_command(command_name, require_graphics=False):
     """Decorator that wraps a graphics method with standard error handling."""
     def decorator(method):
         def wrapper(self, args):
+            if require_graphics:
+                err = self._require_graphics_mode()
+                if err:
+                    return err
             try:
                 return method(self, args)
             except Exception as e:
@@ -165,12 +169,9 @@ class BasicGraphics:
 
         return [{'type': 'set_color', 'fg': fg, 'bg': bg}]
     
-    @_graphics_command('PSET')
+    @_graphics_command('PSET', require_graphics=True)
     def execute_pset(self, args):
         """Execute PSET command to set a pixel"""
-        err = self._require_graphics_mode()
-        if err:
-            return err
 
         if args.startswith('(') and ')' in args:
             result = self._parse_coord_pair(args, 'PSET')
@@ -197,12 +198,9 @@ class BasicGraphics:
                 color = self._eval_int(parts[2])
             return [{'type': 'pset', 'x': x, 'y': y, 'color': color}]
     
-    @_graphics_command('PRESET')
+    @_graphics_command('PRESET', require_graphics=True)
     def execute_preset(self, args):
         """Execute PRESET command to reset a pixel to background color"""
-        err = self._require_graphics_mode()
-        if err:
-            return err
 
         if args.startswith('(') and ')' in args:
             result = self._parse_coord_pair(args, 'PRESET')
@@ -220,12 +218,9 @@ class BasicGraphics:
             y = self._eval_int(parts[1])
             return [{'type': 'preset', 'x': x, 'y': y}]
     
-    @_graphics_command('LINE')
+    @_graphics_command('LINE', require_graphics=True)
     def execute_line_graphics(self, args):
         """Execute LINE command to draw a line"""
-        err = self._require_graphics_mode()
-        if err:
-            return err
 
         # Parse LINE (x1,y1)-(x2,y2)[,PSET|PRESET|color][,B|BF]
         # or LINE x1,y1,x2,y2[,color]
@@ -276,12 +271,9 @@ class BasicGraphics:
 
             return [{'type': 'line', 'x1': x1, 'y1': y1, 'x2': x2, 'y2': y2, 'color': color}]
     
-    @_graphics_command('CIRCLE')
+    @_graphics_command('CIRCLE', require_graphics=True)
     def execute_circle(self, args):
         """Execute CIRCLE command to draw a circle"""
-        err = self._require_graphics_mode()
-        if err:
-            return err
 
         # Parse CIRCLE (x,y),radius[,color] or CIRCLE x,y,radius[,color]
         if args.startswith('(') and ')' in args:
@@ -318,12 +310,9 @@ class BasicGraphics:
 
             return [{'type': 'circle', 'x': x, 'y': y, 'radius': radius, 'color': color}]
     
-    @_graphics_command('PAINT')
+    @_graphics_command('PAINT', require_graphics=True)
     def execute_paint(self, args):
         """Execute PAINT command for flood fill"""
-        err = self._require_graphics_mode()
-        if err:
-            return err
 
         if args.startswith('(') and ')' in args:
             result = self._parse_coord_pair(args, 'PAINT')
@@ -353,12 +342,9 @@ class BasicGraphics:
                  'Example: PAINT(100,50),1',
                  'Coordinates must be enclosed in parentheses'])
     
-    @_graphics_command('GET')
+    @_graphics_command('GET', require_graphics=True)
     def execute_get(self, args):
         """Execute GET command to capture graphics area"""
-        err = self._require_graphics_mode()
-        if err:
-            return err
 
         # Parse GET (x1,y1)-(x2,y2), array_name
         if '-(' in args and ',' in args:
@@ -385,12 +371,9 @@ class BasicGraphics:
                     'Example: GET(0,0)-(50,50),A',
                     'Specify rectangular area and target array'])
     
-    @_graphics_command('PUT')
+    @_graphics_command('PUT', require_graphics=True)
     def execute_put(self, args):
         """Execute PUT command to display stored graphics"""
-        err = self._require_graphics_mode()
-        if err:
-            return err
 
         # Parse PUT (x,y), array_name [,action]
         if args.strip().startswith('('):
@@ -417,12 +400,9 @@ class BasicGraphics:
                     'Example: PUT(100,50),A,PSET',
                     'Specify coordinates, array name, and optional action'])
     
-    @_graphics_command('DRAW')
+    @_graphics_command('DRAW', require_graphics=True)
     def execute_draw(self, args):
         """Execute DRAW command for turtle graphics"""
-        err = self._require_graphics_mode()
-        if err:
-            return err
 
         draw_string = self.emulator.evaluate_expression(args)
         if not isinstance(draw_string, str):

@@ -156,6 +156,21 @@ class CoCoBasic:
             return error_response(error)
         return None
 
+    def _require_stack(self, stack, keyword, matching, example):
+        """Return error response if stack is empty (keyword without matching opener), else None."""
+        if not stack:
+            error = self.error_context.syntax_error(
+                f"{keyword} without matching {matching}",
+                self.current_line,
+                suggestions=[
+                    f'Every {keyword} must have a matching {matching}',
+                    f'Check that {matching} blocks are properly nested',
+                    f'Example: {example}'
+                ]
+            )
+            return error_response(error)
+        return None
+
     def parse_line(self, line):
         """Parse a line using the BasicParser - kept for backward compatibility"""
         return BasicParser.parse_line(line)
@@ -489,29 +504,17 @@ class CoCoBasic:
             return result
         
         # If nothing matches, it's a syntax error
-        if self.current_line == 0 or not self.running:
-            # Direct command or not in program execution
-            error = self.error_context.syntax_error(
-                "Unrecognized command or syntax",
-                suggestions=[
-                    'Check command spelling and syntax',
-                    'Use HELP to see available commands',
-                    'Check BASIC reference for proper syntax'
-                ]
-            )
-            return error_response(error)
-        else:
-            # Program execution context
-            error = self.error_context.syntax_error(
-                "Unrecognized command or syntax",
-                self.current_line,
-                suggestions=[
-                    'Check command spelling and syntax',
-                    'Use HELP to see available commands',
-                    'Check BASIC reference for proper syntax'
-                ]
-            )
-            return error_response(error)
+        line = self.current_line if (self.current_line != 0 and self.running) else None
+        error = self.error_context.syntax_error(
+            "Unrecognized command or syntax",
+            line,
+            suggestions=[
+                'Check command spelling and syntax',
+                'Use HELP to see available commands',
+                'Check BASIC reference for proper syntax'
+            ]
+        )
+        return error_response(error)
 
     def evaluate_expression(self, expr, line=None):
         """Evaluate a BASIC expression string using the AST parser."""
@@ -1389,17 +1392,9 @@ class CoCoBasic:
     # Enhanced Control Flow Methods
     def execute_wend(self, args):
         """WEND statement - end WHILE loop"""
-        if not self.while_stack:
-            error = self.error_context.syntax_error(
-                "WEND without matching WHILE",
-                self.current_line,
-                suggestions=[
-                    'Every WEND must have a matching WHILE',
-                    'Check that WHILE loops are properly nested',
-                    'Example: WHILE condition ... WEND'
-                ]
-            )
-            return error_response(error)
+        err = self._require_stack(self.while_stack, 'WEND', 'WHILE', 'WHILE condition ... WEND')
+        if err:
+            return err
         
         # Get the current WHILE loop
         while_info = self.while_stack[-1]
@@ -1419,17 +1414,9 @@ class CoCoBasic:
     
     def execute_loop(self, args):
         """LOOP statement - end DO/LOOP block"""
-        if not self.do_stack:
-            error = self.error_context.syntax_error(
-                "LOOP without matching DO",
-                self.current_line,
-                suggestions=[
-                    'Every LOOP must have a matching DO',
-                    'Check that DO loops are properly nested',
-                    'Example: DO ... LOOP or DO ... LOOP WHILE condition'
-                ]
-            )
-            return error_response(error)
+        err = self._require_stack(self.do_stack, 'LOOP', 'DO', 'DO ... LOOP or DO ... LOOP WHILE condition')
+        if err:
+            return err
         
         # Get current DO loop
         do_info = self.do_stack[-1]
@@ -1441,29 +1428,20 @@ class CoCoBasic:
         condition_type = do_info.get('condition_type')
 
         # Check for condition at LOOP (overrides DO condition)
-        if args.upper().startswith('WHILE '):
-            condition_str = args[6:].strip()
-            condition_type = 'WHILE'
-            # Parse and cache AST node for efficiency on repeated iterations
-            if 'loop_condition_ast' not in do_info or do_info.get('loop_condition_str') != condition_str:
-                try:
-                    do_info['loop_condition_ast'] = self.ast_parser.parse_expression(condition_str, self.current_line)
-                    do_info['loop_condition_str'] = condition_str
-                except Exception:
-                    do_info['loop_condition_ast'] = None
-            condition_ast = do_info.get('loop_condition_ast')
-            condition = condition_str if condition_ast is None else None
-        elif args.upper().startswith('UNTIL '):
-            condition_str = args[6:].strip()
-            condition_type = 'UNTIL'
-            if 'loop_condition_ast' not in do_info or do_info.get('loop_condition_str') != condition_str:
-                try:
-                    do_info['loop_condition_ast'] = self.ast_parser.parse_expression(condition_str, self.current_line)
-                    do_info['loop_condition_str'] = condition_str
-                except Exception:
-                    do_info['loop_condition_ast'] = None
-            condition_ast = do_info.get('loop_condition_ast')
-            condition = condition_str if condition_ast is None else None
+        for keyword in ('WHILE', 'UNTIL'):
+            prefix = keyword + ' '
+            if args.upper().startswith(prefix):
+                condition_str = args[len(prefix):].strip()
+                condition_type = keyword
+                if 'loop_condition_ast' not in do_info or do_info.get('loop_condition_str') != condition_str:
+                    try:
+                        do_info['loop_condition_ast'] = self.ast_parser.parse_expression(condition_str, self.current_line)
+                        do_info['loop_condition_str'] = condition_str
+                    except Exception:
+                        do_info['loop_condition_ast'] = None
+                condition_ast = do_info.get('loop_condition_ast')
+                condition = condition_str if condition_ast is None else None
+                break
 
         # Evaluate loop continuation
         should_continue = False
@@ -1497,17 +1475,9 @@ class CoCoBasic:
 
     def execute_else(self, args):
         """ELSE statement - alternative branch in multi-line IF"""
-        if not self.if_stack:
-            error = self.error_context.syntax_error(
-                "ELSE without matching IF",
-                self.current_line,
-                suggestions=[
-                    'Every ELSE must have a matching IF',
-                    'Check that IF blocks are properly structured',
-                    'Example: IF condition ... ELSE ... ENDIF'
-                ]
-            )
-            return error_response(error)
+        err = self._require_stack(self.if_stack, 'ELSE', 'IF', 'IF condition ... ELSE ... ENDIF')
+        if err:
+            return err
         
         # Get current IF info
         if_info = self.if_stack[-1]
@@ -1523,17 +1493,9 @@ class CoCoBasic:
     
     def execute_endif(self, args):
         """ENDIF statement - end multi-line IF block"""
-        if not self.if_stack:
-            error = self.error_context.syntax_error(
-                "ENDIF without matching IF",
-                self.current_line,
-                suggestions=[
-                    'Every ENDIF must have a matching IF',
-                    'Check that IF blocks are properly structured',
-                    'Example: IF condition ... ENDIF'
-                ]
-            )
-            return error_response(error)
+        err = self._require_stack(self.if_stack, 'ENDIF', 'IF', 'IF condition ... ENDIF')
+        if err:
+            return err
         
         # Pop the current IF from the stack
         self.if_stack.pop()

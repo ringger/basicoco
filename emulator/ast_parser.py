@@ -14,6 +14,8 @@ from .error_context import ErrorContextManager, error_response
 
 def basic_truthy(value) -> bool:
     """Convert a BASIC value to Python bool using CoCo semantics."""
+    if isinstance(value, str):
+        return len(value) > 0
     if isinstance(value, (int, float)):
         return bool(value)
     return value != 0
@@ -1588,13 +1590,7 @@ class ASTEvaluator(ASTVisitor):
         """Visit IF statement - evaluate condition and execute appropriate branch"""
         condition_result = self.visit(node.condition)
 
-        # Convert to boolean (BASIC truth rules)
-        if isinstance(condition_result, (int, float)):
-            condition_true = condition_result != 0
-        elif isinstance(condition_result, str):
-            condition_true = len(condition_result) > 0
-        else:
-            condition_true = bool(condition_result)
+        condition_true = basic_truthy(condition_result)
 
         if condition_true:
             result = self.visit(node.then_branch)

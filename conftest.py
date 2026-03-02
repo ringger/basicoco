@@ -8,6 +8,8 @@ to all test files automatically.
 import pytest
 import sys
 import os
+import tempfile
+import shutil
 from typing import Dict, List, Any
 
 # Add project root to Python path
@@ -181,6 +183,24 @@ def pytest_collection_modifyitems(config, items):
 
         if "websocket" in item.name.lower():
             item.add_marker(pytest.mark.websocket)
+
+
+@pytest.fixture
+def temp_programs_dir():
+    """Provide a temporary directory with a programs/ subdirectory.
+
+    Autouse in test classes that test file operations (SAVE, LOAD, FILES, KILL, CD).
+    Changes cwd to the temp directory and restores it on teardown.
+    """
+    test_directory = tempfile.mkdtemp(prefix='basicoco_test_')
+    original_cwd = os.getcwd()
+    os.chdir(test_directory)
+    programs_dir = os.path.join(test_directory, 'programs')
+    os.makedirs(programs_dir, exist_ok=True)
+    yield programs_dir
+    os.chdir(original_cwd)
+    if os.path.exists(test_directory):
+        shutil.rmtree(test_directory)
 
 
 @pytest.fixture(scope="session")
