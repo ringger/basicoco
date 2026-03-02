@@ -215,10 +215,11 @@ class TestPrintMigration:
         assert any('ABC' in t for t in output)
 
     def test_print_comma_separator(self, basic, helpers):
-        """PRINT with commas should add tab spacing"""
+        """PRINT with commas should advance to next 16-column zone"""
         result = basic.process_command('PRINT "A","B"')
         output = helpers.get_text_output(result)
-        assert any('\t' in t for t in output)
+        # "A" at col 0, comma advances to col 16, so 15 spaces between
+        assert output == ['A               B']
 
     def test_print_trailing_semicolon(self, basic):
         """PRINT with trailing semicolon should set inline flag"""

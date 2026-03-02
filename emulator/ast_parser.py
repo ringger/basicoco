@@ -1669,18 +1669,24 @@ class ASTEvaluator(ASTVisitor):
 
     def visit_print_statement(self, node: PrintStatementNode) -> Any:
         """Visit PRINT statement"""
+        ZONE_WIDTH = 16  # CoCo uses 16-column comma zones
+
         # Handle empty PRINT (blank line)
         if not node.expressions:
+            self.emulator.print_column = 0
             return [{'type': 'text', 'text': ''}]
 
         # Build output from expressions and separators
         output_parts = []
+        col = self.emulator.print_column
 
         for i, expr in enumerate(node.expressions):
             # Evaluate expression
             try:
                 value = self.visit(expr)
-                output_parts.append(self._format_print_value(value))
+                formatted = self._format_print_value(value)
+                output_parts.append(formatted)
+                col += len(formatted)
             except Exception as e:
                 error = self.emulator.error_context.runtime_error(
                     f"Error evaluating PRINT expression: {e}",
@@ -1696,7 +1702,11 @@ class ASTEvaluator(ASTVisitor):
             if i < len(node.separators) and i < len(node.expressions) - 1:
                 sep = node.separators[i]
                 if sep == ',':
-                    output_parts.append('\t')
+                    # Advance to next 16-column zone boundary
+                    next_zone = ((col // ZONE_WIDTH) + 1) * ZONE_WIDTH
+                    spaces = next_zone - col
+                    output_parts.append(' ' * spaces)
+                    col = next_zone
                 # Semicolon = no spacing
 
         # Join parts
@@ -1704,7 +1714,17 @@ class ASTEvaluator(ASTVisitor):
 
         # Trailing separator means inline output (no newline)
         has_trailing_separator = len(node.separators) >= len(node.expressions)
-        if '\r' in output_text or has_trailing_separator:
+        if has_trailing_separator:
+            # Trailing comma: advance to next zone
+            if node.separators[-1] == ',':
+                next_zone = ((col // ZONE_WIDTH) + 1) * ZONE_WIDTH
+                spaces = next_zone - col
+                output_text += ' ' * spaces
+                col = next_zone
+            self.emulator.print_column = col
+            return [{'type': 'text', 'text': output_text, 'inline': True}]
+        self.emulator.print_column = 0
+        if '\r' in output_text:
             return [{'type': 'text', 'text': output_text, 'inline': True}]
         return [{'type': 'text', 'text': output_text}]
 

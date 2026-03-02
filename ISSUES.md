@@ -4,10 +4,15 @@
 
 Prioritized by how often real CoCo BASIC programs need them.
 
+**High — affects common programs:**
+- [x] PRINT comma zones — commas advance to next 16-column zone. `print_column` tracks position across inline PRINT statements.
+- [x] RND argument semantics — `RND(0)` repeats last value, `RND(-n)` reseeds. `last_rnd` state on emulator.
+
 **Medium — useful but less common:**
 - [ ] OPEN/CLOSE/PRINT#/INPUT# — sequential file I/O
-- [ ] PCLEAR — allocate graphics pages
 - [ ] PPOINT — read pixel color as a function; collision detection in games
+- [ ] DRAW B/N/S — pen-up move, no-draw return, and scale are parsed but silently no-op'd
+- [ ] PCLEAR — allocate graphics pages
 
 **Low — rarely needed or hard to emulate meaningfully:**
 - [ ] PEEK/POKE — memory access (would need a simulated memory map)
@@ -21,11 +26,8 @@ Prioritized by how often real CoCo BASIC programs need them.
 
 ## Known Behavioral Limitations
 
-- **DRAW B/N/S parsed but silently no-op'd** — B (pen-up/blind move), N (no-draw then return to origin), and S (scale) are parsed by `BasicParser` but `_execute_draw_command` has no handler for them. All three silently do nothing — B doesn't move without drawing, N doesn't return to origin, S doesn't apply scale.
 - **DRAW A/X not supported** — angle rotation (A) and substring execution (X) are silently consumed by the parser but not implemented.
-- **RND ignores its argument** — `RND(0)` should repeat the last value, `RND(-n)` should reseed. Currently all arguments are ignored and `random.random()` is always called.
-- **PAINT trailing-comma edge case** — `PAINT(x,y),` (trailing comma, no color value) silently defaults to color 1 instead of raising an error. The no-comma case (`PAINT(x,y)`) correctly raises a syntax error.
-- **PRINT comma zones not implemented** — commas emit a tab character rather than advancing to the next 16-column zone as real CoCo BASIC does.
+- **PAINT trailing-comma edge case** — `PAINT(x,y),` (trailing comma, no color value) defaults to color 1 rather than raising an error. The no-comma case (`PAINT(x,y)`) correctly raises a syntax error.
 - **GOTO out of multi-line IF** leaves a stale `if_stack` entry (cleared on next RUN). This matches real CoCo behavior where GOTO from structured blocks is undefined.
 
 ## Refactoring Opportunities

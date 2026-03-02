@@ -78,6 +78,8 @@ class CoCoBasic:
         self.current_input_index = 0 # Current variable index being input
         self.arrays = {}  # Storage for dimensioned arrays
         self.keyboard_buffer = []  # Buffer for INKEY$ function
+        self.print_column = 0  # Current PRINT cursor column (for comma zones)
+        self.last_rnd = 0.0  # Last value returned by RND (for RND(0))
         self.current_draw_color = 1  # Default drawing color
         self.turtle_x = 64  # Turtle graphics X position (center of default screen)
         self.turtle_y = 48  # Turtle graphics Y position (center of default screen)
@@ -833,6 +835,8 @@ class CoCoBasic:
         self.iteration_count = 0
         # Don't clear keyboard buffer - preserve keys for INKEY$
         self.graphics_mode = 0  # Reset to text mode
+        self.print_column = 0  # Reset print cursor
+        self.last_rnd = 0.0  # Reset last RND value
 
     def execute_new(self):
         """NEW command - clear program and variables"""
@@ -849,6 +853,11 @@ class CoCoBasic:
     
     def execute_cont(self, args):
         return self.executor.execute_cont(args)
+
+    def _execute_cls(self):
+        """CLS — clear screen and reset print column."""
+        self.print_column = 0
+        return [{'type': 'clear_screen'}]
 
     def _execute_tron(self):
         """TRON — enable trace mode."""
@@ -1233,7 +1242,7 @@ class CoCoBasic:
                                      examples=["RESTORE"])
         
         # System commands
-        self.command_registry.register('CLS', lambda args: [{'type': 'clear_screen'}],
+        self.command_registry.register('CLS', lambda args: self._execute_cls(),
                                      category='system',
                                      description="Clear the screen",
                                      syntax="CLS",

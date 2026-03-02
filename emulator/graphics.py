@@ -325,7 +325,7 @@ class BasicGraphics:
 
             if remainder.startswith(','):
                 parts = _split_args(remainder[1:])
-                if parts[0]:
+                if parts and parts[0]:
                     paint_color = self._eval_int(parts[0])
                 if len(parts) > 1 and parts[1]:
                     border_color = self._eval_int(parts[1])

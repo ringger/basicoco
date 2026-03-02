@@ -165,10 +165,22 @@ def fn_int(evaluator, args: List[Any]) -> int:
 
 
 def fn_rnd(evaluator, args: List[Any]) -> float:
-    """RND(n) - return random number between 0 and 1"""
-    _check_args(evaluator, 'RND', args, 1, 'RND(seed)')
-    _to_float(evaluator, args[0], 'RND')  # validate arg is numeric
-    return random.random()
+    """RND(n) - return random number between 0 and 1.
+
+    CoCo semantics:
+      RND(n) where n > 0: new random number (0 < x < 1)
+      RND(0): repeat last random number
+      RND(-n): reseed with n, then return new random number
+    """
+    _check_args(evaluator, 'RND', args, 1, 'RND(n)')
+    n = _to_float(evaluator, args[0], 'RND')
+    if n == 0:
+        return evaluator.last_rnd
+    if n < 0:
+        random.seed(int(n))
+    result = random.random()
+    evaluator.last_rnd = result
+    return result
 
 
 def fn_sgn(evaluator, args: List[Any]) -> int:
