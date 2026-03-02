@@ -274,6 +274,34 @@ def fn_log(evaluator, args: List[Any]) -> float:
 # Conversion Functions
 # ============================================================================
 
+def fn_hex(evaluator, args: List[Any]) -> str:
+    """HEX$(n) - return hexadecimal string representation of number"""
+    _check_args(evaluator, 'HEX$', args, 1, 'HEX$(number)')
+    n = _to_int(evaluator, args[0], 'HEX$')
+    if n < 0 or n > 65535:
+        error = evaluator.error_context.runtime_error(
+            f"HEX$ argument out of range (0-65535): {n}",
+            suggestions=["HEX$ accepts integers from 0 to 65535",
+                         'Example: HEX$(255) returns "FF"',
+                         'Example: HEX$(4096) returns "1000"'])
+        raise ValueError(error.format_detailed())
+    return format(n, 'X')
+
+
+def fn_oct(evaluator, args: List[Any]) -> str:
+    """OCT$(n) - return octal string representation of number"""
+    _check_args(evaluator, 'OCT$', args, 1, 'OCT$(number)')
+    n = _to_int(evaluator, args[0], 'OCT$')
+    if n < 0 or n > 65535:
+        error = evaluator.error_context.runtime_error(
+            f"OCT$ argument out of range (0-65535): {n}",
+            suggestions=["OCT$ accepts integers from 0 to 65535",
+                         'Example: OCT$(255) returns "377"',
+                         'Example: OCT$(8) returns "10"'])
+        raise ValueError(error.format_detailed())
+    return format(n, 'o')
+
+
 def fn_asc(evaluator, args: List[Any]) -> int:
     """ASC(string) - return ASCII code of first character"""
     _check_args(evaluator, 'ASC', args, 1, 'ASC(string)')
@@ -362,6 +390,8 @@ def register_all_functions(registry):
     # Conversion functions
     registry.register('ASC', fn_asc)
     registry.register('VAL', fn_val)
+    registry.register('HEX$', fn_hex)
+    registry.register('OCT$', fn_oct)
 
 
 # ============================================================================

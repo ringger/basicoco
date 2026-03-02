@@ -133,7 +133,8 @@ class CoCoBasic:
     def get_reserved_function_names(self):
         """Return list of reserved function names that cannot be used as variable/array names"""
         return ['LEFT$', 'RIGHT$', 'MID$', 'LEN', 'ABS', 'INT', 'RND', 'SQR',
-                'SIN', 'COS', 'TAN', 'ATN', 'EXP', 'LOG', 'CHR$', 'ASC', 'STR$', 'VAL', 'INKEY$']
+                'SIN', 'COS', 'TAN', 'ATN', 'EXP', 'LOG', 'CHR$', 'ASC', 'STR$', 'VAL',
+                'INKEY$', 'HEX$', 'OCT$']
 
     def check_reserved_name(self, name):
         """Return error response if name is a reserved function, else None."""
