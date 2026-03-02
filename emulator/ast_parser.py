@@ -9,7 +9,7 @@ from typing import Any, List, Optional, Union, Dict
 from dataclasses import dataclass
 from enum import Enum
 import re
-from .error_context import ErrorContextManager
+from .error_context import ErrorContextManager, error_response
 
 
 class NodeType(Enum):
@@ -1567,7 +1567,7 @@ class ASTEvaluator(ASTVisitor):
                     'Example: FOR I=1 TO 10 ... EXIT FOR ... NEXT I'
                 ]
             )
-            return [{'type': 'error', 'message': error.format_detailed()}]
+            return error_response(error)
         return [{'type': 'exit_for_loop'}]
     
     def visit_if_statement(self, node: IfStatementNode) -> Any:
@@ -1597,7 +1597,7 @@ class ASTEvaluator(ASTVisitor):
                             "Check with LIST command to see available lines"
                         ]
                     )
-                    return [{'type': 'error', 'message': error.format_detailed()}]
+                    return error_response(error)
                 return [{'type': 'jump', 'line': line_num}]
             # None means visitor couldn't handle it — fall back to registry
             if result is None:
@@ -1679,7 +1679,7 @@ class ASTEvaluator(ASTVisitor):
                         'Example: PRINT X, "Hello", Y+5'
                     ]
                 )
-                return [{'type': 'error', 'message': error.format_detailed()}]
+                return error_response(error)
 
             # Add separator spacing (not for trailing separator)
             if i < len(node.separators) and i < len(node.expressions) - 1:
@@ -1715,7 +1715,7 @@ class ASTEvaluator(ASTVisitor):
                         'Example: Use DATA instead of SIN'
                     ]
                 )
-                return [{'type': 'error', 'message': error.format_detailed()}]
+                return error_response(error)
             try:
                 indices = [int(self.visit(idx)) for idx in node.target.indices]
             except (ValueError, TypeError) as e:
@@ -1736,7 +1736,7 @@ class ASTEvaluator(ASTVisitor):
                         'Example: Use DATA instead of SIN'
                     ]
                 )
-                return [{'type': 'error', 'message': error.format_detailed()}]
+                return error_response(error)
             self.emulator.variables[var_name] = value
         else:
             var_name = str(node.target).upper()
@@ -1786,7 +1786,7 @@ class ASTEvaluator(ASTVisitor):
                     'Specify at least one variable to input'
                 ]
             )
-            return [{'type': 'error', 'message': error.format_detailed()}]
+            return error_response(error)
 
         # Store multi-variable INPUT state
         self.emulator.input_variables = variables
@@ -1822,7 +1822,7 @@ class ASTEvaluator(ASTVisitor):
                     "Line number must be a positive integer"
                 ]
             )
-            return [{'type': 'error', 'message': error.format_detailed()}]
+            return error_response(error)
 
         if line_num <= 0:
             error = self.emulator.error_context.runtime_error(
@@ -1834,7 +1834,7 @@ class ASTEvaluator(ASTVisitor):
                     "Check with LIST command to see available lines"
                 ]
             )
-            return [{'type': 'error', 'message': error.format_detailed()}]
+            return error_response(error)
 
         return [{'type': 'jump', 'line': line_num}]
 
@@ -1853,7 +1853,7 @@ class ASTEvaluator(ASTVisitor):
                     "Make sure target line contains a subroutine that ends with RETURN"
                 ]
             )
-            return [{'type': 'error', 'message': error.format_detailed()}]
+            return error_response(error)
 
         if line_num <= 0:
             error = self.emulator.error_context.runtime_error(
@@ -1865,7 +1865,7 @@ class ASTEvaluator(ASTVisitor):
                     "Subroutine should end with RETURN statement"
                 ]
             )
-            return [{'type': 'error', 'message': error.format_detailed()}]
+            return error_response(error)
 
         self.emulator.call_stack.append((self.emulator.current_line, self.emulator.current_sub_line))
         return [{'type': 'jump', 'line': line_num}]
@@ -1882,7 +1882,7 @@ class ASTEvaluator(ASTVisitor):
                     "Check that subroutines are called with GOSUB before RETURN"
                 ]
             )
-            return [{'type': 'error', 'message': error.format_detailed()}]
+            return error_response(error)
 
         return_line, return_sub_line = self.emulator.call_stack.pop()
         return [{'type': 'jump_return', 'line': return_line, 'sub_line': return_sub_line}]
@@ -1914,7 +1914,7 @@ class ASTEvaluator(ASTVisitor):
                     "Check that all expressions evaluate to numbers"
                 ]
             )
-            return [{'type': 'error', 'message': error.format_detailed()}]
+            return error_response(error)
 
         # Check if loop should execute at all
         if ((step_val > 0 and start_val > end_val) or

@@ -9,6 +9,8 @@ import glob
 import os
 import time
 
+from .error_context import error_response, text_response
+
 
 class FileManager:
     """Manages file operations for the BASIC interpreter.
@@ -51,7 +53,7 @@ class FileManager:
     def _file_error(self, message, filename, command):
         """Return a formatted file error response list."""
         error = self.emulator.error_context.file_error(message, filename, command)
-        return [{'type': 'error', 'message': error.format_detailed()}]
+        return error_response(error)
 
     def load_program(self, filename):
         """Load a BASIC program from a file"""
@@ -68,7 +70,7 @@ class FileManager:
                     'File extension .bas will be added automatically'
                 ]
             )
-            return [{'type': 'error', 'message': error.format_detailed()}]
+            return error_response(error)
 
         filename = self._ensure_bas_extension(filename)
 
@@ -94,7 +96,7 @@ class FileManager:
                                 emu.expand_line_to_sublines(line_num, code)
                                 lines_loaded += 1
 
-            return [{'type': 'text', 'text': f'LOADED {lines_loaded} LINES FROM {os.path.basename(found_file)}'}]
+            return text_response(f'LOADED {lines_loaded} LINES FROM {os.path.basename(found_file)}')
 
         except FileNotFoundError:
             return self._file_error(f"FILE NOT FOUND: {os.path.basename(filename)}", filename, "LOAD")
@@ -118,7 +120,7 @@ class FileManager:
                     'File extension .bas will be added automatically'
                 ]
             )
-            return [{'type': 'error', 'message': error.format_detailed()}]
+            return error_response(error)
 
         if not emu.program:
             error = emu.error_context.runtime_error(
@@ -129,7 +131,7 @@ class FileManager:
                     'Use LIST command to see current program'
                 ]
             )
-            return [{'type': 'error', 'message': error.format_detailed()}]
+            return error_response(error)
 
         filename = self._ensure_bas_extension(filename)
 
@@ -146,7 +148,7 @@ class FileManager:
                     f.write(f"{line_num} {code}\n")
 
             lines_saved = len(sorted_lines)
-            return [{'type': 'text', 'text': f'SAVED {lines_saved} LINES TO {os.path.basename(filename)}'}]
+            return text_response(f'SAVED {lines_saved} LINES TO {os.path.basename(filename)}')
 
         except PermissionError:
             return self._file_error(f"PERMISSION DENIED: {os.path.basename(filename)}", filename, "SAVE")
@@ -256,7 +258,7 @@ class FileManager:
                     'File extension .bas will be added automatically'
                 ]
             )
-            return [{'type': 'error', 'message': error.format_detailed()}]
+            return error_response(error)
 
         filename = self._ensure_bas_extension(filename)
 
@@ -281,13 +283,13 @@ class FileManager:
         if response in ['Y', 'YES']:
             try:
                 os.remove(filename)
-                return [{'type': 'text', 'text': f'DELETED {os.path.basename(filename)}'}]
+                return text_response(f'DELETED {os.path.basename(filename)}')
             except PermissionError:
                 return self._file_error(f"PERMISSION DENIED: {os.path.basename(filename)}", filename, "KILL")
             except Exception as e:
                 return self._file_error(f"DELETE ERROR: {str(e)}", filename, "KILL")
         else:
-            return [{'type': 'text', 'text': 'DELETE CANCELLED'}]
+            return text_response('DELETE CANCELLED')
 
     def change_directory(self, path):
         """Change current working directory"""
@@ -295,7 +297,7 @@ class FileManager:
 
         if not path:
             current_dir = os.getcwd()
-            return [{'type': 'text', 'text': f'CURRENT DIRECTORY: {current_dir}'}]
+            return text_response(f'CURRENT DIRECTORY: {current_dir}')
 
         try:
             if path == "..":

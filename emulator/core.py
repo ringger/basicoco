@@ -17,7 +17,7 @@ from .expressions import FunctionRegistry
 from .functions import register_all_functions
 from .ast_parser import ASTParser, ASTEvaluator
 from .output_manager import StreamingOutputManager, LegacyOutputAdapter
-from .error_context import ErrorContextManager
+from .error_context import ErrorContextManager, error_response, text_response
 from .file_manager import FileManager
 from .program_executor import ProgramExecutor
 
@@ -133,26 +133,10 @@ class CoCoBasic:
         return self.evaluate_expression(expr, line)
 
     @staticmethod
+    @staticmethod
     def _split_args(args):
         """Split arguments by comma, respecting parentheses."""
-        parts = []
-        current = ""
-        depth = 0
-        for ch in args:
-            if ch == '(':
-                depth += 1
-                current += ch
-            elif ch == ')':
-                depth -= 1
-                current += ch
-            elif ch == ',' and depth == 0:
-                parts.append(current.strip())
-                current = ""
-            else:
-                current += ch
-        if current.strip():
-            parts.append(current.strip())
-        return parts
+        return BasicParser.split_on_delimiter_paren_aware(args, delimiter=',')
 
     def _remove_expanded_lines(self, line_num):
         """Remove all expanded_program entries for a given line number."""
@@ -229,7 +213,7 @@ class CoCoBasic:
                 # In TRS-80 BASIC, this would set string space
                 # For our implementation, we'll just acknowledge it
                 self.variable_manager.clear_variables()
-                return [{'type': 'text', 'text': f'OK'}]
+                return text_response('OK')
             except ValueError:
                 error = self.error_context.syntax_error(
                     "Invalid number in CLEAR command",
@@ -240,7 +224,7 @@ class CoCoBasic:
                         'Check that the number is valid'
                     ]
                 )
-                return [{'type': 'error', 'message': error.format_detailed()}]
+                return error_response(error)
         else:
             # CLEAR with no arguments - just clear variables
             self.variable_manager.clear_variables()
@@ -278,13 +262,11 @@ class CoCoBasic:
             self.expanded_program[(line_num, 0)] = code.strip()
             return
 
-        # Check if this is a single-line control structure that should use AST conversion
-        control_keywords = ['IF', 'FOR', 'WHILE', 'DO']
-        has_control = any(keyword in code.upper() for keyword in control_keywords)
+        # Use AST conversion for control structures with colons OR IF statements (even without colons)
+        has_control = BasicParser.has_control_keyword(code)
         has_colons = ':' in code
         is_if_statement = code.upper().strip().startswith('IF ')
 
-        # Use AST conversion for control structures with colons OR IF statements (even without colons)
         if (has_control and has_colons) or is_if_statement:
             # Try AST conversion for single-line control structures
             try:
@@ -325,11 +307,8 @@ class CoCoBasic:
         if BasicParser.is_rem_line(code):
             return self.process_statement(code)
 
-        code_upper = code.upper().strip()
-
         # Try AST conversion for single-line control structures with colons
-        control_keywords = ['IF ', 'FOR ', 'WHILE ', 'DO:', 'DO ']
-        has_control = any(code_upper.startswith(kw) for kw in control_keywords)
+        has_control = BasicParser.has_control_keyword(code)
         has_colons = ':' in code
 
         if has_control and has_colons:
@@ -373,14 +352,7 @@ class CoCoBasic:
         # Use a temporary line number for immediate mode (negative to avoid conflicts)
         temp_line_num = -1
 
-        # Save current program state completely
-        old_program = self.program.copy()
-        old_expanded_program = self.expanded_program.copy()
-        old_running = self.running
-        old_current_line = self.current_line
-        old_current_sub_line = self.current_sub_line
-        old_for_stack = getattr(self, 'for_stack', []).copy()
-        old_call_stack = getattr(self, 'call_stack', []).copy()
+        saved_state = self.save_execution_state()
 
         try:
             # Clear program and set up temporary program
@@ -413,14 +385,7 @@ class CoCoBasic:
             return filtered_results
 
         finally:
-            # Restore complete program state
-            self.program = old_program
-            self.expanded_program = old_expanded_program
-            self.running = old_running
-            self.current_line = old_current_line
-            self.current_sub_line = old_current_sub_line
-            self.for_stack = old_for_stack
-            self.call_stack = old_call_stack
+            self.restore_execution_state(saved_state)
 
     def _try_ast_execute(self, code):
         """Try to execute a statement via AST. Returns None if not migrated."""
@@ -463,7 +428,7 @@ class CoCoBasic:
                     "IF statements must include THEN keyword"
                 ]
             )
-            return [{'type': 'error', 'message': error.format_detailed()}]
+            return error_response(error)
 
         try:
             ast_node = self.ast_parser.parse_statement(code_stripped)
@@ -485,7 +450,7 @@ class CoCoBasic:
                         'Check BASIC reference for proper syntax'
                     ]
                 )
-                return [{'type': 'error', 'message': error.format_detailed()}]
+                return error_response(error)
             return None  # Fall back to registry
 
     def process_statement(self, code):
@@ -532,7 +497,7 @@ class CoCoBasic:
                     'Check BASIC reference for proper syntax'
                 ]
             )
-            return [{'type': 'error', 'message': error.format_detailed()}]
+            return error_response(error)
         else:
             # Program execution context
             error = self.error_context.syntax_error(
@@ -544,7 +509,7 @@ class CoCoBasic:
                     'Check BASIC reference for proper syntax'
                 ]
             )
-            return [{'type': 'error', 'message': error.format_detailed()}]
+            return error_response(error)
 
     def evaluate_expression(self, expr, line=None):
         """Evaluate a BASIC expression string using the AST parser."""
@@ -571,7 +536,7 @@ class CoCoBasic:
                     "Check that FOR and NEXT statements are properly paired"
                 ]
             )
-            return [{'type': 'error', 'message': error.format_detailed()}]
+            return error_response(error)
         
         for_info = self.for_stack[-1]
         var_name = for_info['var']
@@ -653,7 +618,7 @@ class CoCoBasic:
                     "Both frequency and duration are required"
                 ]
             )
-            return [{'type': 'error', 'message': error.format_detailed()}]
+            return error_response(error)
 
         try:
             frequency = int(self.evaluate_expression(parts[0], self.current_line))
@@ -669,7 +634,7 @@ class CoCoBasic:
                         "Lower numbers = deeper tones, higher numbers = higher pitch"
                     ]
                 )
-                return [{'type': 'error', 'message': error.format_detailed()}]
+                return error_response(error)
                 
             if duration < 1 or duration > 255:
                 error = self.error_context.runtime_error(
@@ -681,7 +646,7 @@ class CoCoBasic:
                         "Try values like 50 (short beep) or 100 (medium beep)"
                     ]
                 )
-                return [{'type': 'error', 'message': error.format_detailed()}]
+                return error_response(error)
             
             return [{'type': 'sound', 'frequency': frequency, 'duration': duration}]
             
@@ -699,7 +664,7 @@ class CoCoBasic:
                     "Check that expressions evaluate to integers"
                 ]
             )
-            return [{'type': 'error', 'message': error.format_detailed()}]
+            return error_response(error)
     
     def execute_randomize(self, args):
         """RANDOMIZE [seed] - seed the random number generator"""
@@ -790,6 +755,36 @@ class CoCoBasic:
         else:
             self.variables[var_name] = typed_value
 
+    def clear_all_stacks(self):
+        """Clear all control-flow stacks."""
+        self.for_stack.clear()
+        self.call_stack.clear()
+        self.if_stack.clear()
+        self.while_stack.clear()
+        self.do_stack.clear()
+
+    def save_execution_state(self):
+        """Snapshot program and execution state for later restoration."""
+        return {
+            'program': self.program.copy(),
+            'expanded_program': self.expanded_program.copy(),
+            'running': self.running,
+            'current_line': self.current_line,
+            'current_sub_line': self.current_sub_line,
+            'for_stack': self.for_stack.copy(),
+            'call_stack': self.call_stack.copy(),
+        }
+
+    def restore_execution_state(self, state):
+        """Restore a previously saved execution state snapshot."""
+        self.program = state['program']
+        self.expanded_program = state['expanded_program']
+        self.running = state['running']
+        self.current_line = state['current_line']
+        self.current_sub_line = state['current_sub_line']
+        self.for_stack = state['for_stack']
+        self.call_stack = state['call_stack']
+
     def clear_interpreter_state(self, clear_program=True):
         """Clear interpreter state - shared function for NEW, LOAD, and other commands"""
         if clear_program:
@@ -798,11 +793,7 @@ class CoCoBasic:
         
         self.variables.clear()
         self.arrays.clear()  # Clear all dimensioned arrays
-        self.for_stack.clear()
-        self.call_stack.clear()
-        self.if_stack.clear()
-        self.while_stack.clear()
-        self.do_stack.clear()
+        self.clear_all_stacks()
         self.data_statements.clear()
         self.data_pointer = 0
         self.running = False
@@ -825,14 +816,14 @@ class CoCoBasic:
     def execute_new(self):
         """NEW command - clear program and variables"""
         self.clear_interpreter_state(clear_program=True)
-        return [{'type': 'text', 'text': 'READY'}]
+        return text_response('READY')
     
     def execute_stop(self, args):
         # STOP command - stop program execution with message (allows CONT)
         self.running = False
         # Store position for CONT command
         self.stopped_position = (self.current_line, self.current_sub_line)
-        return [{'type': 'text', 'text': 'BREAK IN ' + str(self.current_line)}]
+        return text_response('BREAK IN ' + str(self.current_line))
     
     def execute_cont(self, args):
         return self.executor.execute_cont(args)
@@ -908,7 +899,7 @@ class CoCoBasic:
                     "Variables must match DATA statement types"
                 ]
             )
-            return [{'type': 'error', 'message': error.format_detailed()}]
+            return error_response(error)
         
         # Parse variable names (parenthesis-aware for multi-dim arrays)
         var_names = self._split_args(args)
@@ -924,7 +915,7 @@ class CoCoBasic:
                         "Check that READ statements match available DATA"
                     ]
                 )
-                return [{'type': 'error', 'message': error.format_detailed()}]
+                return error_response(error)
             
             # Get the next data item
             line_num, data_value = self.data_statements[self.data_pointer]
@@ -956,7 +947,7 @@ class CoCoBasic:
                     'Ensure parentheses are properly matched'
                 ]
             )
-            return [{'type': 'error', 'message': error.format_detailed()}]
+            return error_response(error)
 
         array_name = var_name[:paren_pos]
         indices_str = var_name[paren_pos + 1:-1]  # contents between outer parens
@@ -981,7 +972,7 @@ class CoCoBasic:
                     'Check that the line number is valid'
                 ]
             )
-            return [{'type': 'error', 'message': error.format_detailed()}]
+            return error_response(error)
         except (IndexError, TypeError, KeyError):
             error = self.error_context.runtime_error(
                 "Array index out of bounds",
@@ -991,7 +982,7 @@ class CoCoBasic:
                     'Use valid positive integer indices'
                 ]
             )
-            return [{'type': 'error', 'message': error.format_detailed()}]
+            return error_response(error)
 
     def execute_restore(self, args):
         # RESTORE command - reset data pointer to beginning
@@ -1014,7 +1005,7 @@ class CoCoBasic:
                 suggestions=["Use ON expression GOTO line1,line2,...",
                            "Use ON expression GOSUB line1,line2,..."]
             )
-            return [{'type': 'error', 'message': error.format_detailed()}]
+            return error_response(error)
         
         # Determine which command and split
         if goto_pos != -1 and (gosub_pos == -1 or goto_pos < gosub_pos):
@@ -1035,7 +1026,7 @@ class CoCoBasic:
                 self.current_line,
                 suggestions=["Provide a numeric expression after ON"]
             )
-            return [{'type': 'error', 'message': error.format_detailed()}]
+            return error_response(error)
         
         # Evaluate the expression
         try:
@@ -1048,7 +1039,7 @@ class CoCoBasic:
                 suggestions=["Ensure the expression evaluates to a number",
                            "Check variable values"]
             )
-            return [{'type': 'error', 'message': error.format_detailed()}]
+            return error_response(error)
         
         # Parse line numbers using expression evaluation
         try:
@@ -1065,7 +1056,7 @@ class CoCoBasic:
                            "Example: ON X GOTO 100,200,300",
                            "Example: ON X GOTO START,LOOP,END"]
             )
-            return [{'type': 'error', 'message': error.format_detailed()}]
+            return error_response(error)
         
         # Check if index is within range (1-based indexing)
         if index < 1 or index > len(line_numbers):
@@ -1093,7 +1084,7 @@ class CoCoBasic:
                 'Expression must evaluate to a number'
             ]
         )
-        return [{'type': 'error', 'message': error.format_detailed()}]
+        return error_response(error)
     
     # INKEY$ functionality moved to functions.py function registry
     # Keyboard buffer management now handled by function registry
@@ -1345,7 +1336,7 @@ class CoCoBasic:
                     'Example: WHILE condition ... WEND'
                 ]
             )
-            return [{'type': 'error', 'message': error.format_detailed()}]
+            return error_response(error)
         
         # Get the current WHILE loop
         while_info = self.while_stack[-1]
@@ -1375,7 +1366,7 @@ class CoCoBasic:
                     'Example: DO ... LOOP or DO ... LOOP WHILE condition'
                 ]
             )
-            return [{'type': 'error', 'message': error.format_detailed()}]
+            return error_response(error)
         
         # Get current DO loop
         do_info = self.do_stack[-1]
@@ -1453,7 +1444,7 @@ class CoCoBasic:
                     'Example: IF condition ... ELSE ... ENDIF'
                 ]
             )
-            return [{'type': 'error', 'message': error.format_detailed()}]
+            return error_response(error)
         
         # Get current IF info
         if_info = self.if_stack[-1]
@@ -1479,7 +1470,7 @@ class CoCoBasic:
                     'Example: IF condition ... ENDIF'
                 ]
             )
-            return [{'type': 'error', 'message': error.format_detailed()}]
+            return error_response(error)
         
         # Pop the current IF from the stack
         self.if_stack.pop()
@@ -1498,7 +1489,7 @@ class CoCoBasic:
                     'Specify which lines to delete'
                 ]
             )
-            return [{'type': 'error', 'message': error.format_detailed()}]
+            return error_response(error)
         
         try:
             # Parse the argument - can be single line or range
@@ -1515,7 +1506,7 @@ class CoCoBasic:
                             'Use hyphen to separate start and end line numbers'
                         ]
                     )
-                    return [{'type': 'error', 'message': error.format_detailed()}]
+                    return error_response(error)
                 
                 start_str = parts[0].strip()
                 end_str = parts[1].strip()
@@ -1530,7 +1521,7 @@ class CoCoBasic:
                             'Cannot have empty line numbers in range'
                         ]
                     )
-                    return [{'type': 'error', 'message': error.format_detailed()}]
+                    return error_response(error)
                 
                 start_line = int(start_str)
                 end_line = int(end_str)
@@ -1545,7 +1536,7 @@ class CoCoBasic:
                             'Check the range specification'
                         ]
                     )
-                    return [{'type': 'error', 'message': error.format_detailed()}]
+                    return error_response(error)
                 
                 # Delete all lines in the range
                 lines_deleted = 0
@@ -1556,9 +1547,9 @@ class CoCoBasic:
                         lines_deleted += 1
                 
                 if lines_deleted == 0:
-                    return [{'type': 'text', 'text': 'NO LINES DELETED'}]
+                    return text_response('NO LINES DELETED')
                 else:
-                    return [{'type': 'text', 'text': f'DELETED {lines_deleted} LINE(S)'}]
+                    return text_response(f'DELETED {lines_deleted} LINE(S)')
                     
             else:
                 # Single line format: DELETE line_number
@@ -1567,9 +1558,9 @@ class CoCoBasic:
                 if line_num in self.program:
                     del self.program[line_num]
                     self._remove_expanded_lines(line_num)
-                    return [{'type': 'text', 'text': f'DELETED LINE {line_num}'}]
+                    return text_response(f'DELETED LINE {line_num}')
                 else:
-                    return [{'type': 'text', 'text': f'LINE {line_num} NOT FOUND'}]
+                    return text_response(f'LINE {line_num} NOT FOUND')
                     
         except ValueError:
             error = self.error_context.syntax_error(
@@ -1581,7 +1572,7 @@ class CoCoBasic:
                     'Check that line numbers are valid'
                 ]
             )
-            return [{'type': 'error', 'message': error.format_detailed()}]
+            return error_response(error)
         except (TypeError, KeyError) as e:
             return [{'type': 'error', 'message': f'DELETE ERROR: {str(e)}'}]
 
@@ -1615,7 +1606,7 @@ class CoCoBasic:
                         'Check that line numbers are valid'
                     ]
                 )
-                return [{'type': 'error', 'message': error.format_detailed()}]
+                return error_response(error)
         
         if new_start < 1 or new_start > 65535:
             error = self.error_context.syntax_error(
@@ -1627,7 +1618,7 @@ class CoCoBasic:
                     'Use valid line number range'
                 ]
             )
-            return [{'type': 'error', 'message': error.format_detailed()}]
+            return error_response(error)
         if increment < 1:
             error = self.error_context.syntax_error(
                 "Increment must be positive",
@@ -1638,18 +1629,18 @@ class CoCoBasic:
                     'Use positive increment value'
                 ]
             )
-            return [{'type': 'error', 'message': error.format_detailed()}]
+            return error_response(error)
         
         # Get sorted list of existing line numbers
         old_lines = sorted(self.program.keys())
         if not old_lines:
-            return [{'type': 'text', 'text': 'NO PROGRAM TO RENUMBER'}]
+            return text_response('NO PROGRAM TO RENUMBER')
         
         # Determine which lines to renumber
         if old_start is not None:
             old_lines = [line for line in old_lines if line >= old_start]
             if not old_lines:
-                return [{'type': 'text', 'text': 'NO LINES TO RENUMBER'}]
+                return text_response('NO LINES TO RENUMBER')
         
         # Create mapping of old to new line numbers
         line_mapping = {}
@@ -1666,7 +1657,7 @@ class CoCoBasic:
                         'Consider renumbering in smaller batches'
                     ]
                 )
-                return [{'type': 'error', 'message': error.format_detailed()}]
+                return error_response(error)
         
         # Check for conflicts with existing lines not being renumbered
         unchanged_lines = set(self.program.keys()) - set(old_lines)
@@ -1695,7 +1686,7 @@ class CoCoBasic:
         for line_num in sorted(self.program.keys()):
             self.expand_line_to_sublines(line_num, self.program[line_num])
         
-        return [{'type': 'text', 'text': f'RENUMBERED {len(line_mapping)} LINES'}]
+        return text_response(f'RENUMBERED {len(line_mapping)} LINES')
 
     @staticmethod
     def _update_line_references(code, line_mapping):
@@ -1739,11 +1730,11 @@ class CoCoBasic:
         if not args:
             # Show current status
             status = "ON" if self.safety_enabled else "OFF"
-            return [{'type': 'text', 'text': f'SAFETY IS {status}'}]
+            return text_response(f'SAFETY IS {status}')
         
         if args == 'ON':
             self.safety_enabled = True
-            return [{'type': 'text', 'text': 'SAFETY ON - ITERATION LIMITS ENABLED'}]
+            return text_response('SAFETY ON - ITERATION LIMITS ENABLED')
         elif args == 'OFF':
             self.safety_enabled = False
             return [{'type': 'text', 'text': 'SAFETY OFF - ITERATION LIMITS DISABLED'},
@@ -1758,5 +1749,5 @@ class CoCoBasic:
                     'Use ON or OFF after SAFETY'
                 ]
             )
-            return [{'type': 'error', 'message': error.format_detailed()}]
+            return error_response(error)
 

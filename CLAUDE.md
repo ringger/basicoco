@@ -36,7 +36,15 @@ INPUT pauses execution by returning `{'type': 'input_request', ...}`. Variable t
 
 ## Statement Splitting
 
-`BasicParser` in `parser.py` owns all colon-splitting logic. Use `split_on_delimiter()` for simple splits and `split_on_delimiter_paren_aware()` when parenthesized groups must be respected. `is_rem_line()` guards against splitting REM comments. Never duplicate this logic — always call through to `BasicParser`.
+`BasicParser` in `parser.py` owns all statement-splitting and argument-splitting logic:
+
+- `split_on_delimiter()` — split on colons (or custom delimiter), respecting quoted strings.
+- `split_on_delimiter_paren_aware()` — same but also respects parenthesized groups. Use with `delimiter=','` for argument splitting (replaces all per-module `_split_args` variants).
+- `is_rem_line()` — guards against splitting REM comments.
+- `has_control_keyword()` — detects IF/FOR/WHILE/DO at the start of a line.
+- `CONTROL_KEYWORDS` — canonical tuple of control-flow keyword prefixes.
+
+Never duplicate this logic — always call through to `BasicParser`.
 
 ### Immediate mode flow
 
@@ -64,5 +72,7 @@ INPUT pauses execution by returning `{'type': 'input_request', ...}`. Variable t
 - System OK messages use `_system_ok()` (tagged with `'source': 'system'`)
 - File-creating tests must use autouse temp directory fixtures — never write to real `programs/`
 - All errors use `error_context.syntax_error()` / `runtime_error()` with 2-3 suggestions
+- Use `error_response(error)` and `text_response(text)` from `error_context` to build response lists — never hand-build `[{'type': 'error', ...}]` or `[{'type': 'text', ...}]`
+- Use `clear_all_stacks()`, `save_execution_state()`, `restore_execution_state()` for stack/state management
 - `source venv/bin/activate` before running anything
 - Tests: `python -m pytest --ignore=tests/integration/test_websocket_completion_signals.py`

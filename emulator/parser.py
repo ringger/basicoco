@@ -11,10 +11,19 @@ import re
 class BasicParser:
     """Parser for BASIC language constructs"""
 
+    # Control-flow keywords that trigger AST conversion when colons are present.
+    CONTROL_KEYWORDS = ('IF ', 'FOR ', 'WHILE ', 'DO:', 'DO ')
+
     @staticmethod
     def is_rem_line(code: str) -> bool:
         """Check if a line is a REM comment (should never be split on colons)."""
         return code.strip().upper().startswith('REM')
+
+    @staticmethod
+    def has_control_keyword(code: str) -> bool:
+        """Check if code starts with a control-flow keyword (IF/FOR/WHILE/DO)."""
+        upper = code.strip().upper()
+        return any(upper.startswith(kw) for kw in BasicParser.CONTROL_KEYWORDS)
 
     @staticmethod
     def split_on_delimiter(text: str, delimiter: str = ':') -> list:

@@ -5,6 +5,8 @@ Handles program execution loop, flow control, and resume logic.
 Extracted from core.py to reduce its size.
 """
 
+from .error_context import error_response, text_response
+
 
 class ProgramExecutor:
     """Drives BASIC program execution: RUN, CONT, continue after INPUT/PAUSE.
@@ -217,10 +219,7 @@ class ProgramExecutor:
                     emu.emit_output([item])
                 if item.get('type') == 'error':
                     emu.running = False
-                    emu.call_stack.clear()
-                    emu.for_stack.clear()
-                    emu.while_stack.clear()
-                    emu.do_stack.clear()
+                    emu.clear_all_stacks()
                     return current_pos_index, 'stop'
 
         return current_pos_index + 1, 'next'
@@ -287,7 +286,7 @@ class ProgramExecutor:
                     'Use LOAD "filename" to load a program from disk'
                 ]
             )
-            return [{'type': 'error', 'message': error.format_detailed()}]
+            return error_response(error)
 
         # Clear variables and arrays but keep program (like authentic BASIC)
         if clear_variables:
@@ -324,7 +323,7 @@ class ProgramExecutor:
                     'Use CONT only after STOP or error interruption'
                 ]
             )
-            return [{'type': 'error', 'message': error.format_detailed()}]
+            return error_response(error)
 
         # Clear pause continuation state if that's why we're continuing
         if hasattr(emu, 'waiting_for_pause_continuation') and emu.waiting_for_pause_continuation:
@@ -345,7 +344,7 @@ class ProgramExecutor:
                     'Use RUN to start the program from the beginning'
                 ]
             )
-            return [{'type': 'error', 'message': error.format_detailed()}]
+            return error_response(error)
 
         output = self._execute_statements_loop(all_positions, start_index)
         if not emu.waiting_for_input and not emu.waiting_for_pause_continuation:
@@ -365,7 +364,7 @@ class ProgramExecutor:
                     'Run a new program with RUN command'
                 ]
             )
-            return [{'type': 'error', 'message': error.format_detailed()}]
+            return error_response(error)
 
         stopped_line, stopped_sub_line = emu.stopped_position
 
@@ -381,7 +380,7 @@ class ProgramExecutor:
 
         if continue_pos is None:
             emu.running = False
-            return [{'type': 'text', 'text': 'READY'}]
+            return text_response('READY')
 
         output = self._execute_statements_loop(all_positions, continue_pos)
         emu.running = False

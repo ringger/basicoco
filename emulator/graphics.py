@@ -8,6 +8,7 @@ Extracted from the main CoCoBasic class for better organization.
 
 from .parser import BasicParser
 from .commands import CommandRegistry
+from .error_context import error_response
 
 
 def _graphics_command(command_name):
@@ -54,7 +55,7 @@ class BasicGraphics:
         """Create a standardized syntax error response list."""
         error = self.emulator.error_context.syntax_error(
             message, self.emulator.current_line, suggestions=suggestions)
-        return [{'type': 'error', 'message': error.format_detailed()}]
+        return error_response(error)
 
     def _require_graphics_mode(self):
         """Return error response if not in graphics mode, else None."""
@@ -103,28 +104,10 @@ class BasicGraphics:
                     return i
         return -1
     
-    def _split_arguments_respecting_parentheses(self, args):
-        """Split arguments by comma, respecting parentheses"""
-        parts = []
-        current_part = ""
-        paren_depth = 0
-        
-        for char in args:
-            if char == '(':
-                paren_depth += 1
-                current_part += char
-            elif char == ')':
-                paren_depth -= 1
-                current_part += char
-            elif char == ',' and paren_depth == 0:
-                parts.append(current_part.strip())
-                current_part = ""
-            else:
-                current_part += char
-        
-        if current_part.strip():
-            parts.append(current_part.strip())
-        return parts
+    @staticmethod
+    def _split_arguments_respecting_parentheses(args):
+        """Split arguments by comma, respecting parentheses."""
+        return BasicParser.split_on_delimiter_paren_aware(args, delimiter=',')
     
     @_graphics_command('PMODE')
     def execute_pmode(self, args):

@@ -6,6 +6,7 @@ and process_statement.
 """
 
 import pytest
+from emulator.error_context import error_response, text_response
 
 
 class TestProcessCommandRouting:
@@ -201,3 +202,75 @@ class TestProcessStatementDispatch:
     def test_whitespace_only_returns_empty(self, basic):
         result = basic.process_statement('   ')
         assert result == []
+
+
+class TestResponseBuilders:
+    """Test error_response and text_response helpers"""
+
+    def test_error_response_format(self, basic):
+        error = basic.error_context.syntax_error("TEST ERROR")
+        result = error_response(error)
+        assert len(result) == 1
+        assert result[0]['type'] == 'error'
+        assert 'TEST ERROR' in result[0]['message']
+
+    def test_text_response_format(self):
+        result = text_response('HELLO')
+        assert result == [{'type': 'text', 'text': 'HELLO'}]
+
+    def test_text_response_empty_string(self):
+        result = text_response('')
+        assert result == [{'type': 'text', 'text': ''}]
+
+
+class TestStateManagement:
+    """Test save/restore execution state and clear_all_stacks"""
+
+    def test_clear_all_stacks(self, basic):
+        basic.for_stack.append({'var': 'I'})
+        basic.call_stack.append({'line': 10})
+        basic.if_stack.append({'condition_met': True})
+        basic.while_stack.append({'line': 20})
+        basic.do_stack.append({'line': 30})
+
+        basic.clear_all_stacks()
+
+        assert len(basic.for_stack) == 0
+        assert len(basic.call_stack) == 0
+        assert len(basic.if_stack) == 0
+        assert len(basic.while_stack) == 0
+        assert len(basic.do_stack) == 0
+
+    def test_save_restore_execution_state(self, basic):
+        """save/restore should preserve program, stacks, and position"""
+        basic.process_command('10 PRINT "A"')
+        basic.process_command('20 PRINT "B"')
+        basic.for_stack.append({'var': 'I'})
+        basic.current_line = 10
+        basic.running = True
+
+        state = basic.save_execution_state()
+
+        # Mutate everything
+        basic.program.clear()
+        basic.expanded_program.clear()
+        basic.for_stack.clear()
+        basic.current_line = 99
+        basic.running = False
+
+        basic.restore_execution_state(state)
+
+        assert 10 in basic.program
+        assert 20 in basic.program
+        assert len(basic.for_stack) == 1
+        assert basic.current_line == 10
+        assert basic.running is True
+
+    def test_save_restore_does_not_share_references(self, basic):
+        """Saved state should be independent copies"""
+        basic.for_stack.append({'var': 'I'})
+        state = basic.save_execution_state()
+
+        basic.for_stack.append({'var': 'J'})
+
+        assert len(state['for_stack']) == 1  # Saved copy unaffected

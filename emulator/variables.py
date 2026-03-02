@@ -7,6 +7,8 @@ Extracted from the main CoCoBasic class for better organization.
 """
 
 import re
+from .parser import BasicParser
+from .error_context import error_response
 
 
 class VariableManager:
@@ -35,25 +37,10 @@ class VariableManager:
                         'Specify at least one array to dimension'
                     ]
                 )
-                return [{'type': 'error', 'message': error.format_detailed()}]
+                return error_response(error)
             
-            # Parse comma-separated array declarations, but be careful with parentheses
-            array_defs = []
-            current_def = ""
-            paren_count = 0
-            
-            for char in args:
-                current_def += char
-                if char == '(':
-                    paren_count += 1
-                elif char == ')':
-                    paren_count -= 1
-                elif char == ',' and paren_count == 0:
-                    array_defs.append(current_def[:-1].strip())  # Exclude the comma
-                    current_def = ""
-            
-            if current_def.strip():
-                array_defs.append(current_def.strip())
+            # Parse comma-separated array declarations, respecting parentheses
+            array_defs = BasicParser.split_on_delimiter_paren_aware(args, delimiter=',')
             
             for array_def in array_defs:
                 array_def = array_def.strip()
@@ -70,7 +57,7 @@ class VariableManager:
                             'Array name must be followed by parentheses with dimensions'
                         ]
                     )
-                    return [{'type': 'error', 'message': error.format_detailed()}]
+                    return error_response(error)
 
                 array_name = array_def[:paren_pos].strip().upper()
                 dimensions_str = array_def[paren_pos + 1:-1].strip()
@@ -85,7 +72,7 @@ class VariableManager:
                             'Array name and dimensions are required'
                         ]
                     )
-                    return [{'type': 'error', 'message': error.format_detailed()}]
+                    return error_response(error)
 
                 # Check if array name conflicts with reserved function names
                 if array_name in self.emulator.get_reserved_function_names():
@@ -98,7 +85,7 @@ class VariableManager:
                             'Example: Use DATA instead of SIN'
                         ]
                     )
-                    return [{'type': 'error', 'message': error.format_detailed()}]
+                    return error_response(error)
                 
                 # Parse dimensions (comma-separated numbers)
                 try:
@@ -115,7 +102,7 @@ class VariableManager:
                                     'Use positive integers for array sizes'
                                 ]
                             )
-                            return [{'type': 'error', 'message': error.format_detailed()}]
+                            return error_response(error)
                         dimensions.append(dim_value)
                     
                     # Check if array is already dimensioned (after syntax validation)
@@ -128,7 +115,7 @@ class VariableManager:
                                 'Choose a different array name'
                             ]
                         )
-                        return [{'type': 'error', 'message': error.format_detailed()}]
+                        return error_response(error)
                     
                     # Create multi-dimensional array initialized to 0 or ""
                     # Note: Color Computer BASIC arrays - DIM A(10) creates indices 0-10 (11 elements)
@@ -150,7 +137,7 @@ class VariableManager:
                             'Check that all variables in dimensions are defined'
                         ]
                     )
-                    return [{'type': 'error', 'message': error.format_detailed()}]
+                    return error_response(error)
             
             return []  # DIM doesn't produce output
         except Exception as e:
@@ -162,7 +149,7 @@ class VariableManager:
                     'Ensure all expressions are valid'
                 ]
             )
-            return [{'type': 'error', 'message': error.format_detailed()}]
+            return error_response(error)
     
     def get_array_element(self, array_name, indices):
         """Get value from array element using nested array structure"""

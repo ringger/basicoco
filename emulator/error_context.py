@@ -373,3 +373,16 @@ def file_error(message: str, filename: str, line: Optional[int] = None) -> Dict[
     """Create a file error in legacy format"""
     enhanced_message = enhance_error_message(f"{message}: {filename}", line)
     return create_legacy_error(enhanced_message)
+
+
+# ── Response builder helpers ──────────────────────────────────────────
+# Use these instead of hand-building response dicts.
+
+def error_response(error: 'BasicError') -> List[Dict[str, Any]]:
+    """Build a standard error response list from a BasicError."""
+    return [{'type': 'error', 'message': error.format_detailed()}]
+
+
+def text_response(text: str) -> List[Dict[str, Any]]:
+    """Build a standard text response list."""
+    return [{'type': 'text', 'text': text}]

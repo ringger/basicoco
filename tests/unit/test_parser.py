@@ -187,6 +187,40 @@ class TestExpandLineToSublines:
         assert expanded[(10, 1)] == 'B = 10'
 
 
+class TestHasControlKeyword:
+    """Test BasicParser.has_control_keyword"""
+
+    def test_if_detected(self):
+        assert BasicParser.has_control_keyword('IF X=1 THEN PRINT "Y"') is True
+
+    def test_for_detected(self):
+        assert BasicParser.has_control_keyword('FOR I = 1 TO 10') is True
+
+    def test_while_detected(self):
+        assert BasicParser.has_control_keyword('WHILE X < 5') is True
+
+    def test_do_with_colon(self):
+        assert BasicParser.has_control_keyword('DO: X=X+1: LOOP') is True
+
+    def test_do_with_space(self):
+        assert BasicParser.has_control_keyword('DO WHILE X < 5') is True
+
+    def test_case_insensitive(self):
+        assert BasicParser.has_control_keyword('for i = 1 to 3') is True
+
+    def test_print_not_detected(self):
+        assert BasicParser.has_control_keyword('PRINT "HELLO"') is False
+
+    def test_dim_not_detected(self):
+        assert BasicParser.has_control_keyword('DIM A(5)') is False
+
+    def test_empty_not_detected(self):
+        assert BasicParser.has_control_keyword('') is False
+
+    def test_leading_spaces(self):
+        assert BasicParser.has_control_keyword('  IF X THEN Y') is True
+
+
 class TestCoreExpandLineToSublines:
     """Test the core.py expand_line_to_sublines method (which adds REM guards and AST conversion)"""
 
