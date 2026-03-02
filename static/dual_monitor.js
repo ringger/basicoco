@@ -50,7 +50,13 @@ class DisplayManager {
                 this.graphicsDisplay.preset(output.x, output.y);
                 break;
             case 'line':
-                this.graphicsDisplay.drawLine(output.x1, output.y1, output.x2, output.y2, output.color);
+                if (output.box_type === 'BF') {
+                    this.graphicsDisplay.drawFilledBox(output.x1, output.y1, output.x2, output.y2, output.color);
+                } else if (output.box_type === 'B') {
+                    this.graphicsDisplay.drawBox(output.x1, output.y1, output.x2, output.y2, output.color);
+                } else {
+                    this.graphicsDisplay.drawLine(output.x1, output.y1, output.x2, output.y2, output.color);
+                }
                 break;
             case 'circle':
                 console.log(`CIRCLE: x=${output.x}, y=${output.y}, radius=${output.radius}, color=${output.color}`);
@@ -770,9 +776,37 @@ class GraphicsDisplay {
         }
     }
     
+    drawBox(x1, y1, x2, y2, color = null) {
+        // Draw rectangle outline using four lines
+        this.drawLine(x1, y1, x2, y1, color);  // top
+        this.drawLine(x2, y1, x2, y2, color);  // right
+        this.drawLine(x2, y2, x1, y2, color);  // bottom
+        this.drawLine(x1, y2, x1, y1, color);  // left
+    }
+
+    drawFilledBox(x1, y1, x2, y2, color = null) {
+        if (this.graphicsMode === 0) return;
+
+        const res = this.pmodeResolutions[this.graphicsMode];
+        const fillColor = color !== null ? this.colors[color % this.colors.length] : this.currentColor;
+
+        const minX = Math.min(x1, x2);
+        const maxX = Math.max(x1, x2);
+        const minY = Math.min(y1, y2);
+        const maxY = Math.max(y1, y2);
+
+        this.ctx.fillStyle = fillColor;
+        this.ctx.fillRect(
+            minX * res.pixelWidth,
+            minY * res.pixelHeight,
+            (maxX - minX + 1) * res.pixelWidth,
+            (maxY - minY + 1) * res.pixelHeight
+        );
+    }
+
     drawCircle(x, y, radius, color = null) {
         if (this.graphicsMode === 0) return;
-        
+
         const res = this.pmodeResolutions[this.graphicsMode];
         const circleColor = color !== null ? this.colors[color % this.colors.length] : this.currentColor;
         

@@ -179,3 +179,69 @@ class TestLineCoordinatePairSyntax:
         assert line_item['y1'] == 20
         assert line_item['x2'] == 60
         assert line_item['y2'] == 70
+
+
+class TestLineBoxModes:
+    """Test LINE command with B (box) and BF (filled box) modifiers."""
+
+    def _setup_graphics(self, basic):
+        basic.process_command('PMODE 4,1')
+
+    def _get_line_item(self, result):
+        return next(item for item in result if item.get('type') == 'line')
+
+    def test_box_with_pset(self, basic, helpers):
+        self._setup_graphics(basic)
+        result = basic.process_command('LINE (10,10)-(50,50), PSET, B')
+        assert helpers.get_error_messages(result) == []
+        item = self._get_line_item(result)
+        assert item['box_type'] == 'B'
+        assert item['mode'] == 'PSET'
+
+    def test_filled_box_with_pset(self, basic, helpers):
+        self._setup_graphics(basic)
+        result = basic.process_command('LINE (10,10)-(50,50), PSET, BF')
+        assert helpers.get_error_messages(result) == []
+        item = self._get_line_item(result)
+        assert item['box_type'] == 'BF'
+
+    def test_box_with_color(self, basic, helpers):
+        self._setup_graphics(basic)
+        result = basic.process_command('LINE (10,10)-(50,50), 3, B')
+        assert helpers.get_error_messages(result) == []
+        item = self._get_line_item(result)
+        assert item['color'] == 3
+        assert item['box_type'] == 'B'
+
+    def test_box_without_mode(self, basic, helpers):
+        """LINE (x1,y1)-(x2,y2), B — box with no explicit mode."""
+        self._setup_graphics(basic)
+        result = basic.process_command('LINE (10,10)-(50,50), B')
+        assert helpers.get_error_messages(result) == []
+        item = self._get_line_item(result)
+        assert item['box_type'] == 'B'
+
+    def test_filled_box_without_mode(self, basic, helpers):
+        """LINE (x1,y1)-(x2,y2), BF — filled box with no explicit mode."""
+        self._setup_graphics(basic)
+        result = basic.process_command('LINE (10,10)-(50,50), BF')
+        assert helpers.get_error_messages(result) == []
+        item = self._get_line_item(result)
+        assert item['box_type'] == 'BF'
+
+    def test_plain_line_has_no_box_type(self, basic, helpers):
+        """Plain LINE without B/BF should have box_type=None."""
+        self._setup_graphics(basic)
+        result = basic.process_command('LINE (10,10)-(50,50)')
+        assert helpers.get_error_messages(result) == []
+        item = self._get_line_item(result)
+        assert item['box_type'] is None
+
+    def test_box_with_spaces_around_dash(self, basic, helpers):
+        self._setup_graphics(basic)
+        result = basic.process_command('LINE (10, 10) - (50, 50), PSET, B')
+        assert helpers.get_error_messages(result) == []
+        item = self._get_line_item(result)
+        assert item['box_type'] == 'B'
+        assert item['x1'] == 10
+        assert item['x2'] == 50

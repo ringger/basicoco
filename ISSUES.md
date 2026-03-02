@@ -1,22 +1,19 @@
 # BasiCoCo Issues
 
-## Open
+## Not Yet Implemented (from Extended Color BASIC)
 
-### Not Yet Implemented (from Extended Color BASIC)
-
-Prioritized by how often real BASIC programs need them.
+Prioritized by how often real CoCo BASIC programs need them.
 
 **High — commonly used in programs:**
-- [x] SGN — sign function
-- [x] RANDOMIZE — seed random number generator
+- [x] LINE BOX/BF — `LINE (x1,y1)-(x2,y2), color, B` (box) and `BF` (filled box)
+- [ ] HEX$ — hex string conversion (display, debugging, base converter programs)
 - [ ] ON ERROR GOTO — error trapping (robust programs depend on this)
-- [ ] HEX$ — hex string conversion (frequently used for display/debugging)
-- [ ] TIMER — system timer (games, benchmarks, delays)
+- [ ] TIMER — system timer function (games, benchmarks, delays)
 
 **Medium — useful but less common:**
 - [ ] TRON/TROFF — trace on/off for debugging (helpful for learners)
-- [ ] OPEN/CLOSE — file I/O (sequential file access)
-- [ ] PCLEAR — clear graphics pages (graphics programs may need it)
+- [ ] OPEN/CLOSE/PRINT#/INPUT# — sequential file I/O
+- [ ] PCLEAR — allocate graphics pages
 - [ ] PPOINT — read pixel color (collision detection in games)
 - [ ] OCT$ — octal string conversion
 
@@ -30,33 +27,16 @@ Prioritized by how often real BASIC programs need them.
 - [ ] EXEC — execute machine language (no-op or educational stub)
 - [ ] USR — user-defined machine language function (no-op or educational stub)
 
-### Refactoring Opportunities
+## Known Behavioral Limitations
+
+- GOTO out of a multi-line IF block leaves a stale `if_stack` entry (cleared on next RUN). This matches real CoCo behavior where GOTO from structured blocks is undefined.
+- PAINT requires `PAINT(x,y),color` syntax — color is mandatory, unlike some BASIC variants where it defaults.
+- DRAW supports basic turtle commands (U/D/L/R/E/F/G/H/M/B/N/S/C) but not angle rotation (A command) or substrings (X command).
+- Numbers print with CoCo-style spacing (leading space for positive, trailing space) but comma-zone alignment (16-column zones) is not implemented.
+
+## Refactoring Opportunities
 
 Ordered by dependency and impact. AST migration depends on the split.
 
-1. [ ] Split ast_parser.py (1925 lines) into three modules: `ast_nodes.py` (node classes + enums, ~240 lines), `ast_parser.py` (parser, ~1090 lines), `ast_evaluator.py` (visitor + evaluator, ~575 lines). Only 3 consumers import from it. Clean separation of concerns. Do this before further AST migration to keep files manageable.
-2. [ ] Migrate remaining registry commands to AST — SOUND, DIM, READ, ON GOTO/GOSUB, and graphics commands (PMODE, SCREEN, COLOR, CIRCLE, PAINT, GET, PUT) currently use string-based argument splitting with `_split_args()` before passing to `evaluate_expression()`. Full AST migration would add node types, parser rules, and evaluator visitors for each, eliminating structural string parsing entirely. Currently FOR, IF, PRINT, LET, GOTO, GOSUB, RETURN, INPUT, END are AST-migrated.
-
-## Completed
-
-### DRY Refactoring (March 2026)
-
-- [x] Extract quote-stripping helper in core.py
-- [x] Extract coordinate parsing helper in graphics.py
-- [x] Extract arg validation helper in functions.py
-- [x] Extract graphics mode check helper in graphics.py
-- [x] Extract file error handling helper in core.py
-- [x] Extract filename validation helper in core.py
-- [x] Consolidate path search logic in core.py
-- [x] Consolidate test helpers in conftest.py — already well-consolidated
-- [x] Refactor operator dispatch in ast_parser.py — kept as-is, special logic per operator
-- [x] Consolidate array bounds checking — only 2 locations with different patterns
-
-### Architecture (March 2026)
-
-- [x] Retire ExpressionEvaluator; move AST parser/evaluator onto CoCoBasic
-- [x] Extract shared execution engine (_execute_statements_loop, _handle_flow_control)
-- [x] Consolidate OK message generation via _system_ok()
-- [x] Add _eval_int() and _syntax_error() helpers in graphics.py
-- [x] Add standalone CLI REPL (basicoco.py)
-- [x] Remove dev_tests/ directory
+1. [ ] Split ast_parser.py (1933 lines) into three modules: `ast_nodes.py` (node classes + enums, ~240 lines), `ast_parser.py` (parser, ~1090 lines), `ast_evaluator.py` (visitor + evaluator, ~575 lines). Only 3 consumers import from it. Clean separation of concerns. Do this before further AST migration to keep files manageable.
+2. [ ] Migrate remaining registry commands to AST — SOUND, DIM, READ, ON GOTO/GOSUB, and graphics commands currently use string-based argument splitting with `_split_args()` before passing to `evaluate_expression()`. Full AST migration would add node types, parser rules, and evaluator visitors for each, eliminating structural string parsing entirely. Currently AST-migrated: FOR, IF, PRINT, LET, GOTO, GOSUB, RETURN, INPUT, END, EXIT FOR, WHILE, DO.

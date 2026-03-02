@@ -221,33 +221,36 @@ class BasicGraphics:
         if err:
             return err
 
-        # Parse LINE (x1,y1)-(x2,y2)[,color] or LINE x1,y1,x2,y2[,color]
+        # Parse LINE (x1,y1)-(x2,y2)[,PSET|PRESET|color][,B|BF]
+        # or LINE x1,y1,x2,y2[,color]
         if CommandRegistry.is_coordinate_pair_syntax(args):
-            # Standard syntax: LINE (x1,y1)-(x2,y2)[,PSET|PRESET|color]
-            color_part = None
-            mode = 'PSET'  # default draw mode
-            if ',' in args and args.rfind(',') > args.rfind(')'):
-                line_spec, trailing = args.rsplit(',', 1)
-                trailing = trailing.strip().upper()
-                if trailing in ('PSET', 'PRESET'):
-                    mode = trailing
-                elif trailing:
-                    color_part = trailing
-            else:
-                line_spec = args
+            # Extract coordinate spec and trailing parameters
+            last_paren = args.rfind(')')
+            coord_spec = args[:last_paren + 1]
+            trailing = args[last_paren + 1:].strip().lstrip(',')
+            parts = [p.strip().upper() for p in trailing.split(',') if p.strip()]
 
-            start_coords, end_coords = CommandRegistry.parse_line_coordinates(line_spec)
+            mode = 'PSET'
+            color = None
+            box_type = None
+
+            for part in parts:
+                if part in ('PSET', 'PRESET'):
+                    mode = part
+                elif part in ('B', 'BF'):
+                    box_type = part
+                elif part:
+                    color = self._eval_int(part)
+
+            start_coords, end_coords = CommandRegistry.parse_line_coordinates(coord_spec)
 
             x1 = self._eval_int(start_coords[0].strip())
             y1 = self._eval_int(start_coords[1].strip())
             x2 = self._eval_int(end_coords[0].strip())
             y2 = self._eval_int(end_coords[1].strip())
 
-            color = None
-            if color_part:
-                color = self._eval_int(color_part)
-
-            return [{'type': 'line', 'x1': x1, 'y1': y1, 'x2': x2, 'y2': y2, 'color': color, 'mode': mode}]
+            return [{'type': 'line', 'x1': x1, 'y1': y1, 'x2': x2, 'y2': y2,
+                     'color': color, 'mode': mode, 'box_type': box_type}]
         else:
             # Space-separated syntax: LINE x1,y1,x2,y2[,color]
             parts = self._split_arguments_respecting_parentheses(args)
