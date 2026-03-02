@@ -51,7 +51,7 @@ class TestSingleLineControlStructures:
         result = basic.process_command('FOR I=1 TO 3: PRINT I: NEXT I')
         text_outputs = helpers.get_text_output(result)
 
-        expected_outputs = ['1', '2', '3']
+        expected_outputs = [' 1 ', ' 2 ', ' 3 ']
         assert text_outputs == expected_outputs
         helpers.assert_variable_equals(basic, 'I', 4)  # After loop completion
 
@@ -60,7 +60,7 @@ class TestSingleLineControlStructures:
         result = basic.process_command('FOR X=0 TO 6 STEP 2: PRINT X: NEXT X')
         text_outputs = helpers.get_text_output(result)
 
-        expected_outputs = ['0', '2', '4', '6']
+        expected_outputs = [' 0 ', ' 2 ', ' 4 ', ' 6 ']
         assert text_outputs == expected_outputs
         helpers.assert_variable_equals(basic, 'X', 8)  # After loop completion
 
@@ -72,7 +72,7 @@ class TestSingleLineControlStructures:
         result = basic.process_command('WHILE X<=3: PRINT X: X=X+1: WEND')
         text_outputs = helpers.get_text_output(result)
 
-        expected_outputs = ['1', '2', '3']
+        expected_outputs = [' 1 ', ' 2 ', ' 3 ']
         assert text_outputs == expected_outputs
         helpers.assert_variable_equals(basic, 'X', 4)
 
@@ -84,7 +84,7 @@ class TestSingleLineControlStructures:
         result = basic.process_command('DO: PRINT Y: Y=Y+1: LOOP WHILE Y<=2')
         text_outputs = helpers.get_text_output(result)
 
-        expected_outputs = ['1', '2']
+        expected_outputs = [' 1 ', ' 2 ']
         assert text_outputs == expected_outputs
         helpers.assert_variable_equals(basic, 'Y', 3)
 
@@ -96,7 +96,7 @@ class TestSingleLineControlStructures:
         result = basic.process_command('DO WHILE Z>0: PRINT Z: Z=Z-1: LOOP')
         text_outputs = helpers.get_text_output(result)
 
-        expected_outputs = ['3', '2', '1']
+        expected_outputs = [' 3 ', ' 2 ', ' 1 ']
         assert text_outputs == expected_outputs
         helpers.assert_variable_equals(basic, 'Z', 0)
 
@@ -135,7 +135,7 @@ class TestSingleLineControlStructures:
         results = helpers.execute_program(basic, program)
         text_outputs = helpers.get_text_output(results)
 
-        expected_outputs = ['1', '2', 'DONE']
+        expected_outputs = [' 1 ', ' 2 ', 'DONE']
         assert text_outputs == expected_outputs
 
     def test_program_mode_complex_single_line(self, basic, helpers):
@@ -150,7 +150,7 @@ class TestSingleLineControlStructures:
         text_outputs = helpers.get_text_output(results)
 
         # A accumulates: 1, 3, 6. Should print when A>3 (so 6), then final value
-        assert '6' in text_outputs
+        assert ' 6 ' in text_outputs
         assert any('FINAL:6' in output or ('FINAL:' in output and '6' in output) for output in text_outputs)
 
     def test_error_handling_single_line(self, basic, helpers):
@@ -182,7 +182,7 @@ class TestSingleLineControlStructures:
         text_outputs = helpers.get_text_output(result)
 
         # Should print 1, 2, then exit
-        expected_outputs = ['1', '2']
+        expected_outputs = [' 1 ', ' 2 ']
         assert text_outputs == expected_outputs
         # I should be 3 (the value when EXIT FOR was executed)
         helpers.assert_variable_equals(basic, 'I', 3)
@@ -218,11 +218,11 @@ class TestSingleLineControlStructures:
         # Should see: VALUE:1, MIDDLE, VALUE:3, DONE
         # Should NOT see: VALUE:2 (skipped due to GOTO)
         combined_output = ' '.join(text_outputs)
-        assert 'VALUE:1' in combined_output
+        assert 'VALUE: 1 ' in combined_output
         assert 'MIDDLE' in combined_output
-        assert 'VALUE:3' in combined_output
+        assert 'VALUE: 3 ' in combined_output
         assert 'DONE' in combined_output
-        assert 'VALUE:2' not in combined_output
+        assert 'VALUE: 2 ' not in combined_output
 
     def test_single_line_goto_with_expressions(self, basic, helpers):
         """Test GOTO with variable expressions in single-line contexts"""

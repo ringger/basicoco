@@ -10,7 +10,59 @@ import re
 
 class BasicParser:
     """Parser for BASIC language constructs"""
-    
+
+    @staticmethod
+    def is_rem_line(code: str) -> bool:
+        """Check if a line is a REM comment (should never be split on colons)."""
+        return code.strip().upper().startswith('REM')
+
+    @staticmethod
+    def split_on_delimiter(text: str, delimiter: str = ':') -> list:
+        """Split text on delimiter, respecting quoted strings. Strips parts."""
+        parts = []
+        current = ""
+        in_quotes = False
+        for char in text:
+            if char == '"':
+                in_quotes = not in_quotes
+                current += char
+            elif char == delimiter and not in_quotes:
+                if current.strip():
+                    parts.append(current.strip())
+                current = ""
+            else:
+                current += char
+        if current.strip():
+            parts.append(current.strip())
+        return parts
+
+    @staticmethod
+    def split_on_delimiter_paren_aware(text: str, delimiter: str = ':') -> list:
+        """Like split_on_delimiter but also respects parenthesized groups."""
+        parts = []
+        current = ""
+        in_quotes = False
+        paren_depth = 0
+        for char in text:
+            if char == '"':
+                in_quotes = not in_quotes
+                current += char
+            elif char == '(' and not in_quotes:
+                paren_depth += 1
+                current += char
+            elif char == ')' and not in_quotes:
+                paren_depth -= 1
+                current += char
+            elif char == delimiter and not in_quotes and paren_depth == 0:
+                if current.strip():
+                    parts.append(current.strip())
+                current = ""
+            else:
+                current += char
+        if current.strip():
+            parts.append(current.strip())
+        return parts
+
     @staticmethod
     def parse_line(line):
         """Parse a line to extract line number and code"""
@@ -31,49 +83,15 @@ class BasicParser:
     @staticmethod
     def expand_line_to_sublines(line_num, code, expanded_program):
         """Expand a line containing multiple statements into sublines"""
-        # Split by colons, but be careful about strings
-        statements = BasicParser._split_by_colon_outside_strings(code)
-        
-        # Store each statement as a sub-line
-        for i, statement in enumerate(statements):
-            statement = statement.strip()
-            if statement:
-                expanded_program[(line_num, i)] = statement
-    
-    @staticmethod
-    def _split_by_colon_outside_strings(code):
-        """Split code by colons, but ignore colons inside strings and respect IF/THEN constructs"""
-        # Check if this line contains an IF/THEN construct that starts the line
+        # IF/THEN single-line statements should not be split
         code_upper = code.upper().strip()
-        if_pos = code_upper.find('IF ')
-        then_pos = code_upper.find(' THEN ')
-        
-        # If this line STARTS with an IF/THEN statement, don't split after THEN
-        if if_pos == 0 and then_pos > if_pos:
-            # This line starts with IF/THEN - treat the whole thing as one statement
-            return [code.strip()]
-        
-        # Normal colon splitting for other statements (including FOR loops)
-        statements = []
-        current_statement = ""
-        in_string = False
-        
-        for char in code:
-            if char == '"' and not in_string:
-                in_string = True
-                current_statement += char
-            elif char == '"' and in_string:
-                in_string = False
-                current_statement += char
-            elif char == ':' and not in_string:
-                statements.append(current_statement)
-                current_statement = ""
-            else:
-                current_statement += char
-        
-        # Add the last statement
-        statements.append(current_statement)
-        return statements
+        if code_upper.startswith('IF ') and ' THEN ' in code_upper:
+            expanded_program[(line_num, 0)] = code.strip()
+            return
+
+        statements = BasicParser.split_on_delimiter(code)
+        for i, statement in enumerate(statements):
+            expanded_program[(line_num, i)] = statement
     
     # Removed unused parse_function_arguments method - function argument parsing
     # is now handled by the AST parser and expression evaluator

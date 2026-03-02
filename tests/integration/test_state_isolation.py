@@ -115,8 +115,8 @@ class TestStateIsolation:
         
         # Variables should be shared between main and subroutine
         combined = ' '.join(text_outputs)
-        assert 'SUB A:10' in combined  # A starts as 10 (semicolon concatenates without spaces)
-        assert 'MAIN A:20' in combined  # A modified to 20 in subroutine
+        assert 'SUB A: 10 ' in combined  # A starts as 10; numbers carry spaces
+        assert 'MAIN A: 20 ' in combined  # A modified to 20 in subroutine
         
         # B should exist after return
         helpers.assert_variable_equals(basic, 'B', 30)

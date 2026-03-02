@@ -34,6 +34,10 @@ AST visitors push; registry closing commands pop:
 
 INPUT pauses execution by returning `{'type': 'input_request', ...}`. Variable targets are described by dicts: `{'name': 'V', 'array': True, 'indices': [1]}` or `{'name': 'X', 'array': False}`. After storing the value via `store_input_value(var_desc, value)`, call `continue_program_execution()` to resume.
 
+## Statement Splitting
+
+`BasicParser` in `parser.py` owns all colon-splitting logic. Use `split_on_delimiter()` for simple splits and `split_on_delimiter_paren_aware()` when parenthesized groups must be respected. `is_rem_line()` guards against splitting REM comments. Never duplicate this logic — always call through to `BasicParser`.
+
 ## Naming
 
 - **`process_*`**: internal system (`process_command`, `process_statement`)

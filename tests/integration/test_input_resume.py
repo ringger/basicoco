@@ -164,9 +164,9 @@ class TestInputThenWhileLoop:
             '80 END',
         ]
         text = run_with_inputs(basic, program, ['3'])
-        assert '1' in text
-        assert '2' in text
-        assert '3' in text
+        assert ' 1 ' in text
+        assert ' 2 ' in text
+        assert ' 3 ' in text
         assert 'DONE' in text
 
     def test_input_inside_while(self, basic):
@@ -218,8 +218,8 @@ class TestInputThenExitFor:
             '70 END',
         ]
         text = run_with_inputs(basic, program, ['7', '3', '0'])
-        assert '7' in text
-        assert '3' in text
+        assert ' 7 ' in text
+        assert ' 3 ' in text
         assert 'DONE' in text
 
 
@@ -245,7 +245,7 @@ class TestInputWithArrayVariables:
             '40 END',
         ]
         text = run_with_inputs(basic, program, ['21'])
-        assert '42' in text
+        assert ' 42 ' in text
 
     def test_input_into_array_in_loop(self, basic):
         """The bar-chart pattern: INPUT into array elements inside a FOR loop."""
@@ -282,7 +282,7 @@ class TestInputWithArrayVariables:
             '50 END',
         ]
         text = run_with_inputs(basic, program, ['99'])
-        assert '99' in text
+        assert ' 99 ' in text
 
 
 class TestStoreInputValue:

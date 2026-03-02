@@ -28,7 +28,7 @@ class TestProgramExecutionFlow:
         results = helpers.execute_program(basic, program)
         text_outputs = helpers.get_text_output(results)
         
-        assert '3' in text_outputs
+        assert ' 3 ' in text_outputs
 
     def test_statement_expansion_verification(self, basic, helpers):
         """Test that complex statements are expanded correctly"""
@@ -78,10 +78,10 @@ class TestProgramExecutionFlow:
         
         combined = ' '.join(text_outputs)
         # Should see loop iterations and doubled values (semicolon concatenates without spaces)
-        assert 'LOOP1' in combined
-        assert 'DOUBLE2' in combined
-        assert 'LOOP3' in combined
-        assert 'DOUBLE6' in combined
+        assert 'LOOP 1 ' in combined
+        assert 'DOUBLE 2 ' in combined
+        assert 'LOOP 3 ' in combined
+        assert 'DOUBLE 6 ' in combined
 
     def test_gosub_return_with_multi_statements(self, basic, helpers):
         """Test GOSUB/RETURN with multi-statement lines"""
@@ -133,7 +133,7 @@ class TestProgramExecutionFlow:
         assert '1' in combined
         assert '2' in combined 
         assert '3' in combined
-        assert 'LAST4' in combined  # Semicolon concatenates without spaces
+        assert 'LAST 4 ' in combined  # Semicolon joins; numbers carry spaces
 
     def test_error_handling_across_statements(self, basic, helpers):
         """Test division by zero handling in multi-statement lines"""

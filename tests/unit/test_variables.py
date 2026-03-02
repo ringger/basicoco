@@ -22,21 +22,21 @@ class TestVariables:
         helpers.assert_variable_equals(basic, 'A', 42)
         result = basic.process_command('PRINT A')
         text_output = helpers.get_text_output(result)
-        assert text_output == ['42']
+        assert text_output == [' 42 ']
 
         # Float values
         basic.process_command('B = 3.14')
         helpers.assert_variable_equals(basic, 'B', 3.14)
         result = basic.process_command('PRINT B')
         text_output = helpers.get_text_output(result)
-        assert text_output == ['3.14']
+        assert text_output == [' 3.14 ']
 
         # Negative values
         basic.process_command('C = -7')
         helpers.assert_variable_equals(basic, 'C', -7)
         result = basic.process_command('PRINT C')
         text_output = helpers.get_text_output(result)
-        assert text_output == ['-7']
+        assert text_output == ['-7 ']
 
     def test_string_variables(self, basic, helpers):
         """Test string variable assignment and retrieval"""
@@ -210,7 +210,7 @@ class TestVariables:
         # Test that the functions still work normally after validation
         result = basic.process_command('PRINT LEN("TEST")')
         text_output = helpers.get_text_output(result)
-        assert text_output == ['4']
+        assert text_output == [' 4 ']
 
         result = basic.process_command('PRINT STR$(123)')
         text_output = helpers.get_text_output(result)
@@ -219,7 +219,7 @@ class TestVariables:
         # Test that our valid variables work
         result = basic.process_command('PRINT LENS')
         text_output = helpers.get_text_output(result)
-        assert text_output == ['42']
+        assert text_output == [' 42 ']
 
         result = basic.process_command('PRINT STRINGS$')
         text_output = helpers.get_text_output(result)
@@ -235,33 +235,33 @@ class TestVariables:
         # Test nested mathematical functions
         result = basic.process_command('PRINT SQR(A) + SQR(B)')
         text_output = helpers.get_text_output(result)
-        assert text_output == ['7']  # 3 + 4 = 7
+        assert text_output == [' 7 ']  # 3 + 4 = 7
 
         result = basic.process_command('PRINT ABS(SIN(0)) + ABS(COS(0))')
         text_output = helpers.get_text_output(result)
-        assert text_output == ['1']  # 0 + 1 = 1
+        assert text_output == [' 1 ']  # 0 + 1 = 1
 
         result = basic.process_command('PRINT INT(SQR(A)) * INT(SQR(B))')
         text_output = helpers.get_text_output(result)
-        assert text_output == ['12']  # 3 * 4 = 12
+        assert text_output == [' 12 ']  # 3 * 4 = 12
 
         # Test nested string and conversion functions
         result = basic.process_command('PRINT LEN(STR$(123))')
         text_output = helpers.get_text_output(result)
-        assert text_output == ['4']  # " 123" has 4 chars (with leading space)
+        assert text_output == [' 4 ']  # " 123" has 4 chars (with leading space)
 
         result = basic.process_command('PRINT VAL(STR$(456))')
         text_output = helpers.get_text_output(result)
-        assert text_output == ['456']  # Convert number to string back to number
+        assert text_output == [' 456 ']  # Convert number to string back to number
 
         result = basic.process_command('PRINT ASC(CHR$(65))')
         text_output = helpers.get_text_output(result)
-        assert text_output == ['65']  # Convert to char back to ASCII
+        assert text_output == [' 65 ']  # Convert to char back to ASCII
 
         # Test complex string function nesting
         result = basic.process_command('PRINT LEN(LEFT$(S$, 5))')
         text_output = helpers.get_text_output(result)
-        assert text_output == ['5']  # Length of "HELLO"
+        assert text_output == [' 5 ']  # Length of "HELLO"
 
         result = basic.process_command('PRINT LEFT$(MID$(S$, 7, 5), 3)')
         text_output = helpers.get_text_output(result)
@@ -274,30 +274,30 @@ class TestVariables:
         # Test mathematical expressions with string length
         result = basic.process_command('PRINT LEN(S$) - 5')
         text_output = helpers.get_text_output(result)
-        assert text_output == ['6']  # 11 - 5 = 6
+        assert text_output == [' 6 ']  # 11 - 5 = 6
 
         result = basic.process_command('PRINT SQR(LEN("TEST"))')
         text_output = helpers.get_text_output(result)
-        assert text_output == ['2']  # SQR(4) = 2
+        assert text_output == [' 2 ']  # SQR(4) = 2
 
         # Test deeply nested expressions
         basic.process_command('X = 25')
         result = basic.process_command('PRINT INT(SQR(X)) + LEN(STR$(X))')
         text_output = helpers.get_text_output(result)
-        assert text_output == ['8']  # 5 + 3 = 8 (25 -> " 25" = 3 chars)
+        assert text_output == [' 8 ']  # 5 + 3 = 8 (25 -> " 25" = 3 chars)
 
         # Test complex conditional-like expressions (using mathematical comparisons)
         result = basic.process_command('PRINT ABS(SQR(A) - 3)')
         text_output = helpers.get_text_output(result)
-        assert text_output == ['0']  # |3 - 3| = 0
+        assert text_output == [' 0 ']  # |3 - 3| = 0
 
         result = basic.process_command('PRINT INT(LEN(S$) / 2)')
         text_output = helpers.get_text_output(result)
-        assert text_output == ['5']  # INT(11/2) = INT(5.5) = 5
+        assert text_output == [' 5 ']  # INT(11/2) = INT(5.5) = 5
 
         # Test function chains with variables
         basic.process_command('Y = LEN(S$)')
         result = basic.process_command('PRINT SQR(Y - 2)')
         text_output = helpers.get_text_output(result)
-        assert text_output == ['3']  # SQR(11-2) = SQR(9) = 3
+        assert text_output == [' 3 ']  # SQR(11-2) = SQR(9) = 3
 

@@ -26,7 +26,7 @@ class TestDimCommand:
         basic.process_command('A(5) = 42')
         result = basic.process_command('PRINT A(5)')
         text_output = helpers.get_text_output(result)
-        assert text_output == ['42']
+        assert text_output == [' 42 ']
 
     def test_1d_string_array(self, basic, helpers):
         """Test 1D string array operations"""
@@ -48,7 +48,7 @@ class TestDimCommand:
         basic.process_command('C(2,3) = 99')
         result = basic.process_command('PRINT C(2,3)')
         text_output = helpers.get_text_output(result)
-        assert text_output == ['99']
+        assert text_output == [' 99 ']
 
     def test_multiple_arrays_in_one_dim(self, basic, helpers):
         """Test declaring multiple arrays in one DIM statement"""
@@ -61,7 +61,7 @@ class TestDimCommand:
         basic.process_command('X(3) = 10')
         result = basic.process_command('PRINT X(3)')
         text_output = helpers.get_text_output(result)
-        assert text_output == ['10']
+        assert text_output == [' 10 ']
         
         basic.process_command('Y$(1) = "TEST"')
         result = basic.process_command('PRINT Y$(1)')
@@ -71,7 +71,7 @@ class TestDimCommand:
         basic.process_command('Z(1,1) = 55')
         result = basic.process_command('PRINT Z(1,1)')
         text_output = helpers.get_text_output(result)
-        assert text_output == ['55']
+        assert text_output == [' 55 ']
 
     def test_array_bounds_checking(self, basic, helpers):
         """Test array bounds error handling"""
@@ -105,7 +105,7 @@ class TestDimCommand:
         # Check default values (should be 0 for numeric, empty string for string)
         result = basic.process_command('PRINT NUM(0)')
         text_output = helpers.get_text_output(result)
-        assert text_output == ['0']
+        assert text_output == [' 0 ']
         result = basic.process_command('PRINT STRINGS$(0)')
         text_output = helpers.get_text_output(result)
         assert text_output == ['']
@@ -119,10 +119,10 @@ class TestDimCommand:
         # Use in arithmetic
         result = basic.process_command('PRINT A(1) + A(2)')
         text_output = helpers.get_text_output(result)
-        assert text_output == ['15']
+        assert text_output == [' 15 ']
         result = basic.process_command('PRINT A(1) * 2')
         text_output = helpers.get_text_output(result)
-        assert text_output == ['20']
+        assert text_output == [' 20 ']
 
     def test_array_with_variables_as_indices(self, basic, helpers):
         """Test using variables as array indices"""
@@ -132,16 +132,16 @@ class TestDimCommand:
         
         result = basic.process_command('PRINT A(3)')
         text_output = helpers.get_text_output(result)
-        assert text_output == ['42']
-        
+        assert text_output == [' 42 ']
+
         # Use expression as index
         basic.process_command('J = 2')
         result = basic.process_command('PRINT A(I)')
         text_output = helpers.get_text_output(result)
-        assert text_output == ['42']  # I=3
+        assert text_output == [' 42 ']  # I=3
         result = basic.process_command('PRINT A(J+1)')
         text_output = helpers.get_text_output(result)
-        assert text_output == ['42']  # J+1=3
+        assert text_output == [' 42 ']  # J+1=3
 
     def test_string_array_operations(self, basic, helpers):
         """Test string array specific operations"""
@@ -165,7 +165,7 @@ class TestDimCommand:
         basic.process_command('BIG(99) = 123')
         result = basic.process_command('PRINT BIG(99)')
         text_output = helpers.get_text_output(result)
-        assert text_output == ['123']
+        assert text_output == [' 123 ']
 
     def test_dim_syntax_errors(self, basic, helpers):
         """Test DIM command syntax error handling"""
@@ -214,7 +214,7 @@ class TestDimCommand:
         # Test that the functions still work normally
         result = basic.process_command('PRINT LEN("TEST")')
         text_output = helpers.get_text_output(result)
-        assert text_output == ['4']
+        assert text_output == [' 4 ']
         result = basic.process_command('PRINT STR$(123)')
         text_output = helpers.get_text_output(result)
         assert text_output == [' 123']  # STR$ adds leading space for positive numbers
@@ -223,8 +223,8 @@ class TestDimCommand:
         basic.process_command('LENS(0) = 42')
         result = basic.process_command('PRINT LENS(0)')
         text_output = helpers.get_text_output(result)
-        assert text_output == ['42']
-        
+        assert text_output == [' 42 ']
+
         basic.process_command('STRINGS$(0) = "HELLO"')
         result = basic.process_command('PRINT STRINGS$(0)')
         text_output = helpers.get_text_output(result)

@@ -147,6 +147,6 @@ class TestRecoveryAfterStackErrors:
         ]
         results = helpers.execute_program(basic, program2)
         text = helpers.get_text_output(results)
-        assert '1' in text
-        assert '3' in text
+        assert ' 1 ' in text
+        assert ' 3 ' in text
         assert basic.for_stack == []

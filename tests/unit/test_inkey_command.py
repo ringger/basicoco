@@ -214,21 +214,21 @@ class TestInkeyCommand:
         # Test mathematical functions (should work with parentheses)
         result = basic.process_command('PRINT SQR(N)')
         text_output = helpers.get_text_output(result)
-        assert text_output == ['4']
+        assert text_output == [' 4 ']
         result = basic.process_command('PRINT ABS(-5)')
         text_output = helpers.get_text_output(result)
-        assert text_output == ['5']
+        assert text_output == [' 5 ']
         result = basic.process_command('PRINT INT(3.7)')
         text_output = helpers.get_text_output(result)
-        assert text_output == ['3']
-        
+        assert text_output == [' 3 ']
+
         # Test string functions with proper parentheses
         result = basic.process_command('PRINT LEN(S$)')
         text_output = helpers.get_text_output(result)
-        assert text_output == ['5']
+        assert text_output == [' 5 ']
         result = basic.process_command('PRINT ASC("A")')
         text_output = helpers.get_text_output(result)
-        assert text_output == ['65']
+        assert text_output == [' 65 ']
         result = basic.process_command('PRINT CHR$(65)')
         text_output = helpers.get_text_output(result)
         assert text_output == ['A']
@@ -236,15 +236,15 @@ class TestInkeyCommand:
         # Test functions in expressions with variables
         result = basic.process_command('PRINT SQR(N) + LEN(S$)')
         text_output = helpers.get_text_output(result)
-        assert text_output == ['9']  # 4 + 5 = 9
-        
+        assert text_output == [' 9 ']  # 4 + 5 = 9
+
         # Test nested function syntax
         result = basic.process_command('PRINT LEN(CHR$(65))')
         text_output = helpers.get_text_output(result)
-        assert text_output == ['1']  # Length of "A"
+        assert text_output == [' 1 ']  # Length of "A"
         result = basic.process_command('PRINT ASC(CHR$(66))')
         text_output = helpers.get_text_output(result)
-        assert text_output == ['66']  # Round trip B
+        assert text_output == [' 66 ']  # Round trip B
         
         # Test function calls in different contexts
         basic.process_command('RESULT = SQR(N)')

@@ -23,7 +23,7 @@ class TestComprehensiveProgram:
         assert len(results) > 0
         text_outputs = helpers.get_text_output(results)
         assert "BASIC TEST" in text_outputs
-        assert "5" in text_outputs
+        assert " 5 " in text_outputs
 
     def test_math_and_variables_program(self, basic, helpers):
         """Test program with math operations and variables"""

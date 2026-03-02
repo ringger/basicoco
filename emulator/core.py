@@ -267,6 +267,11 @@ class CoCoBasic:
     
     def expand_line_to_sublines(self, line_num, code):
         """Expand line using BasicParser or AST converter for single-line control structures"""
+        # REM lines should never be split or AST-converted
+        if BasicParser.is_rem_line(code):
+            self.expanded_program[(line_num, 0)] = code.strip()
+            return
+
         # Check if this is a single-line control structure that should use AST conversion
         control_keywords = ['IF', 'FOR', 'WHILE', 'DO']
         has_control = any(keyword in code.upper() for keyword in control_keywords)
@@ -306,27 +311,9 @@ class CoCoBasic:
 
     def split_statements(self, code):
         """Split a line into statements on colons, but respect quoted strings"""
-        statements = []
-        current_statement = ""
-        in_quotes = False
-
-        # Simple colon splitting that respects quoted strings
-        # Control structure handling is now done by AST converter
-        for char in code:
-            if char == '"':
-                in_quotes = not in_quotes
-                current_statement += char
-            elif char == ':' and not in_quotes:
-                if current_statement.strip():
-                    statements.append(current_statement.strip())
-                current_statement = ""
-            else:
-                current_statement += char
-
-        if current_statement.strip():
-            statements.append(current_statement.strip())
-
-        return statements
+        if BasicParser.is_rem_line(code):
+            return [code.strip()]
+        return BasicParser.split_on_delimiter(code)
     
     
     def process_line(self, code):

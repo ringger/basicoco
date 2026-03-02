@@ -7,6 +7,7 @@ multi-line equivalents using the AST parser infrastructure.
 
 import re
 from typing import List, Optional, Union
+from .parser import BasicParser
 from .ast_parser import (
     ASTNode, IfStatementNode, ForStatementNode, WhileStatementNode,
     DoLoopStatementNode, ExitForStatementNode, EndStatementNode, GotoStatementNode, PrintStatementNode,
@@ -453,7 +454,7 @@ def _parse_ast_if_statement(statement: str, parser, converter) -> Optional[List[
         else_statements = []
 
         # Split by colons but respect quotes and nested structures
-        body_parts = _split_respecting_quotes_and_structures(body_part, ':')
+        body_parts = BasicParser.split_on_delimiter_paren_aware(body_part)
 
         # Parse the entire THEN body as structured statements using AST parser
         # Split by ELSE first to separate THEN and ELSE parts
@@ -473,7 +474,7 @@ def _parse_ast_if_statement(statement: str, parser, converter) -> Optional[List[
                 body_statements = [then_ast]
             except Exception:
                 # Fallback to colon splitting for complex cases
-                then_parts = _split_respecting_quotes_and_structures(then_body, ':')
+                then_parts = BasicParser.split_on_delimiter_paren_aware(then_body)
                 for part in then_parts:
                     part_stripped = part.strip()
                     if part_stripped:
@@ -486,7 +487,7 @@ def _parse_ast_if_statement(statement: str, parser, converter) -> Optional[List[
                 else_statements = [else_ast]
             except Exception:
                 # Fallback to colon splitting for complex cases
-                else_parts = _split_respecting_quotes_and_structures(else_body, ':')
+                else_parts = BasicParser.split_on_delimiter_paren_aware(else_body)
                 for part in else_parts:
                     part_stripped = part.strip()
                     if part_stripped:
@@ -535,7 +536,7 @@ def _parse_ast_for_statement(statement: str, parser, converter) -> Optional[List
         step_node = parser.parse_expression(step_expr) if step_expr != "1" else None
 
         # Parse body statements (excluding any NEXT statement)
-        body_parts = _split_respecting_quotes_and_structures(body_part, ':')
+        body_parts = BasicParser.split_on_delimiter_paren_aware(body_part)
         body_statements = []
 
         for part in body_parts:
@@ -575,7 +576,7 @@ def _parse_ast_while_statement(statement: str, parser, converter) -> Optional[Li
         condition_node = parser.parse_expression(condition_part)
 
         # Parse body statements (excluding any WEND statement)
-        body_parts = _split_respecting_quotes_and_structures(body_part, ':')
+        body_parts = BasicParser.split_on_delimiter_paren_aware(body_part)
         body_statements = []
 
         for part in body_parts:
@@ -628,7 +629,7 @@ def _parse_ast_do_statement(statement: str, parser, converter) -> Optional[List[
             condition_position = 'TOP'
 
         # Parse body statements and look for LOOP statement
-        body_parts = _split_respecting_quotes_and_structures(body_part, ':')
+        body_parts = BasicParser.split_on_delimiter_paren_aware(body_part)
         body_statements = []
 
         for part in body_parts:
@@ -682,7 +683,7 @@ def _parse_single_line_if(statement: str, parser, converter) -> Optional[List[st
     statements = ['IF ' + condition_part + ' THEN']
 
     # Parse the body - could contain multiple statements
-    body_parts = _split_respecting_quotes(rest, ':')
+    body_parts = BasicParser.split_on_delimiter(rest)
 
     # Check for ELSE in the body
     for i, part in enumerate(body_parts):
@@ -723,7 +724,7 @@ def _parse_single_line_for(statement: str, parser, converter) -> Optional[List[s
     statements = [for_header]
 
     # Process body statements
-    body_parts = _split_respecting_quotes(body, ':')
+    body_parts = BasicParser.split_on_delimiter(body)
 
     # Find NEXT statement
     next_found = False
@@ -766,7 +767,7 @@ def _parse_single_line_while(statement: str, parser, converter) -> Optional[List
     statements = [while_header]
 
     # Process body statements
-    body_parts = _split_respecting_quotes(body, ':')
+    body_parts = BasicParser.split_on_delimiter(body)
 
     # Find WEND statement
     wend_found = False
@@ -809,7 +810,7 @@ def _parse_single_line_do(statement: str, parser, converter) -> Optional[List[st
     statements = [do_header]
 
     # Process body statements
-    body_parts = _split_respecting_quotes(body, ':')
+    body_parts = BasicParser.split_on_delimiter(body)
 
     # Find LOOP statement
     loop_found = False
@@ -830,36 +831,6 @@ def _parse_single_line_do(statement: str, parser, converter) -> Optional[List[st
     return statements
 
 
-def _split_respecting_quotes_and_structures(text: str, delimiter: str) -> List[str]:
-    """Split text by delimiter, respecting quoted strings and nested structures"""
-    parts = []
-    current = ""
-    in_quotes = False
-    paren_count = 0
-
-    for char in text:
-        if char == '"':
-            in_quotes = not in_quotes
-            current += char
-        elif char == '(' and not in_quotes:
-            paren_count += 1
-            current += char
-        elif char == ')' and not in_quotes:
-            paren_count -= 1
-            current += char
-        elif char == delimiter and not in_quotes and paren_count == 0:
-            if current.strip():
-                parts.append(current)
-                current = ""
-        else:
-            current += char
-
-    if current.strip():
-        parts.append(current)
-
-    return parts
-
-
 def _parse_body_statement(statement: str, parser) -> ASTNode:
     """Parse a single body statement and return appropriate AST node"""
     if not statement.strip():
@@ -877,24 +848,3 @@ def _parse_body_statement(statement: str, parser) -> ASTNode:
             return LiteralNode(statement)
 
 
-def _split_respecting_quotes(text: str, delimiter: str) -> List[str]:
-    """Split text by delimiter, but respect quoted strings"""
-    parts = []
-    current = ""
-    in_quotes = False
-
-    for char in text:
-        if char == '"':
-            in_quotes = not in_quotes
-            current += char
-        elif char == delimiter and not in_quotes:
-            if current:
-                parts.append(current)
-                current = ""
-        else:
-            current += char
-
-    if current:
-        parts.append(current)
-
-    return parts

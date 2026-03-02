@@ -103,17 +103,17 @@ class TestCommandParsing:
         # Test basic precedence
         result = basic.process_command('PRINT 2 + 3 * 4')
         text_output = helpers.get_text_output(result)
-        assert text_output == ['14']  # Should be 14, not 20
+        assert text_output == [' 14 ']  # Should be 14, not 20
         result = basic.process_command('PRINT (2 + 3) * 4')
         text_output = helpers.get_text_output(result)
-        assert text_output == ['20']  # Should be 20
-        
+        assert text_output == [' 20 ']  # Should be 20
+
         # Test with variables
         basic.variables['X'] = 2
         basic.variables['Y'] = 3
         result = basic.process_command('PRINT X + Y * 4')
         text_output = helpers.get_text_output(result)
-        assert text_output == ['14']
+        assert text_output == [' 14 ']
 
     def test_string_vs_numeric_contexts(self, basic, helpers):
         """Test parsing in string vs numeric contexts"""
@@ -121,8 +121,8 @@ class TestCommandParsing:
         basic.variables['A'] = 5
         result = basic.process_command('PRINT A + 10')
         text_output = helpers.get_text_output(result)
-        assert text_output == ['15']
-        
+        assert text_output == [' 15 ']
+
         # String context
         basic.variables['A$'] = 'HELLO'
         result = basic.process_command('PRINT A$')
@@ -151,10 +151,10 @@ class TestCommandParsing:
         basic.variables['X'] = 10
         result = basic.process_command('PRINT X+5')
         text_output = helpers.get_text_output(result)
-        assert text_output == ['15']
+        assert text_output == [' 15 ']
         result = basic.process_command('PRINT X + 5')
         text_output = helpers.get_text_output(result)
-        assert text_output == ['15']
+        assert text_output == [' 15 ']
 
     def test_line_number_parsing(self, basic, helpers):
         """Test line number parsing in various contexts"""

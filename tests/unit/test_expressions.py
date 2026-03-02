@@ -261,7 +261,7 @@ class TestExpressionEvaluation:
             assert any("UNDEFINED" in error.upper() or "VARIABLE" in error.upper() for error in errors), \
                    f"Expected undefined variable error, got: {errors}"
         else:
-            assert text_output == ['0'], f"Undefined variable should default to 0, got: {text_output}"
+            assert text_output == [' 0 '], f"Undefined variable should default to 0, got: {text_output}"
 
         # Division by zero should produce specific error
         result = basic.process_command("PRINT 5 / 0")

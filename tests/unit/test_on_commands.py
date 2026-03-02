@@ -150,9 +150,9 @@ class TestOnCommand:
         assert 'SUB 1' in output_text
         assert 'SUB 2' in output_text
         assert 'SUB 3' in output_text
-        assert 'BACK FROM 1' in output_text
-        assert 'BACK FROM 2' in output_text
-        assert 'BACK FROM 3' in output_text
+        assert 'BACK FROM  1 ' in output_text
+        assert 'BACK FROM  2 ' in output_text
+        assert 'BACK FROM  3 ' in output_text
 
     def test_on_goto_single_option(self, basic, helpers):
         """Test ON GOTO with single option"""

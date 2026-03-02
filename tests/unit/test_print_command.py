@@ -30,15 +30,15 @@ class TestPrintCommand:
         """Test PRINT with numeric literals"""
         result = basic.process_command('PRINT 42')
         text_output = helpers.get_text_output(result)
-        assert text_output == ['42']
+        assert text_output == [' 42 ']
 
         result = basic.process_command('PRINT 3.14')
         text_output = helpers.get_text_output(result)
-        assert text_output == ['3.14']
+        assert text_output == [' 3.14 ']
 
         result = basic.process_command('PRINT -7')
         text_output = helpers.get_text_output(result)
-        assert text_output == ['-7']
+        assert text_output == ['-7 ']
 
     def test_print_variables(self, basic, helpers):
         """Test PRINT with variables"""
@@ -50,7 +50,7 @@ class TestPrintCommand:
         # Test printing variables
         result = basic.process_command('PRINT A')
         text_output = helpers.get_text_output(result)
-        assert text_output == ['42']
+        assert text_output == [' 42 ']
 
         result = basic.process_command('PRINT B$')
         text_output = helpers.get_text_output(result)
@@ -58,25 +58,25 @@ class TestPrintCommand:
 
         result = basic.process_command('PRINT C')
         text_output = helpers.get_text_output(result)
-        assert text_output == ['3.14']
+        assert text_output == [' 3.14 ']
 
     def test_print_expressions(self, basic, helpers):
         """Test PRINT with mathematical expressions"""
         result = basic.process_command('PRINT 2 + 3')
         text_output = helpers.get_text_output(result)
-        assert text_output == ['5']
+        assert text_output == [' 5 ']
 
         result = basic.process_command('PRINT 10 - 4')
         text_output = helpers.get_text_output(result)
-        assert text_output == ['6']
+        assert text_output == [' 6 ']
 
         result = basic.process_command('PRINT 3 * 4')
         text_output = helpers.get_text_output(result)
-        assert text_output == ['12']
+        assert text_output == [' 12 ']
 
         result = basic.process_command('PRINT 15 / 3')
         text_output = helpers.get_text_output(result)
-        assert text_output == ['5']
+        assert text_output == [' 5 ']
 
     def test_print_concatenated(self, basic, helpers):
         """Test PRINT with semicolons (concatenation)"""
@@ -132,7 +132,7 @@ class TestPrintCommand:
         errors = helpers.get_error_messages(result)
         if not errors:  # Function is implemented
             text_output = helpers.get_text_output(result)
-            assert text_output == ['5'], f"LEN function should return 5, got {text_output}"
+            assert text_output == [' 5 '], f"LEN function should return 5, got {text_output}"
         else:
             # Function not implemented - verify we get appropriate error
             assert any('LEN' in error or 'FUNCTION' in error for error in errors), \
@@ -174,7 +174,7 @@ class TestPrintCommand:
         # Test mixed types with semicolons (no spaces)
         result = basic.process_command('PRINT "NUMBER:";A;"!"')
         assert len(result) > 0 and result[0]['type'] == 'text'
-        assert 'NUMBER:42!' in result[0]['text']
+        assert 'NUMBER: 42 !' in result[0]['text']
 
         # Test mixed types with commas (spacing)
         result = basic.process_command('PRINT "VALUE",A,"DONE"')
@@ -194,7 +194,7 @@ class TestPrintCommand:
         # Test mixed variable types with different separators
         result = basic.process_command('PRINT S$;":";A;",";B')
         assert len(result) > 0 and result[0]['type'] == 'text'
-        assert 'HELLO:42' in result[0]['text']  # Semicolons concatenate without spaces
+        assert 'HELLO: 42 ' in result[0]['text']  # Numbers carry sign space + trailing space
         assert '3.14' in result[0]['text']
 
         # Test complex expression with separators

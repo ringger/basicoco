@@ -1368,14 +1368,22 @@ class ASTEvaluator(ASTVisitor):
     
     @staticmethod
     def _format_print_value(value):
-        """Format a value for PRINT output"""
+        """Format a value for PRINT output.
+
+        CoCo BASIC numeric formatting: a leading space for the sign position
+        (positive numbers get a space, negative get '-') and a trailing space.
+        """
         if isinstance(value, str):
             return value
         elif isinstance(value, (int, float)):
             if isinstance(value, float) and value.is_integer():
-                return str(int(value))
+                num_str = str(int(value))
             else:
-                return str(value)
+                num_str = str(value)
+            if value < 0:
+                return num_str + ' '
+            else:
+                return ' ' + num_str + ' '
         else:
             return str(value)
 

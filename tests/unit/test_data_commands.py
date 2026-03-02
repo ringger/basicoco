@@ -332,5 +332,5 @@ class TestDataCommand:
         assert any('OUT OF DATA' in error for error in errors)
         
         # Should print A value but not reach line 50
-        assert any('A =100' in output for output in text_outputs), "Should print A value before error"
+        assert any('A = 100 ' in output for output in text_outputs), "Should print A value before error"
         assert not any('SHOULD NOT REACH HERE' in output for output in text_outputs)

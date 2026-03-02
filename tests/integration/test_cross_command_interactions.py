@@ -16,7 +16,7 @@ class TestCrossCommandInteraction:
         basic.process_command('A = 5')
         result = basic.process_command('PRINT A')
         text_output = helpers.get_text_output(result)
-        assert text_output == ['5']
+        assert text_output == [' 5 ']
 
     def test_inkey_with_program_vs_immediate_mode(self, basic, helpers):
         """Test INKEY$ behavior in program vs immediate mode"""
@@ -45,12 +45,12 @@ class TestCrossCommandInteraction:
         # Direct access
         result = basic.process_command('PRINT A(3)')
         text_output = helpers.get_text_output(result)
-        assert text_output == ['42']
-        
+        assert text_output == [' 42 ']
+
         # In expression
         result = basic.process_command('PRINT A(3) + 8')
         text_output = helpers.get_text_output(result)
-        assert text_output == ['50']
+        assert text_output == [' 50 ']
         
         # In FOR loop - test with program that includes its own DIM
         program = [
@@ -76,7 +76,7 @@ class TestCrossCommandInteraction:
         # String functions with variables
         result = basic.process_command('PRINT LEN(A$)')
         text_output = helpers.get_text_output(result)
-        assert text_output == ['5']
+        assert text_output == [' 5 ']
         result = basic.process_command("PRINT LEFT$(A$, 3)")
         text_output = helpers.get_text_output(result)
         assert text_output == ["HEL"]
@@ -84,7 +84,7 @@ class TestCrossCommandInteraction:
         # String functions with array elements
         result = basic.process_command('PRINT LEN(B$(1))')
         text_output = helpers.get_text_output(result)
-        assert text_output == ['5']
+        assert text_output == [' 5 ']
         result = basic.process_command('PRINT B$(1) + "!"')
         text_output = helpers.get_text_output(result)
         assert text_output == ['WORLD!']
@@ -97,19 +97,19 @@ class TestCrossCommandInteraction:
         # Nested function calls
         result = basic.process_command('PRINT SQR(A) + SQR(B)')
         text_output = helpers.get_text_output(result)
-        assert text_output == ['7']
-        
+        assert text_output == [' 7 ']
+
         # Functions in expressions
         result = basic.process_command('PRINT INT(SQR(A) * 2.5)')
         text_output = helpers.get_text_output(result)
-        assert text_output == ['7']
-        
+        assert text_output == [' 7 ']
+
         # Functions with array elements
         basic.process_command('DIM C(5)')
         basic.process_command('C(2) = 25')
         result = basic.process_command('PRINT SQR(C(2))')
         text_output = helpers.get_text_output(result)
-        assert text_output == ['5']
+        assert text_output == [' 5 ']
 
     def test_data_read_with_different_variable_types(self, basic, helpers):
         """Test DATA/READ with mixed numeric and string variables/arrays"""
@@ -190,7 +190,7 @@ class TestCrossCommandInteraction:
         assert len(errors) == 0
         
         combined = ' '.join(text_outputs)
-        assert 'FINAL: 30' in combined  # A(3) should be 3 * 10 = 30
+        assert 'FINAL:  30 ' in combined  # A(3) should be 3 * 10 = 30
 
     def test_error_recovery_across_commands(self, basic, helpers):
         """Test error recovery and state after command errors"""
@@ -208,7 +208,7 @@ class TestCrossCommandInteraction:
         basic.process_command('A(5) = 99')
         result = basic.process_command('PRINT A(5)')
         text_output = helpers.get_text_output(result)
-        assert text_output == ['99']
+        assert text_output == [' 99 ']
 
     def test_graphics_commands_with_variable_expressions(self, basic, helpers):
         """Test graphics commands with complex variable expressions"""

@@ -8,6 +8,8 @@ replacing the brittle hard-coded pattern matching with a registry-based system.
 import re
 from typing import List, Dict, Callable, Any, Optional
 
+from .parser import BasicParser
+
 
 class CommandRegistry:
     """
@@ -111,18 +113,10 @@ class CommandRegistry:
         return None
     
     def _has_multi_statements(self, line: str) -> bool:
-        """Check if line contains multiple statements (colons outside strings)
-
-        All control structures with colons are now handled by the AST converter,
-        so no special cases are needed here.
-        """
-        in_quotes = False
-        for char in line:
-            if char == '"':
-                in_quotes = not in_quotes
-            elif char == ':' and not in_quotes:
-                return True
-        return False
+        """Check if line contains multiple statements (colons outside strings)"""
+        if BasicParser.is_rem_line(line):
+            return False
+        return len(BasicParser.split_on_delimiter(line)) > 1
     
     @staticmethod
     def tokenize_command(line: str) -> List[str]:

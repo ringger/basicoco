@@ -22,7 +22,7 @@ class TestNestedArrayAccess:
         ]
         results = helpers.execute_program(basic, program)
         text = helpers.get_text_output(results)
-        assert '99' in text
+        assert ' 99 ' in text
 
     def test_nested_array_index_in_assignment(self, basic, helpers):
         program = [
@@ -34,7 +34,7 @@ class TestNestedArrayAccess:
         ]
         results = helpers.execute_program(basic, program)
         text = helpers.get_text_output(results)
-        assert '77' in text
+        assert ' 77 ' in text
 
     def test_nested_array_chain(self, basic, helpers):
         """A(B(C(0))) — three levels of indirection."""
@@ -48,7 +48,7 @@ class TestNestedArrayAccess:
         ]
         results = helpers.execute_program(basic, program)
         text = helpers.get_text_output(results)
-        assert '55' in text
+        assert ' 55 ' in text
 
     def test_same_array_nested(self, basic, helpers):
         """A(A(0)) — array used as its own index."""
@@ -61,7 +61,7 @@ class TestNestedArrayAccess:
         ]
         results = helpers.execute_program(basic, program)
         text = helpers.get_text_output(results)
-        assert '42' in text
+        assert ' 42 ' in text
 
 
 class TestArraysInWhileDoConditions:
@@ -115,7 +115,7 @@ class TestArraysInWhileDoConditions:
         ]
         results = helpers.execute_program(basic, program)
         text = helpers.get_text_output(results)
-        assert '128' in text
+        assert ' 128 ' in text
 
 
 class TestArraysInOnGotoGosub:
@@ -191,7 +191,7 @@ class TestArraySelfModification:
         ]
         results = helpers.execute_program(basic, program)
         text = helpers.get_text_output(results)
-        assert '11' in text
+        assert ' 11 ' in text
 
     def test_accumulate_in_loop(self, basic, helpers):
         program = [
@@ -205,7 +205,7 @@ class TestArraySelfModification:
         ]
         results = helpers.execute_program(basic, program)
         text = helpers.get_text_output(results)
-        assert '32' in text
+        assert ' 32 ' in text
 
     def test_swap_two_elements(self, basic, helpers):
         program = [
@@ -235,7 +235,7 @@ class TestArraySelfModification:
         ]
         results = helpers.execute_program(basic, program)
         text = helpers.get_text_output(results)
-        assert '15' in text
+        assert ' 15 ' in text
 
 
 class TestStringArraysWithFunctions:
@@ -278,9 +278,9 @@ class TestStringArraysWithFunctions:
         ]
         results = helpers.execute_program(basic, program)
         text = helpers.get_text_output(results)
-        assert '2' in text
-        assert '5' in text
-        assert '9' in text
+        assert ' 2 ' in text
+        assert ' 5 ' in text
+        assert ' 9 ' in text
 
     def test_string_array_concatenation(self, basic, helpers):
         program = [
@@ -305,7 +305,7 @@ class TestStringArraysWithFunctions:
         ]
         results = helpers.execute_program(basic, program)
         text = helpers.get_text_output(results)
-        assert '65' in text
+        assert ' 65 ' in text
         assert 'B' in text
 
     def test_val_str_with_arrays(self, basic, helpers):
@@ -319,7 +319,7 @@ class TestStringArraysWithFunctions:
         ]
         results = helpers.execute_program(basic, program)
         text = helpers.get_text_output(results)
-        assert '50' in text
+        assert ' 50 ' in text
 
 
 class TestArraysInIfConditions:
@@ -401,8 +401,8 @@ class TestMultiDimensionalArrays:
         ]
         results = helpers.execute_program(basic, program)
         text = helpers.get_text_output(results)
-        assert '5' in text   # 1*3 + 2
-        assert '7' in text   # 2*3 + 1
+        assert ' 5 ' in text   # 1*3 + 2
+        assert ' 7 ' in text   # 2*3 + 1
 
     def test_2d_array_with_variable_indices(self, basic, helpers):
         program = [
@@ -415,7 +415,7 @@ class TestMultiDimensionalArrays:
         ]
         results = helpers.execute_program(basic, program)
         text = helpers.get_text_output(results)
-        assert '99' in text
+        assert ' 99 ' in text
 
     def test_2d_string_array(self, basic, helpers):
         program = [
