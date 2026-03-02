@@ -4,9 +4,19 @@ This directory contains BASIC programs for BasiCoCo.
 
 ## Available Programs
 
-### Demo Programs
+### Games
+- **guess_number.bas** - Number guessing game (GOSUB, INPUT, IF/ELSE, LEFT$, RND)
+- **math_quiz.bas** - Math quiz game (WHILE/WEND, EXIT FOR, ABS, SGN, RANDOMIZE, RND)
 - **lunar_lander.bas** - Classic lunar lander game
 - **simple_lunar.bas** - Simplified lunar lander
+
+### Interactive Tools
+- **string_lab.bas** - String laboratory: Caesar cipher, word counter, base converter (MID$, ASC, CHR$, INSTR, VAL, STR$, SQR, RESTORE, ON...GOSUB)
+- **sorting_demo.bas** - Bubble sort with subroutines (GOSUB/RETURN, DATA/READ, DIM, DO/LOOP, STRING$, ON...GOTO)
+- **bar_chart.bas** - Bar chart visualization (DIM, INPUT, LEN, LEFT$, WHILE/WEND)
+- **math_plotter.bas** - Math function plotter: sine, cosine, exp, sqrt, Lissajous, turtle star (SIN, COS, ATN, EXP, LOG, PMODE, SCREEN, LINE, DRAW, PAINT)
+
+### Graphics Demos
 - **bounce_pause.bas** - Bouncing animation with PAUSE command
 - **blue_circle.bas** - Graphics circle demo
 - **qix_beam.bas** - QIX-style beam animation
