@@ -5,7 +5,33 @@ Handles program execution loop, flow control, and resume logic.
 Extracted from core.py to reduce its size.
 """
 
+import re
+
 from .error_context import error_response, text_response
+
+
+def _classify_error(message: str) -> int:
+    """Map an error message to a CoCo-style numeric error code."""
+    msg = message.upper()
+    if 'DIVISION BY ZERO' in msg or 'DIVIDE BY ZERO' in msg:
+        return 99
+    if 'SYNTAX' in msg:
+        return 1
+    if 'UNDEFINED LINE' in msg:
+        return 7
+    if 'TYPE MISMATCH' in msg:
+        return 13
+    if 'OVERFLOW' in msg:
+        return 6
+    if 'OUT OF DATA' in msg:
+        return 4
+    if 'ILLEGAL FUNCTION' in msg or 'ILLEGAL QUANTITY' in msg:
+        return 5
+    if 'STRING TOO LONG' in msg:
+        return 14
+    if re.search(r'SUBSCRIPT|OUT OF RANGE|DIMENSION', msg):
+        return 9
+    return 0
 
 
 class ProgramExecutor:
@@ -210,12 +236,39 @@ class ProgramExecutor:
                 output.append({'type': 'error', 'message': 'ELSE WITHOUT ENDIF'})
                 return current_pos_index, 'stop'
 
+            elif item_type == 'resume':
+                pos = item['position']
+                if pos in all_positions:
+                    return all_positions.index(pos), 'jumped'
+                return current_pos_index + 1, 'next'
+
+            elif item_type == 'resume_next':
+                pos = item['position']
+                if pos in all_positions:
+                    idx = all_positions.index(pos)
+                    return idx + 1, 'next'
+                return current_pos_index + 1, 'next'
+
             elif item_type != 'input_request':
                 # Regular output -- filter system OK messages
                 if not item.get('source') == 'system':
                     output.append(item)
                     emu.emit_output([item])
                 if item.get('type') == 'error':
+                    # ON ERROR GOTO handler intercept
+                    if (emu.on_error_goto_line is not None
+                            and not emu.in_error_handler):
+                        line_num, sub_index = all_positions[current_pos_index]
+                        emu.error_line = line_num
+                        emu.error_number = _classify_error(
+                            item.get('message', ''))
+                        emu.error_resume_position = (line_num, sub_index)
+                        emu.in_error_handler = True
+                        handler_idx = self._find_line_position(
+                            emu.on_error_goto_line, all_positions)
+                        if handler_idx is not None:
+                            return handler_idx, 'jumped'
+                    # No handler or handler line not found
                     emu.running = False
                     emu.clear_all_stacks()
                     return current_pos_index, 'stop'

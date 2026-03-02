@@ -46,6 +46,11 @@ class BasicParser:
         return parts
 
     @staticmethod
+    def split_args(text: str) -> list:
+        """Split comma-separated arguments, respecting parentheses and quotes."""
+        return BasicParser.split_on_delimiter_paren_aware(text, delimiter=',')
+
+    @staticmethod
     def split_on_delimiter_paren_aware(text: str, delimiter: str = ':') -> list:
         """Like split_on_delimiter but also respects parenthesized groups."""
         parts = []

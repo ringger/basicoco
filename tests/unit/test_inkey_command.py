@@ -25,28 +25,28 @@ class TestInkeyCommand:
         
         # Should return empty string
         result = basic.process_command('PRINT INKEY$')
-        assert any(item.get('text') == '' for item in result if item.get('type') == 'text')
+        assert '' in helpers.get_text_output(result)
 
     def test_inkey_with_keys_in_buffer(self, basic, helpers):
         """Test INKEY$ with keys in buffer"""
         # Add keys to buffer manually
         basic.keyboard_buffer = ['A', 'B', 'C']
-        
+
         # First call should return 'A'
         result1 = basic.process_command('PRINT INKEY$')
-        assert any('A' in item.get('text', '') for item in result1 if item.get('type') == 'text')
-        
+        assert any('A' in text for text in helpers.get_text_output(result1))
+
         # Second call should return 'B'
         result2 = basic.process_command('PRINT INKEY$')
-        assert any('B' in item.get('text', '') for item in result2 if item.get('type') == 'text')
-        
+        assert any('B' in text for text in helpers.get_text_output(result2))
+
         # Third call should return 'C'
         result3 = basic.process_command('PRINT INKEY$')
-        assert any('C' in item.get('text', '') for item in result3 if item.get('type') == 'text')
-        
+        assert any('C' in text for text in helpers.get_text_output(result3))
+
         # Fourth call should return empty string
         result4 = basic.process_command('PRINT INKEY$')
-        assert any(item.get('text') == '' for item in result4 if item.get('type') == 'text')
+        assert '' in helpers.get_text_output(result4)
 
     def test_inkey_variable_assignment(self, basic, helpers):
         """Test assigning INKEY$ result to variable"""
@@ -61,12 +61,12 @@ class TestInkeyCommand:
         """Test INKEY$ in conditional statements"""
         # Test with empty buffer
         result = basic.process_command('IF INKEY$ = "" THEN PRINT "NO KEY"')
-        assert any('NO KEY' in item.get('text', '') for item in result if item.get('type') == 'text')
-        
+        assert any('NO KEY' in text for text in helpers.get_text_output(result))
+
         # Test with key in buffer
         basic.keyboard_buffer = ['Y']
         result = basic.process_command('IF INKEY$ <> "" THEN PRINT "KEY PRESSED"')
-        assert any('KEY PRESSED' in item.get('text', '') for item in result if item.get('type') == 'text')
+        assert any('KEY PRESSED' in text for text in helpers.get_text_output(result))
 
     def test_inkey_in_loop(self, basic, helpers):
         """Test INKEY$ in a loop context"""
@@ -110,7 +110,7 @@ class TestInkeyCommand:
         
         # Test with parentheses
         result = basic.process_command('PRINT INKEY$()')
-        assert any('Z' in item.get('text', '') for item in result if item.get('type') == 'text')
+        assert any('Z' in text for text in helpers.get_text_output(result))
 
     def test_inkey_special_characters(self, basic, helpers):
         """Test INKEY$ with special characters"""
@@ -185,7 +185,7 @@ class TestInkeyCommand:
         for key in numeric_keys:
             basic.keyboard_buffer = [key]
             result = basic.process_command('PRINT INKEY$')
-            assert any(key in item.get('text', '') for item in result if item.get('type') == 'text')
+            assert any(key in text for text in helpers.get_text_output(result))
 
     def test_inkey_empty_after_clear(self, basic, helpers):
         """Test INKEY$ returns empty after buffer is manually cleared"""
@@ -195,7 +195,7 @@ class TestInkeyCommand:
         
         # Should return empty
         result = basic.process_command('PRINT INKEY$')
-        assert any(item.get('text') == '' for item in result if item.get('type') == 'text')
+        assert '' in helpers.get_text_output(result)
 
     def test_function_syntax_variations(self, basic, helpers):
         """Test various function syntax variations across different functions"""
@@ -208,8 +208,8 @@ class TestInkeyCommand:
         result1 = basic.process_command('K1$ = INKEY$')
         result2 = basic.process_command('K2$ = INKEY$()')
         # Both should work (though second might be empty if buffer consumed)
-        assert len([r for r in result1 if r.get('type') == 'error']) == 0
-        assert len([r for r in result2 if r.get('type') == 'error']) == 0
+        assert len(helpers.get_error_messages(result1)) == 0
+        assert len(helpers.get_error_messages(result2)) == 0
         
         # Test mathematical functions (should work with parentheses)
         result = basic.process_command('PRINT SQR(N)')

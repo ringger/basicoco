@@ -12,6 +12,13 @@ import re
 from .error_context import ErrorContextManager, error_response
 
 
+def basic_truthy(value) -> bool:
+    """Convert a BASIC value to Python bool using CoCo semantics."""
+    if isinstance(value, (int, float)):
+        return bool(value)
+    return value != 0
+
+
 class NodeType(Enum):
     """Types of AST nodes"""
     # Literals
@@ -1398,6 +1405,10 @@ class ASTEvaluator(ASTVisitor):
     def visit_variable(self, node: VariableNode) -> Any:
         """Visit variable reference"""
         var_name = node.name.upper()
+        if var_name == 'ERR':
+            return self.emulator.error_number
+        if var_name == 'ERL':
+            return self.emulator.error_line
         if var_name in self.emulator.variables:
             return self.emulator.variables[var_name]
         return 0 if not var_name.endswith('$') else ""
@@ -1524,7 +1535,7 @@ class ASTEvaluator(ASTVisitor):
     def visit_while_statement(self, node: WhileStatementNode) -> Any:
         """Visit WHILE statement - evaluate condition, push to stack or skip"""
         condition_result = self.visit(node.condition)
-        condition_true = bool(condition_result) if isinstance(condition_result, (int, float)) else condition_result != 0
+        condition_true = basic_truthy(condition_result)
 
         if condition_true:
             self.emulator.while_stack.append({
@@ -1540,7 +1551,7 @@ class ASTEvaluator(ASTVisitor):
         """Visit DO statement - evaluate top condition if present, push to stack"""
         if node.condition and node.condition_position == 'TOP':
             condition_result = self.visit(node.condition)
-            condition_true = bool(condition_result) if isinstance(condition_result, (int, float)) else condition_result != 0
+            condition_true = basic_truthy(condition_result)
 
             if node.condition_type == 'WHILE' and not condition_true:
                 return [{'type': 'skip_do_loop'}]
@@ -1651,8 +1662,9 @@ class ASTEvaluator(ASTVisitor):
                     if isinstance(item, dict) and item.get('type') in ['jump', 'jump_return', 'end']:
                         return results  # Exit program on control flow
             except Exception as e:
-                # Add error to results and continue
-                results.append({'type': 'error', 'message': str(e)})
+                err = self.emulator.error_context.runtime_error(
+                    str(e), self.emulator.current_line)
+                results.append({'type': 'error', 'message': err.format_message()})
 
         return results
 
@@ -1704,39 +1716,28 @@ class ASTEvaluator(ASTVisitor):
         if isinstance(node.target, ArrayAccessNode):
             # Array element assignment: A(5) = 42
             array_name = node.target.array_name.upper()
-            # Check reserved function names
-            if array_name in self.emulator.get_reserved_function_names():
-                error = self.emulator.error_context.syntax_error(
-                    f"Cannot assign to reserved function name: {array_name}",
-                    self.emulator.current_line,
-                    suggestions=[
-                        'Choose a different variable name',
-                        'Reserved names include built-in functions',
-                        'Example: Use DATA instead of SIN'
-                    ]
-                )
-                return error_response(error)
+            err = self.emulator.check_reserved_name(array_name)
+            if err:
+                return err
             try:
                 indices = [int(self.visit(idx)) for idx in node.target.indices]
             except (ValueError, TypeError) as e:
-                return [{'type': 'error', 'message': f'Invalid array index: {e}'}]
-            error = self.emulator.variable_manager.set_array_element(array_name, indices, value)
-            if error:
-                return [{'type': 'error', 'message': error}]
+                err = self.emulator.error_context.runtime_error(
+                    f"Invalid array index: {e}",
+                    self.emulator.current_line,
+                    suggestions=["Array indices must be numeric integers"])
+                return error_response(err)
+            err_msg = self.emulator.variable_manager.set_array_element(array_name, indices, value)
+            if err_msg:
+                err = self.emulator.error_context.runtime_error(
+                    err_msg, self.emulator.current_line,
+                    suggestions=["Check array dimensions with DIM"])
+                return error_response(err)
         elif hasattr(node.target, 'name'):
             var_name = node.target.name.upper()
-            # Check reserved function names
-            if var_name in self.emulator.get_reserved_function_names():
-                error = self.emulator.error_context.syntax_error(
-                    f"Cannot assign to reserved function name: {var_name}",
-                    self.emulator.current_line,
-                    suggestions=[
-                        'Choose a different variable name',
-                        'Reserved names include built-in functions',
-                        'Example: Use DATA instead of SIN'
-                    ]
-                )
-                return error_response(error)
+            err = self.emulator.check_reserved_name(var_name)
+            if err:
+                return err
             self.emulator.variables[var_name] = value
         else:
             var_name = str(node.target).upper()
@@ -1814,7 +1815,7 @@ class ASTEvaluator(ASTVisitor):
             line_num = int(target_line)
         except (ValueError, TypeError) as e:
             error = self.emulator.error_context.syntax_error(
-                "SYNTAX ERROR: Invalid GOTO target",
+                "Invalid GOTO target",
                 self.emulator.current_line,
                 suggestions=[
                     "Correct syntax: GOTO line_number",
@@ -1845,7 +1846,7 @@ class ASTEvaluator(ASTVisitor):
             line_num = int(target_line)
         except (ValueError, TypeError) as e:
             error = self.emulator.error_context.syntax_error(
-                "SYNTAX ERROR: Invalid GOSUB target",
+                "Invalid GOSUB target",
                 self.emulator.current_line,
                 suggestions=[
                     "Correct syntax: GOSUB line_number",
@@ -1896,7 +1897,10 @@ class ASTEvaluator(ASTVisitor):
             end_val = self.visit(node.end_value)
             step_val = self.visit(node.step_value) if node.step_value else 1
         except (ValueError, TypeError) as e:
-            return [{'type': 'error', 'message': str(e)}]
+            err = self.emulator.error_context.runtime_error(
+                str(e), self.emulator.current_line,
+                suggestions=["FOR loop bounds must be numeric"])
+            return error_response(err)
 
         # Ensure numeric values
         try:

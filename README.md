@@ -90,7 +90,7 @@ The dialect is based on Extended Color BASIC as shipped with the CoCo 1 and CoCo
 - **Core**: NEW, RUN, LIST, END, STOP, CONT, CLEAR, LOAD, SAVE, FILES, KILL
 - **I/O**: PRINT (with separators), INPUT (with prompts, multi-variable), CLS, INKEY$
 - **Variables**: Numeric and string variables, operators (+, -, *, /, ^, comparisons)
-- **Control Flow**: FOR/NEXT (with STEP), IF/THEN, GOTO, GOSUB/RETURN, ON GOTO/GOSUB
+- **Control Flow**: FOR/NEXT (with STEP), IF/THEN, GOTO, GOSUB/RETURN, ON GOTO/GOSUB, ON ERROR GOTO/RESUME
 - **Data**: DATA/READ/RESTORE
 - **Math**: ABS, INT, SGN, SQR, SIN, COS, TAN, ATN, EXP, LOG, RND, RANDOMIZE
 - **Strings**: LEN, LEFT$, RIGHT$, MID$, CHR$, ASC, STR$, VAL, STRING$, INSTR, SPACE$
@@ -109,7 +109,7 @@ These were not in Extended Color BASIC but make the environment more learner-fri
 - **Single-line compound statements** like `IF A=1 THEN FOR I=1 TO 3: PRINT I: NEXT I`
 
 ### Not Yet Implemented
-See [ISSUES.md](ISSUES.md) for the full list. Highlights: ON ERROR GOTO, PEEK/POKE, file I/O (OPEN/CLOSE/FIELD), HEX$, OCT$, TRON/TROFF.
+See [ISSUES.md](ISSUES.md) for the full list. Highlights: PEEK/POKE, file I/O (OPEN/CLOSE/FIELD), HEX$, OCT$, TRON/TROFF, TIMER.
 
 ## Interfaces
 
@@ -179,7 +179,7 @@ The interpreter is implemented in Python and is designed to be readable. If you'
 
 ## Testing
 
-864 tests passing.
+887 tests passing.
 
 ```bash
 # Run all tests

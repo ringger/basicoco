@@ -30,6 +30,21 @@ class FileManager:
             return s[1:-1]
         return s
 
+    def _require_filename(self, filename, verb, example):
+        """Return error response if filename is empty, else None."""
+        if not filename:
+            error = self.emulator.error_context.syntax_error(
+                "Filename required",
+                self.emulator.current_line,
+                suggestions=[
+                    f"Provide a filename to {verb}",
+                    f'Example: {example}',
+                    'File extension .bas will be added automatically'
+                ]
+            )
+            return error_response(error)
+        return None
+
     @staticmethod
     def _ensure_bas_extension(filename):
         """Add .bas extension if not already present."""
@@ -60,17 +75,9 @@ class FileManager:
         emu = self.emulator
         filename = self._strip_quotes(filename)
 
-        if not filename:
-            error = emu.error_context.syntax_error(
-                "SYNTAX ERROR: Filename required",
-                emu.current_line,
-                suggestions=[
-                    "Provide a filename to load",
-                    'Example: LOAD "MYGAME"',
-                    'File extension .bas will be added automatically'
-                ]
-            )
-            return error_response(error)
+        err = self._require_filename(filename, 'load', 'LOAD "MYGAME"')
+        if err:
+            return err
 
         filename = self._ensure_bas_extension(filename)
 
@@ -110,17 +117,9 @@ class FileManager:
         emu = self.emulator
         filename = self._strip_quotes(filename)
 
-        if not filename:
-            error = emu.error_context.syntax_error(
-                "SYNTAX ERROR: Filename required",
-                emu.current_line,
-                suggestions=[
-                    "Provide a filename to save",
-                    'Example: SAVE "MYGAME"',
-                    'File extension .bas will be added automatically'
-                ]
-            )
-            return error_response(error)
+        err = self._require_filename(filename, 'save', 'SAVE "MYGAME"')
+        if err:
+            return err
 
         if not emu.program:
             error = emu.error_context.runtime_error(
@@ -248,17 +247,9 @@ class FileManager:
         emu = self.emulator
         filename = self._strip_quotes(filename)
 
-        if not filename:
-            error = emu.error_context.syntax_error(
-                "SYNTAX ERROR: Filename required",
-                emu.current_line,
-                suggestions=[
-                    "Provide a filename to delete",
-                    'Example: KILL "OLDGAME"',
-                    'File extension .bas will be added automatically'
-                ]
-            )
-            return error_response(error)
+        err = self._require_filename(filename, 'delete', 'KILL "OLDGAME"')
+        if err:
+            return err
 
         filename = self._ensure_bas_extension(filename)
 

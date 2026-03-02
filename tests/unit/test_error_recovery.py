@@ -32,7 +32,7 @@ class TestErrorRecovery:
             result = basic.process_command(command)
             
             # Should have expected error
-            error_messages = [item.get('message', '') for item in result if item.get('type') == 'error']
+            error_messages = helpers.get_error_messages(result)
             assert any(expected_error in msg for msg in error_messages), \
                            f"Expected {expected_error} for command: {command}"
             
@@ -66,7 +66,7 @@ class TestErrorRecovery:
         
         # Should be able to execute new commands after error
         result = basic.process_command('PRINT "RECOVERY TEST"')
-        text_messages = [item.get("text", "") for item in result if item.get("type") == "text"]
+        text_messages = helpers.get_text_output(result)
         assert any("RECOVERY TEST" in msg for msg in text_messages)
 
     def test_nested_error_recovery(self, basic, helpers):
@@ -176,7 +176,7 @@ class TestErrorRecovery:
             
             # Should be able to execute valid command after error
             recovery_result = basic.process_command('PRINT "OK"')
-            text_messages = [item.get('text', '') for item in recovery_result if item.get('type') == 'text']
+            text_messages = helpers.get_text_output(recovery_result)
             assert any('OK' in msg for msg in text_messages), \
                            f"Should recover after error: {bad_command}"
     def test_memory_consistency_after_errors(self, basic, helpers):
@@ -253,7 +253,7 @@ class TestErrorRecovery:
             result = basic.process_command(cmd)
             
             # Each should produce an error
-            errors = [item for item in result if item.get('type') == 'error']
+            errors = helpers.get_error_messages(result)
             assert len(errors) > 0, f"Command {i+1} should produce error: {cmd}"
             
             # State should remain consistent

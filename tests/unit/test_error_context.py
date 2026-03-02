@@ -29,7 +29,7 @@ class TestErrorContext:
         """Test basic error context functionality"""
         # Test creating a simple syntax error
         error = self.error_manager.syntax_error("Missing semicolon", line=10)
-        assert error.message == "Missing semicolon"
+        assert error.message == "SYNTAX ERROR: Missing semicolon"
         assert error.category == ErrorCategory.SYNTAX
         assert error.context.line_number == 10
 

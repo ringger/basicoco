@@ -30,7 +30,7 @@ class TestRenumCommand:
         
         # Verify the renumbering
         list_result = basic.process_command('LIST')
-        list_output = ' '.join(str(r.get('text', '')) for r in list_result)
+        list_output = ' '.join(helpers.get_text_output(list_result))
         
         assert '10 PRINT "START"' in list_output
         assert '20 PRINT "MIDDLE"' in list_output
@@ -49,7 +49,7 @@ class TestRenumCommand:
         
         # Verify GOTO reference was updated
         list_result = basic.process_command('LIST')
-        list_output = ' '.join(str(r.get('text', '')) for r in list_result)
+        list_output = ' '.join(helpers.get_text_output(list_result))
         
         assert '100 PRINT "START"' in list_output
         assert '150 GOTO 250' in list_output  # Updated reference
@@ -70,7 +70,7 @@ class TestRenumCommand:
         
         # Verify GOSUB reference was updated
         list_result = basic.process_command('LIST')
-        list_output = ' '.join(str(r.get('text', '')) for r in list_result)
+        list_output = ' '.join(helpers.get_text_output(list_result))
         
         assert '10 GOSUB 40' in list_output  # Updated reference
         assert '20 PRINT "MAIN"' in list_output
@@ -92,7 +92,7 @@ class TestRenumCommand:
         
         # Verify IF...THEN reference was updated
         list_result = basic.process_command('LIST')
-        list_output = ' '.join(str(r.get('text', '')) for r in list_result)
+        list_output = ' '.join(helpers.get_text_output(list_result))
         
         assert '10 X = 5' in list_output
         assert '20 IF X = 5 THEN 50' in list_output  # Updated reference
@@ -115,7 +115,7 @@ class TestRenumCommand:
         
         # Verify ON...GOTO references were updated
         list_result = basic.process_command('LIST')
-        list_output = ' '.join(str(r.get('text', '')) for r in list_result)
+        list_output = ' '.join(helpers.get_text_output(list_result))
         
         assert '10 X = 2' in list_output
         assert '20 ON X GOTO 40 in 50,60', list_output  # Updated references
@@ -141,7 +141,7 @@ class TestRenumCommand:
         
         # Verify ON...GOSUB references were updated
         list_result = basic.process_command('LIST')
-        list_output = ' '.join(str(r.get('text', '')) for r in list_result)
+        list_output = ' '.join(helpers.get_text_output(list_result))
         
         assert '20 ON X GOSUB 50 in 70', list_output  # Updated references
 
@@ -160,7 +160,7 @@ class TestRenumCommand:
         
         # Verify custom numbering
         list_result = basic.process_command('LIST')
-        list_output = ' '.join(str(r.get('text', '')) for r in list_result)
+        list_output = ' '.join(helpers.get_text_output(list_result))
         
         assert '1000 PRINT "A"' in list_output
         assert '1100 PRINT "B"' in list_output
@@ -181,7 +181,7 @@ class TestRenumCommand:
         
         # Verify partial renumbering
         list_result = basic.process_command('LIST')
-        list_output = ' '.join(str(r.get('text', '')) for r in list_result)
+        list_output = ' '.join(helpers.get_text_output(list_result))
         
         # These should remain unchanged
         assert '10 PRINT "KEEP"' in list_output
@@ -219,7 +219,7 @@ class TestRenumCommand:
         result = basic.process_command('RENUM 50,10,100')
         
         # Should detect conflict
-        error_messages = [str(r.get('message', '')) for r in result if r.get('type') == 'error']
+        error_messages = helpers.get_error_messages(result)
         assert any('CONFLICTS' in msg for msg in error_messages)
 
     def test_renum_boundary_conditions(self, basic, helpers):
@@ -229,12 +229,12 @@ class TestRenumCommand:
         
         # Test line number too high
         result = basic.process_command('RENUM 65530,10')
-        error_messages = [str(r.get('message', '')) for r in result if r.get('type') == 'error']
+        error_messages = helpers.get_error_messages(result)
         assert any('exceed maximum value' in msg.lower() for msg in error_messages)
         
         # Test invalid increment
         result = basic.process_command('RENUM 10,0')
-        error_messages = [str(r.get('message', '')) for r in result if r.get('type') == 'error']
+        error_messages = helpers.get_error_messages(result)
         assert any('must be positive' in msg.lower() for msg in error_messages)
 
     def test_renum_syntax_errors(self, basic, helpers):
@@ -244,12 +244,12 @@ class TestRenumCommand:
         
         # Test invalid line number format
         result = basic.process_command('RENUM ABC')
-        error_messages = [str(r.get('message', '')) for r in result if r.get('type') == 'error']
+        error_messages = helpers.get_error_messages(result)
         assert any('invalid' in msg.lower() and 'number' in msg.lower() for msg in error_messages)
         
         # Test line number out of range
         result = basic.process_command('RENUM 0')
-        error_messages = [str(r.get('message', '')) for r in result if r.get('type') == 'error']
+        error_messages = helpers.get_error_messages(result)
         assert any('out of range' in msg.lower() for msg in error_messages)
 
     def test_renum_preserves_line_order(self, basic, helpers):
@@ -266,7 +266,7 @@ class TestRenumCommand:
         
         # Verify order is preserved (sorted by original line numbers)
         list_result = basic.process_command('LIST')
-        list_text = '\n'.join(str(r.get('text', '')) for r in list_result)
+        list_text = '\n'.join(helpers.get_text_output(list_result))
         
         # Lines should appear in execution order
         first_pos = list_text.find('10 PRINT "FIRST"')
@@ -298,7 +298,7 @@ class TestRenumCommand:
         
         # Verify all reference types were updated
         list_result = basic.process_command('LIST')
-        list_output = ' '.join(str(r.get('text', '')) for r in list_result)
+        list_output = ' '.join(helpers.get_text_output(list_result))
         
         # Check ON...GOTO was updated
         assert '1010 ON I GOTO 1040 in 1060,1080', list_output
@@ -321,7 +321,7 @@ class TestRenumCommand:
         
         # Verify non-reference numbers are unchanged
         list_result = basic.process_command('LIST')
-        list_output = ' '.join(str(r.get('text', '')) for r in list_result)
+        list_output = ' '.join(helpers.get_text_output(list_result))
         
         assert 'FOR I = 1 TO 100' in list_output  # 100 unchanged
         assert 'PRINT I * 200' in list_output     # 200 unchanged

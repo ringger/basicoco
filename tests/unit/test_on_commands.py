@@ -32,7 +32,7 @@ class TestOnCommand:
         result = basic.process_command('RUN')
         
         # Should see "OPTION 2" output
-        output_text = ' '.join(str(r.get('text', '')) for r in result if r.get('type') == 'text')
+        output_text = ' '.join(helpers.get_text_output(result))
         assert 'OPTION 2' in output_text
         assert 'OPTION 1' not in output_text
         assert 'OPTION 3' not in output_text
@@ -51,7 +51,7 @@ class TestOnCommand:
         
         # Run - should go to line 200 (A+B = 2)
         result = basic.process_command('RUN')
-        output_text = ' '.join(str(r.get('text', '')) for r in result if r.get('type') == 'text')
+        output_text = ' '.join(helpers.get_text_output(result))
         assert 'SUM = 2' in output_text
 
     def test_on_gosub_basic(self, basic, helpers):
@@ -67,7 +67,7 @@ class TestOnCommand:
         
         # Run - should call subroutine 1 and return
         result = basic.process_command('RUN')
-        output_text = ' '.join(str(r.get('text', '')) for r in result if r.get('type') == 'text')
+        output_text = ' '.join(helpers.get_text_output(result))
         assert 'SUBROUTINE 1' in output_text
         assert 'AFTER GOSUB' in output_text
         assert 'SUBROUTINE 2' not in output_text
@@ -84,7 +84,7 @@ class TestOnCommand:
         
         # Run - should continue execution (not jump)
         result = basic.process_command('RUN')
-        output_text = ' '.join(str(r.get('text', '')) for r in result if r.get('type') == 'text')
+        output_text = ' '.join(helpers.get_text_output(result))
         assert 'CONTINUED' in output_text
         assert 'OPTION 1' not in output_text
         assert 'OPTION 2' not in output_text
@@ -100,7 +100,7 @@ class TestOnCommand:
         
         # Run - should continue execution (0 is out of range)
         result = basic.process_command('RUN')
-        output_text = ' '.join(str(r.get('text', '')) for r in result if r.get('type') == 'text')
+        output_text = ' '.join(helpers.get_text_output(result))
         assert 'X = 0 in CONTINUE', output_text
 
     def test_on_goto_negative_value(self, basic, helpers):
@@ -114,7 +114,7 @@ class TestOnCommand:
         
         # Run - should continue execution (negative is out of range)
         result = basic.process_command('RUN')
-        output_text = ' '.join(str(r.get('text', '')) for r in result if r.get('type') == 'text')
+        output_text = ' '.join(helpers.get_text_output(result))
         assert 'X NEGATIVE in CONTINUE', output_text
 
     def test_on_goto_fractional_truncation(self, basic, helpers):
@@ -127,7 +127,7 @@ class TestOnCommand:
         
         # Run - should truncate 2.8 to 2 and go to option 2
         result = basic.process_command('RUN')
-        output_text = ' '.join(str(r.get('text', '')) for r in result if r.get('type') == 'text')
+        output_text = ' '.join(helpers.get_text_output(result))
         assert 'OPTION 2' in output_text
 
     def test_on_gosub_multiple_calls(self, basic, helpers):
@@ -146,7 +146,7 @@ class TestOnCommand:
         
         # Run - should call all three subroutines
         result = basic.process_command('RUN')
-        output_text = ' '.join(str(r.get('text', '')) for r in result if r.get('type') == 'text')
+        output_text = ' '.join(helpers.get_text_output(result))
         assert 'SUB 1' in output_text
         assert 'SUB 2' in output_text
         assert 'SUB 3' in output_text
@@ -163,7 +163,7 @@ class TestOnCommand:
         
         # Run - should go to only option
         result = basic.process_command('RUN')
-        output_text = ' '.join(str(r.get('text', '')) for r in result if r.get('type') == 'text')
+        output_text = ' '.join(helpers.get_text_output(result))
         assert 'ONLY OPTION' in output_text
         assert 'FALLTHROUGH' not in output_text
 
@@ -179,7 +179,7 @@ class TestOnCommand:
         
         # Run - should go to option 5 (X=5)
         result = basic.process_command('RUN')
-        output_text = ' '.join(str(r.get('text', '')) for r in result if r.get('type') == 'text')
+        output_text = ' '.join(helpers.get_text_output(result))
         assert 'OPTION 5' in output_text
         assert 'OPTION 1' not in output_text
         assert 'OPTION 6' not in output_text
@@ -188,11 +188,11 @@ class TestOnCommand:
         """Test ON command syntax error handling"""
         # Test ON without GOTO or GOSUB
         result = basic.process_command('ON X PRINT "INVALID"')
-        assert any('SYNTAX ERROR' in str(r.get('message', '')) for r in result)
-        
+        assert any('SYNTAX ERROR' in msg for msg in helpers.get_error_messages(result))
+
         # Test ON without expression
         result = basic.process_command('ON GOTO 100,200')
-        assert any('SYNTAX ERROR' in str(r.get('message', '')) for r in result)
+        assert any('SYNTAX ERROR' in msg for msg in helpers.get_error_messages(result))
 
     def test_on_commands_undefined_variable(self, basic, helpers):
         """Test ON commands with undefined variable (defaults to 0)"""
@@ -206,7 +206,7 @@ class TestOnCommand:
         
         # Run - should continue to line 20 since UNDEFINED defaults to 0 (out of range)
         result = basic.process_command('RUN')
-        output_text = ' '.join(str(r.get('text', '')) for r in result if r.get('type') == 'text')
+        output_text = ' '.join(helpers.get_text_output(result))
         assert 'CONTINUED' in output_text
         assert 'OPTION 1' not in output_text
         assert 'OPTION 2' not in output_text
@@ -217,8 +217,9 @@ class TestOnCommand:
         
         # Test with truly non-numeric line numbers (string literals)
         result = basic.process_command('ON X GOTO "ABC","DEF"')
-        assert any('SYNTAX ERROR' in str(r.get('message', '')) or 'INVALID' in str(r.get('message', '')) or 'Invalid' in str(r.get('message', ''))
-                          for r in result if r.get('type') == 'error')
+        error_messages = helpers.get_error_messages(result)
+        assert any('SYNTAX ERROR' in msg or 'INVALID' in msg or 'Invalid' in msg
+                          for msg in error_messages)
 
     def test_on_goto_with_string_result(self, basic, helpers):
         """Test ON GOTO with expression that results in string (should cause error)"""
@@ -226,7 +227,7 @@ class TestOnCommand:
         result = basic.process_command('ON A$ GOTO 100,200')
         
         # Should get error about invalid expression
-        error_messages = [str(r.get('message', '')) for r in result if r.get('type') == 'error']
+        error_messages = helpers.get_error_messages(result)
         assert len(error_messages) > 0
 
     def test_on_goto_expression_evaluation(self, basic, helpers):
@@ -241,7 +242,7 @@ class TestOnCommand:
         
         # Run - (3-1) = 2, should go to option 2
         result = basic.process_command('RUN')
-        output_text = ' '.join(str(r.get('text', '')) for r in result if r.get('type') == 'text')
+        output_text = ' '.join(helpers.get_text_output(result))
         assert 'OPTION 2' in output_text
 
     def test_on_gosub_nested_calls(self, basic, helpers):
@@ -259,7 +260,7 @@ class TestOnCommand:
         
         # Run - should handle nested subroutine calls
         result = basic.process_command('RUN')
-        output_text = ' '.join(str(r.get('text', '')) for r in result if r.get('type') == 'text')
+        output_text = ' '.join(helpers.get_text_output(result))
         assert 'OUTER SUB' in output_text
         assert 'INNER SUB' in output_text
         assert 'OUTER SUB END' in output_text
@@ -274,7 +275,7 @@ class TestOnCommand:
         basic.process_command('100 PRINT "LOWERCASE WORKS"')
         
         result = basic.process_command('RUN')
-        output_text = ' '.join(str(r.get('text', '')) for r in result if r.get('type') == 'text')
+        output_text = ' '.join(helpers.get_text_output(result))
         assert 'LOWERCASE WORKS' in output_text
 
     def test_on_goto_large_line_numbers(self, basic, helpers):
@@ -286,7 +287,7 @@ class TestOnCommand:
         
         # Run - should jump to large line number
         result = basic.process_command('RUN')
-        output_text = ' '.join(str(r.get('text', '')) for r in result if r.get('type') == 'text')
+        output_text = ' '.join(helpers.get_text_output(result))
         assert 'LARGE LINE' in output_text
         assert 'FALLTHROUGH' not in output_text
 
@@ -300,6 +301,6 @@ class TestOnCommand:
         result = basic.process_command('ON X GOTO 100')
         
         # Should execute the target line
-        output_text = ' '.join(str(r.get('text', '')) for r in result if r.get('type') == 'text')
+        output_text = ' '.join(helpers.get_text_output(result))
         # Note: Direct execution behavior may vary, so we mainly check for no syntax errors
-        assert not any('SYNTAX ERROR' in str(r.get('message', '')) for r in result)
+        assert not any('SYNTAX ERROR' in msg for msg in helpers.get_error_messages(result))

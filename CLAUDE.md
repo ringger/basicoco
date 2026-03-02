@@ -40,6 +40,14 @@ Three paths handle IF statements:
 
 Nesting: `_skip_if_or_else_block()` counts nested IFs by checking `stmt.startswith('IF ')` (not substring match, to avoid false positives from strings like `PRINT "IF THEN"`). GOTO out of an IF block leaves a stale if_stack entry — cleared on next RUN by `clear_all_stacks()`.
 
+## ON ERROR GOTO / RESUME
+
+`ON ERROR GOTO <line>` registers an error handler; `ON ERROR GOTO 0` disables it. When a runtime error occurs during program execution, `_handle_flow_control()` in `program_executor.py` intercepts the error (if a handler is registered and not already in an error handler), saves error state, and jumps to the handler line.
+
+State fields on `CoCoBasic`: `on_error_goto_line`, `error_number` (ERR), `error_line` (ERL), `error_resume_position`, `in_error_handler`. All reset by `clear_interpreter_state()`.
+
+`RESUME` / `RESUME NEXT` / `RESUME <line>` return `resume` / `resume_next` / `jump` directives handled by `_handle_flow_control()`. ERR and ERL are read-only pseudo-variables exposed in `visit_variable()`.
+
 ## INPUT Protocol
 
 INPUT pauses execution by returning `{'type': 'input_request', ...}`. Variable targets are described by dicts: `{'name': 'V', 'array': True, 'indices': [1]}` or `{'name': 'X', 'array': False}`. After storing the value via `store_input_value(var_desc, value)`, call `continue_program_execution()` to resume.
@@ -49,7 +57,8 @@ INPUT pauses execution by returning `{'type': 'input_request', ...}`. Variable t
 `BasicParser` in `parser.py` owns all statement-splitting and argument-splitting logic:
 
 - `split_on_delimiter()` — split on colons (or custom delimiter), respecting quoted strings.
-- `split_on_delimiter_paren_aware()` — same but also respects parenthesized groups. Use with `delimiter=','` for argument splitting (replaces all per-module `_split_args` variants).
+- `split_args()` — split on commas, respecting parentheses and quotes. The single shared comma-splitter for the entire codebase (replaces all former per-module `_split_args` variants).
+- `split_on_delimiter_paren_aware()` — generalized version of `split_args()` for non-comma delimiters.
 - `is_rem_line()` — guards against splitting REM comments.
 - `has_control_keyword()` — detects IF/FOR/WHILE/DO at the start of a line.
 - `CONTROL_KEYWORDS` — canonical tuple of control-flow keyword prefixes.
@@ -82,8 +91,10 @@ Never duplicate this logic — always call through to `BasicParser`.
 - LINE coordinate pair syntax: `CommandRegistry.is_coordinate_pair_syntax()` and `parse_line_coordinates()` handle `(x1,y1)-(x2,y2)` with optional spaces around the dash
 - System OK messages use `_system_ok()` (tagged with `'source': 'system'`)
 - File-creating tests must use autouse temp directory fixtures — never write to real `programs/`
-- All errors use `error_context.syntax_error()` / `runtime_error()` with 2-3 suggestions
+- All errors use `error_context.syntax_error()` / `runtime_error()` with 2-3 suggestions. `syntax_error()` auto-prefixes "SYNTAX ERROR:" — don't add it manually.
 - Use `error_response(error)` and `text_response(text)` from `error_context` to build response lists — never hand-build `[{'type': 'error', ...}]` or `[{'type': 'text', ...}]`
+- Use `basic_truthy(value)` from `ast_parser` for BASIC boolean conversion — never inline the `isinstance` check
+- Use `check_reserved_name(name)` on `CoCoBasic` to guard against reserved function names in assignments and DIM
 - Use `clear_all_stacks()`, `save_execution_state()`, `restore_execution_state()` for stack/state management
 - `source venv/bin/activate` before running anything
 - Tests: `python -m pytest --ignore=tests/integration/test_websocket_completion_signals.py`

@@ -182,10 +182,12 @@ class ErrorContextManager:
             function_name=self.current_function
         )
     
-    def syntax_error(self, message: str, line: Optional[int] = None, 
+    def syntax_error(self, message: str, line: Optional[int] = None,
                     column: Optional[int] = None, length: Optional[int] = None,
                     suggestions: Optional[List[str]] = None) -> BasicError:
-        """Create a syntax error with context"""
+        """Create a syntax error with context. Auto-prefixes 'SYNTAX ERROR:' if not present."""
+        if not message.startswith('SYNTAX ERROR'):
+            message = f'SYNTAX ERROR: {message}'
         context = self.create_context(line, column, length)
         return BasicError(
             message=message,

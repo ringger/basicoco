@@ -75,22 +75,14 @@ class VariableManager:
                     return error_response(error)
 
                 # Check if array name conflicts with reserved function names
-                if array_name in self.emulator.get_reserved_function_names():
-                    error = self.emulator.error_context.syntax_error(
-                        f"Cannot use reserved function name as array: {array_name}",
-                        self.emulator.current_line,
-                        suggestions=[
-                            'Choose a different array name',
-                            'Reserved names include built-in functions like SIN, COS, etc.',
-                            'Example: Use DATA instead of SIN'
-                        ]
-                    )
-                    return error_response(error)
+                err = self.emulator.check_reserved_name(array_name)
+                if err:
+                    return err
                 
                 # Parse dimensions (comma-separated numbers)
                 try:
                     dimensions = []
-                    for dim_str in self.emulator._split_args(dimensions_str):
+                    for dim_str in BasicParser.split_args(dimensions_str):
                         dim_value = int(self.emulator.evaluate_expression(dim_str.strip()))
                         if dim_value <= 0:
                             error = self.emulator.error_context.syntax_error(

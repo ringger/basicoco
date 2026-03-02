@@ -10,6 +10,8 @@ from .parser import BasicParser
 from .commands import CommandRegistry
 from .error_context import error_response
 
+_split_args = BasicParser.split_args  # Shared comma-split helper
+
 
 def _graphics_command(command_name):
     """Decorator that wraps a graphics method with standard error handling."""
@@ -18,7 +20,10 @@ def _graphics_command(command_name):
             try:
                 return method(self, args)
             except Exception as e:
-                return [{'type': 'error', 'message': f'Error in {command_name}: {str(e)}'}]
+                err = self.emulator.error_context.runtime_error(
+                    f"Error in {command_name}: {e}",
+                    self.emulator.current_line)
+                return error_response(err)
         wrapper.__name__ = method.__name__
         wrapper.__doc__ = method.__doc__
         return wrapper
@@ -57,10 +62,15 @@ class BasicGraphics:
             message, self.emulator.current_line, suggestions=suggestions)
         return error_response(error)
 
+    @staticmethod
+    def _illegal_function_call():
+        """Return an ILLEGAL FUNCTION CALL error response."""
+        return [{'type': 'error', 'message': 'ILLEGAL FUNCTION CALL'}]
+
     def _require_graphics_mode(self):
         """Return error response if not in graphics mode, else None."""
         if self.emulator.graphics_mode == 0:
-            return [{'type': 'error', 'message': 'ILLEGAL FUNCTION CALL'}]
+            return self._illegal_function_call()
         return None
 
     def _parse_coord_pair(self, args, command_name):
@@ -77,7 +87,7 @@ class BasicGraphics:
                  f'Example: {command_name}(100,50)',
                  'Make sure parentheses are properly matched'])
         coords = args[1:coords_end]
-        coord_parts = self._split_arguments_respecting_parentheses(coords)
+        coord_parts = _split_args(coords)
         if len(coord_parts) != 2:
             return self._syntax_error(
                 f"{command_name} requires exactly two coordinates",
@@ -104,16 +114,12 @@ class BasicGraphics:
                     return i
         return -1
     
-    @staticmethod
-    def _split_arguments_respecting_parentheses(args):
-        """Split arguments by comma, respecting parentheses."""
-        return BasicParser.split_on_delimiter_paren_aware(args, delimiter=',')
     
     @_graphics_command('PMODE')
     def execute_pmode(self, args):
         """Execute PMODE command to set graphics mode"""
         # Parse arguments: PMODE mode[,page]
-        parts = self._split_arguments_respecting_parentheses(args)
+        parts = _split_args(args)
         mode = self._eval_int(parts[0])
         page = 1
 
@@ -121,7 +127,7 @@ class BasicGraphics:
             page = self._eval_int(parts[1])
 
         if mode < 0 or mode > 4:
-            return [{'type': 'error', 'message': 'ILLEGAL FUNCTION CALL'}]
+            return self._illegal_function_call()
 
         self.emulator.graphics_mode = mode
 
@@ -132,7 +138,7 @@ class BasicGraphics:
         """Execute SCREEN command to set screen/color mode"""
         # Parse SCREEN mode[,page] parameters
         if ',' in args:
-            parts = self._split_arguments_respecting_parentheses(args)
+            parts = _split_args(args)
             mode = self._eval_int(parts[0])
             page = self._eval_int(parts[1])
         else:
@@ -140,7 +146,7 @@ class BasicGraphics:
             page = 1  # Default page
 
         if mode < 1 or mode > 2:
-            return [{'type': 'error', 'message': 'ILLEGAL FUNCTION CALL'}]
+            return self._illegal_function_call()
 
         self.emulator.screen_mode = mode
 
@@ -150,7 +156,7 @@ class BasicGraphics:
     def execute_color(self, args):
         """Execute COLOR command to set foreground/background colors"""
         if ',' in args:
-            parts = self._split_arguments_respecting_parentheses(args)
+            parts = _split_args(args)
             fg = self._eval_int(parts[0]) if parts[0] else None
             bg = self._eval_int(parts[1]) if len(parts) > 1 and parts[1] else None
         else:
@@ -178,7 +184,7 @@ class BasicGraphics:
                     color = self._eval_int(color_str)
             return [{'type': 'pset', 'x': x, 'y': y, 'color': color}]
         else:
-            parts = self._split_arguments_respecting_parentheses(args)
+            parts = _split_args(args)
             if len(parts) < 2:
                 return self._syntax_error("PSET requires X and Y coordinates",
                     ['Correct syntax: PSET x,y or PSET x,y,color',
@@ -205,7 +211,7 @@ class BasicGraphics:
             x, y, _ = result
             return [{'type': 'preset', 'x': x, 'y': y}]
         else:
-            parts = self._split_arguments_respecting_parentheses(args)
+            parts = _split_args(args)
             if len(parts) != 2:
                 return self._syntax_error("PRESET requires exactly two coordinates",
                     ['Correct syntax: PRESET x,y', 'Example: PRESET 100,50',
@@ -253,7 +259,7 @@ class BasicGraphics:
                      'color': color, 'mode': mode, 'box_type': box_type}]
         else:
             # Space-separated syntax: LINE x1,y1,x2,y2[,color]
-            parts = self._split_arguments_respecting_parentheses(args)
+            parts = _split_args(args)
             if len(parts) < 4:
                 return self._syntax_error("LINE requires four coordinates", ['Correct syntax: LINE x1,y1,x2,y2 or LINE(x1,y1)-(x2,y2)',
                         'Example: LINE 10,10,100,100',
@@ -286,7 +292,7 @@ class BasicGraphics:
 
             if remainder.startswith(','):
                 remainder = remainder[1:].strip()
-            parts = self._split_arguments_respecting_parentheses(remainder)
+            parts = _split_args(remainder)
             radius = self._eval_int(parts[0])
 
             color = None
@@ -296,7 +302,7 @@ class BasicGraphics:
             return [{'type': 'circle', 'x': x, 'y': y, 'radius': radius, 'color': color}]
         else:
             # Space-separated syntax: CIRCLE x,y,radius[,color]
-            parts = self._split_arguments_respecting_parentheses(args)
+            parts = _split_args(args)
             if len(parts) < 3:
                 return self._syntax_error("CIRCLE requires center coordinates and radius", ['Correct syntax: CIRCLE x,y,radius or CIRCLE x,y,radius,color',
                         'Example: CIRCLE 100,50,25',
@@ -329,7 +335,7 @@ class BasicGraphics:
             border_color = None
 
             if remainder.startswith(','):
-                parts = self._split_arguments_respecting_parentheses(remainder[1:])
+                parts = _split_args(remainder[1:])
                 if parts[0]:
                     paint_color = self._eval_int(parts[0])
                 if len(parts) > 1 and parts[1]:
@@ -394,7 +400,7 @@ class BasicGraphics:
             x, y, remainder = result
 
             if remainder.startswith(','):
-                parts = self._split_arguments_respecting_parentheses(remainder[1:])
+                parts = _split_args(remainder[1:])
             else:
                 return self._syntax_error("Invalid PUT syntax", ['Correct syntax: PUT(x,y),array_name',
                         'Example: PUT(100,50),A',
@@ -420,7 +426,9 @@ class BasicGraphics:
 
         draw_string = self.emulator.evaluate_expression(args)
         if not isinstance(draw_string, str):
-            return [{'type': 'error', 'message': 'DRAW requires string argument'}]
+            return self._syntax_error('DRAW requires string argument',
+                                      ['DRAW takes a string of drawing commands',
+                                       'Example: DRAW "U10R10D10L10"'])
 
         commands = BasicParser.parse_draw_commands(draw_string)
 

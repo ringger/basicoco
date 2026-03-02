@@ -13,7 +13,7 @@ from .variables import VariableManager
 from .commands import CommandRegistry
 from .expressions import FunctionRegistry
 from .functions import register_all_functions
-from .ast_parser import ASTParser, ASTEvaluator
+from .ast_parser import ASTParser, ASTEvaluator, basic_truthy
 from .output_manager import StreamingOutputManager, LegacyOutputAdapter
 from .error_context import ErrorContextManager, error_response, text_response
 from .file_manager import FileManager
@@ -59,7 +59,14 @@ class CoCoBasic:
         self.pause_duration = 0  # Duration of current pause
         self.program_counter = None  # For resuming execution after input
         self.stopped_position = None  # For CONT command - stores (line, sub_line) where STOP occurred
-        
+
+        # ON ERROR GOTO state
+        self.on_error_goto_line = None    # Handler line number, or None
+        self.error_number = 0             # ERR pseudo-variable
+        self.error_line = 0               # ERL pseudo-variable
+        self.error_resume_position = None # (line_num, sub_index) of error site
+        self.in_error_handler = False     # Prevents recursive error handling
+
         # Multi-variable INPUT state
         self.input_variables = None  # List of variables waiting for input
         self.input_prompt = None     # Prompt text for multi-variable input
@@ -111,10 +118,6 @@ class CoCoBasic:
         """Emit debug output using the new system"""
         self.output_manager.debug(message, source=source, line_number=self.current_line)
     
-    @staticmethod
-    def _split_args(args):
-        """Split arguments by comma, respecting parentheses."""
-        return BasicParser.split_on_delimiter_paren_aware(args, delimiter=',')
 
     def _remove_expanded_lines(self, line_num):
         """Remove all expanded_program entries for a given line number."""
@@ -129,9 +132,24 @@ class CoCoBasic:
 
     def get_reserved_function_names(self):
         """Return list of reserved function names that cannot be used as variable/array names"""
-        return ['LEFT$', 'RIGHT$', 'MID$', 'LEN', 'ABS', 'INT', 'RND', 'SQR', 
+        return ['LEFT$', 'RIGHT$', 'MID$', 'LEN', 'ABS', 'INT', 'RND', 'SQR',
                 'SIN', 'COS', 'TAN', 'ATN', 'EXP', 'LOG', 'CHR$', 'ASC', 'STR$', 'VAL', 'INKEY$']
-        
+
+    def check_reserved_name(self, name):
+        """Return error response if name is a reserved function, else None."""
+        if name in self.get_reserved_function_names():
+            error = self.error_context.syntax_error(
+                f"Cannot use reserved function name: {name}",
+                self.current_line,
+                suggestions=[
+                    'Choose a different variable name',
+                    'Reserved names include built-in functions like SIN, COS, etc.',
+                    'Example: Use DATA instead of SIN'
+                ]
+            )
+            return error_response(error)
+        return None
+
     def parse_line(self, line):
         """Parse a line using the BasicParser - kept for backward compatibility"""
         return BasicParser.parse_line(line)
@@ -398,7 +416,7 @@ class CoCoBasic:
         # Validate IF statements require THEN keyword
         if first_word == 'IF' and 'THEN' not in code_upper:
             error = self.error_context.syntax_error(
-                "SYNTAX ERROR: Missing THEN in IF statement",
+                "Missing THEN in IF statement",
                 self.current_line,
                 suggestions=[
                     "Correct syntax: IF condition THEN action",
@@ -420,7 +438,7 @@ class CoCoBasic:
             # For migrated commands, return parse/execution errors instead of falling through
             if first_word in self._ast_migrated_commands and error_msg:
                 error = self.error_context.syntax_error(
-                    f"SYNTAX ERROR: {error_msg}",
+                    error_msg,
                     self.current_line,
                     suggestions=[
                         f'Check {first_word} syntax',
@@ -585,7 +603,7 @@ class CoCoBasic:
         # SOUND frequency,duration
         self.error_context.set_context(self.current_line, f"SOUND {args}")
         
-        parts = self._split_args(args)
+        parts = BasicParser.split_args(args)
         if len(parts) != 2:
             error = self.error_context.syntax_error(
                 "SOUND requires two parameters",
@@ -628,14 +646,10 @@ class CoCoBasic:
             
             return [{'type': 'sound', 'frequency': frequency, 'duration': duration}]
             
-        except ValueError as e:
-            # Enhanced error from expression evaluation
-            return [{'type': 'error', 'message': str(e)}]
-        except TypeError as e:
+        except (ValueError, TypeError) as e:
             error = self.error_context.runtime_error(
-                "Invalid SOUND parameters",
+                f"Invalid SOUND parameters: {e}",
                 self.current_line,
-                details=str(e),
                 suggestions=[
                     "Both frequency and duration must be numeric",
                     "Example: SOUND 440, 100",
@@ -651,8 +665,13 @@ class CoCoBasic:
             try:
                 seed = int(self.evaluate_expression(args, self.current_line))
                 random.seed(seed)
-            except ValueError as e:
-                return [{'type': 'error', 'message': str(e)}]
+            except (ValueError, TypeError) as e:
+                error = self.error_context.runtime_error(
+                    f"Invalid RANDOMIZE seed: {e}",
+                    self.current_line,
+                    suggestions=["RANDOMIZE requires a numeric seed",
+                                 "Example: RANDOMIZE 42"])
+                return error_response(error)
         else:
             random.seed()
         return self._system_ok()
@@ -698,7 +717,12 @@ class CoCoBasic:
             
         except (ValueError, TypeError) as e:
             # Return proper error without masking the exception
-            return [{'type': 'error', 'message': f'PAUSE command error: {type(e).__name__}: {e}'}]
+            error = self.error_context.runtime_error(
+                f"PAUSE command error: {e}",
+                self.current_line,
+                suggestions=["PAUSE requires a numeric duration",
+                             "Example: PAUSE 1000"])
+            return error_response(error)
     
     def store_input_value(self, var_desc, value):
         """Store a user-entered value into the appropriate variable or array element.
@@ -780,7 +804,14 @@ class CoCoBasic:
         self.pause_duration = 0
         self.program_counter = None
         self.stopped_position = None  # Clear stopped position
-        
+
+        # Clear ON ERROR GOTO state
+        self.on_error_goto_line = None
+        self.error_number = 0
+        self.error_line = 0
+        self.error_resume_position = None
+        self.in_error_handler = False
+
         # Clear multi-variable INPUT state
         self.input_variables = None
         self.input_prompt = None
@@ -805,7 +836,32 @@ class CoCoBasic:
     
     def execute_cont(self, args):
         return self.executor.execute_cont(args)
-    
+
+    def execute_resume(self, args):
+        """RESUME [NEXT | line] — resume after ON ERROR GOTO handler."""
+        if not self.in_error_handler:
+            error = self.error_context.runtime_error(
+                "RESUME WITHOUT ERROR",
+                suggestions=["RESUME can only be used inside an ON ERROR GOTO handler",
+                             "Use ON ERROR GOTO line to set up an error handler first"])
+            return error_response(error)
+        self.in_error_handler = False
+        args = args.strip().upper()
+        if args == '' or args == '0':
+            return [{'type': 'resume', 'position': self.error_resume_position}]
+        elif args == 'NEXT':
+            return [{'type': 'resume_next', 'position': self.error_resume_position}]
+        else:
+            try:
+                line = int(self.evaluate_expression(args, self.current_line))
+            except (ValueError, TypeError):
+                error = self.error_context.syntax_error(
+                    f"Invalid RESUME target: {args}",
+                    self.current_line,
+                    suggestions=["Use RESUME, RESUME NEXT, or RESUME line"])
+                return error_response(error)
+            return [{'type': 'jump', 'line': line}]
+
     def execute_data(self, args):
         # DATA command - store data values in program
         # DATA 10,20,"HELLO",30.5
@@ -819,7 +875,7 @@ class CoCoBasic:
         
         # Parse comma-separated values, respecting quotes
         data_items = []
-        items = self.split_data_args(args)
+        items = BasicParser.split_on_delimiter(args, delimiter=',')
         
         for item in items:
             item = item.strip()
@@ -841,35 +897,12 @@ class CoCoBasic:
         
         return []  # DATA commands don't produce output
     
-    def split_data_args(self, args):
-        """Split DATA arguments on commas, but respect quoted strings"""
-        items = []
-        current_item = ""
-        in_quotes = False
-        
-        for char in args:
-            if char == '"':
-                in_quotes = not in_quotes
-                current_item += char
-            elif char == ',' and not in_quotes:
-                # Comma outside quotes - split here
-                items.append(current_item.strip())
-                current_item = ""
-            else:
-                current_item += char
-        
-        # Add the last item
-        if current_item.strip():
-            items.append(current_item.strip())
-        
-        return items
-    
     def execute_read(self, args):
         # READ command - read data into variables
         # READ A,B$,C
         if not args:
             error = self.error_context.syntax_error(
-                "SYNTAX ERROR: READ requires variable names",
+                "READ requires variable names",
                 self.current_line,
                 suggestions=[
                     "Specify variables to read data into",
@@ -880,7 +913,7 @@ class CoCoBasic:
             return error_response(error)
         
         # Parse variable names (parenthesis-aware for multi-dim arrays)
-        var_names = self._split_args(args)
+        var_names = BasicParser.split_args(args)
         
         for var_name in var_names:
             if self.data_pointer >= len(self.data_statements):
@@ -932,12 +965,16 @@ class CoCoBasic:
 
         # Parse indices using parenthesis-aware split
         try:
-            indices = [int(self.evaluate_expression(idx)) for idx in self._split_args(indices_str)]
+            indices = [int(self.evaluate_expression(idx)) for idx in BasicParser.split_args(indices_str)]
             
             # Use VariableManager to set array element
-            error = self.variable_manager.set_array_element(array_name.upper(), indices, value)
-            if error:
-                return [{'type': 'error', 'message': error}]
+            err_msg = self.variable_manager.set_array_element(array_name.upper(), indices, value)
+            if err_msg:
+                error = self.error_context.runtime_error(
+                    err_msg, self.current_line,
+                    suggestions=["Check array dimensions with DIM",
+                                 "Array indices must be within bounds"])
+                return error_response(error)
             return None  # No error
             
         except ValueError:
@@ -968,9 +1005,31 @@ class CoCoBasic:
         return []
     
     def execute_on(self, args):
-        """ON expression GOTO/GOSUB line1,line2,line3..."""
+        """ON expression GOTO/GOSUB line1,line2,line3... or ON ERROR GOTO line"""
         args = args.strip()
-        
+
+        # Check for ON ERROR GOTO before normal ON...GOTO/GOSUB
+        args_upper = args.upper().lstrip()
+        if args_upper.startswith('ERROR'):
+            match = re.match(r'ERROR\s+GOTO\s+(\d+)\s*$', args_upper)
+            if not match:
+                error = self.error_context.syntax_error(
+                    "Expected ON ERROR GOTO line",
+                    self.current_line,
+                    suggestions=["Use ON ERROR GOTO 100",
+                                 "Use ON ERROR GOTO 0 to disable handler"])
+                return error_response(error)
+            target = int(match.group(1))
+            if target == 0:
+                self.on_error_goto_line = None
+                if self.in_error_handler:
+                    self.in_error_handler = False
+                    return [{'type': 'error',
+                             'message': f'ERROR IN {self.error_line}'}]
+                return []
+            self.on_error_goto_line = target
+            return []
+
         # Parse: ON expression GOTO/GOSUB lines
         # First find GOTO or GOSUB keyword
         goto_pos = args.upper().find(' GOTO ')
@@ -978,7 +1037,7 @@ class CoCoBasic:
         
         if goto_pos == -1 and gosub_pos == -1:
             error = self.error_context.syntax_error(
-                "SYNTAX ERROR: ON requires GOTO or GOSUB",
+                "ON requires GOTO or GOSUB",
                 self.current_line,
                 suggestions=["Use ON expression GOTO line1,line2,...",
                            "Use ON expression GOSUB line1,line2,..."]
@@ -1000,7 +1059,7 @@ class CoCoBasic:
             expr_part = expr_part[3:].strip()
         elif expr_part.upper() == 'ON':
             error = self.error_context.syntax_error(
-                "SYNTAX ERROR: ON requires an expression",
+                "ON requires an expression",
                 self.current_line,
                 suggestions=["Provide a numeric expression after ON"]
             )
@@ -1044,25 +1103,13 @@ class CoCoBasic:
         # Get the target line number (1-based indexing)
         target_line = line_numbers[index - 1]
         
-        # Set context for error reporting
-        self.error_context.set_context(self.current_line, f"ON {expr_part} {command} {line_part}")
-        
-        # Dispatch via process_statement (AST-first execution)
+        # Return jump directive directly
         if command == 'GOTO':
-            return self.process_statement(f"GOTO {target_line}")
+            return [{'type': 'jump', 'line': target_line}]
         elif command == 'GOSUB':
-            return self.process_statement(f"GOSUB {target_line}")
-        
-        error = self.error_context.syntax_error(
-            "Invalid ON statement syntax", 
-            self.current_line,
-            suggestions=[
-                'Correct syntax: ON expression GOTO line1,line2,... or ON expression GOSUB line1,line2,...',
-                'Example: ON X GOTO 100,200,300',
-                'Expression must evaluate to a number'
-            ]
-        )
-        return error_response(error)
+            self.call_stack.append((self.current_line, self.current_sub_line))
+            return [{'type': 'jump', 'line': target_line}]
+        return []
     
     # INKEY$ functionality moved to functions.py function registry
     # Keyboard buffer management now handled by function registry
@@ -1124,7 +1171,13 @@ class CoCoBasic:
                                      description="Continue program after STOP",
                                      syntax="CONT",
                                      examples=["CONT"])
-        
+
+        self.command_registry.register('RESUME', self.execute_resume,
+                                     category='flow',
+                                     description="Resume execution after ON ERROR GOTO handler",
+                                     syntax="RESUME [NEXT | line]",
+                                     examples=["RESUME", "RESUME NEXT", "RESUME 100"])
+
         # Data commands
         self.command_registry.register('DATA', self.execute_data,
                                      category='data',
@@ -1321,7 +1374,7 @@ class CoCoBasic:
 
         # Re-evaluate the condition using stored AST node
         result = self.ast_evaluator.visit(while_info['condition_ast'])
-        condition_true = bool(result) if isinstance(result, (int, float)) else result != 0
+        condition_true = basic_truthy(result)
         if condition_true:
             # Continue loop - jump back to after the WHILE statement
             return [{'type': 'jump_after_while', 
@@ -1385,7 +1438,7 @@ class CoCoBasic:
         if condition_ast is not None:
             # AST-based condition evaluation (condition from DO statement)
             result = self.ast_evaluator.visit(condition_ast)
-            condition_true = bool(result) if isinstance(result, (int, float)) else result != 0
+            condition_true = basic_truthy(result)
             if condition_type == 'WHILE':
                 should_continue = condition_true
             elif condition_type == 'UNTIL':
@@ -1552,7 +1605,11 @@ class CoCoBasic:
             )
             return error_response(error)
         except (TypeError, KeyError) as e:
-            return [{'type': 'error', 'message': f'DELETE ERROR: {str(e)}'}]
+            error = self.error_context.runtime_error(
+                f"DELETE error: {e}",
+                self.current_line,
+                suggestions=["Check that the specified line numbers exist"])
+            return error_response(error)
 
     def execute_renum(self, args):
         """RENUM statement - renumber program lines"""
@@ -1642,7 +1699,12 @@ class CoCoBasic:
         new_lines = set(line_mapping.values())
         conflicts = unchanged_lines & new_lines
         if conflicts:
-            return [{'type': 'error', 'message': f'ERROR - NEW LINE {min(conflicts)} CONFLICTS WITH EXISTING LINE'}]
+            error = self.error_context.runtime_error(
+                f"NEW LINE {min(conflicts)} CONFLICTS WITH EXISTING LINE",
+                self.current_line,
+                suggestions=["Choose different RENUM parameters to avoid conflicts",
+                             "Delete conflicting lines first"])
+            return error_response(error)
         
         # Update program with new line numbers
         new_program = {}
