@@ -7,12 +7,14 @@ import pexpect
 import sys
 import time
 
+from emulator.config import DEFAULT_PORT
+
 def test_cli_session():
     print("=== STARTING TRS-80 CLI SESSION ===")
     print("Connecting to backend server...")
     
     # Start the CLI client
-    child = pexpect.spawn('python cli_client.py --host localhost --port 5000', 
+    child = pexpect.spawn(f'python cli_client.py --host localhost --port {DEFAULT_PORT}',
                          encoding='utf-8', timeout=10)
     
     # Show all output

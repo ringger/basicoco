@@ -128,6 +128,11 @@ class TextDisplay {
         ];
         this.currentColorIndex = 0;
         
+        // Scroll-back buffer
+        this.lineBuffer = ['']; // Array of line strings (full history)
+        this.scrollOffset = 0;  // 0 = viewing bottom (live), >0 = scrolled back
+        this.maxBufferLines = 5000;
+
         // REPL state
         this.currentCommand = '';
         this.commandCursorPos = 0; // Position within current command for editing
@@ -135,7 +140,7 @@ class TextDisplay {
         this.promptCol = 0;
         this.waitingForInput = false;
         this.inputPrompt = '';
-        
+
         // Command history and completion
         this.commandHistory = [];
         this.historyIndex = -1;
@@ -175,12 +180,20 @@ class TextDisplay {
         this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
         this.currentRow = 0;
         this.currentCol = 0;
+        this.scrollOffset = 0;
+        this.lineBuffer = [''];
         this.drawCursor();
     }
     
     printText(text) {
+        // If scrolled back, snap to bottom for new output
+        if (this.scrollOffset > 0) {
+            this.scrollOffset = 0;
+            this.renderFromBuffer();
+        }
+
         this.ctx.fillStyle = this.textColor;
-        
+
         for (let char of text) {
             if (char === '\r') {
                 // Carriage return - move to beginning of line
@@ -189,61 +202,127 @@ class TextDisplay {
                 this.drawCursor();
                 continue;
             }
-            
+
             if (char === '\n' || this.currentCol >= this.cols) {
                 this.newLine();
                 if (char === '\n') continue;
             }
-            
+
+            // Write to line buffer
+            this.bufferWriteChar(char, this.currentCol);
+
             // Clear cursor at current position before writing character
             this.clearCurrentCursor();
-            
+
             // Calculate pixel-aligned positions
             const x = Math.round(this.currentCol * this.charWidth);
             const y = Math.round(this.currentRow * this.charHeight);
-            
+
             // Clear character position before writing
             this.ctx.fillStyle = this.backgroundColor;
             this.ctx.fillRect(x, y, this.charWidth, this.charHeight);
-            
+
             // Write character with pixel alignment
             this.ctx.fillStyle = this.textColor;
             this.ctx.fillText(char, x, y + 1);  // Add 1px offset for better alignment
-            
+
             this.currentCol++;
         }
-        
+
         this.drawCursor(); // Draw at new position
+    }
+
+    // Write a character to the current line in the buffer
+    bufferWriteChar(char, col) {
+        const bufIdx = this.lineBuffer.length - 1;
+        const line = this.lineBuffer[bufIdx];
+        const padded = line.padEnd(col, ' ');
+        this.lineBuffer[bufIdx] = padded.substring(0, col) + char + padded.substring(col + 1);
     }
     
     newLine() {
         this.clearCurrentCursor();
         this.currentCol = 0;
         this.currentRow++;
-        
+
+        // Add new line to buffer
+        this.lineBuffer.push('');
+
+        // Trim buffer if too large
+        if (this.lineBuffer.length > this.maxBufferLines) {
+            this.lineBuffer.splice(0, this.lineBuffer.length - this.maxBufferLines);
+        }
+
         if (this.currentRow >= this.rows) {
             this.scrollUp();
             this.currentRow = this.rows - 1;
         }
-        
+
         // Redraw cursor at new position
         this.drawCursor();
     }
-    
+
     scrollUp() {
         const imageData = this.ctx.getImageData(
-            0, this.charHeight, 
+            0, this.charHeight,
             this.canvas.width, this.canvas.height - this.charHeight
         );
         this.ctx.fillStyle = this.backgroundColor;
         this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
         this.ctx.putImageData(imageData, 0, 0);
     }
+
+    scrollBack(lines) {
+        const maxOffset = Math.max(0, this.lineBuffer.length - this.rows);
+        this.scrollOffset = Math.min(this.scrollOffset + lines, maxOffset);
+        this.renderFromBuffer();
+    }
+
+    scrollForward(lines) {
+        this.scrollOffset = Math.max(0, this.scrollOffset - lines);
+        if (this.scrollOffset === 0) {
+            // Back at live view — re-render current screen
+            this.renderFromBuffer();
+            this.drawCursor();
+        } else {
+            this.renderFromBuffer();
+        }
+    }
+
+    renderFromBuffer() {
+        // Clear canvas
+        this.ctx.fillStyle = this.backgroundColor;
+        this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+
+        // Calculate which buffer lines to show
+        const totalLines = this.lineBuffer.length;
+        const endIdx = totalLines - this.scrollOffset;
+        const startIdx = Math.max(0, endIdx - this.rows);
+
+        this.ctx.fillStyle = this.textColor;
+        for (let i = startIdx; i < endIdx; i++) {
+            const screenRow = i - startIdx;
+            const line = this.lineBuffer[i] || '';
+            const y = Math.round(screenRow * this.charHeight);
+            for (let col = 0; col < line.length && col < this.cols; col++) {
+                const x = Math.round(col * this.charWidth);
+                this.ctx.fillText(line[col], x, y + 1);
+            }
+        }
+
+        // Draw cursor only if at live view
+        if (this.scrollOffset === 0) {
+            this.drawCursor();
+        }
+    }
     
     drawCursor() {
+        // Don't draw cursor when scrolled back from live view
+        if (this.scrollOffset > 0) return;
+
         const x = this.currentCol * this.charWidth;
         const y = this.currentRow * this.charHeight;  // Align exactly with text baseline
-        
+
         if (this.cursorVisible) {
             // Use current rainbow color
             this.ctx.fillStyle = this.rainbowColors[this.currentColorIndex];
@@ -384,13 +463,24 @@ class TextDisplay {
     
     // Tab completion
     handleTabCompletion() {
+        const beforeCursor = this.currentCommand.substring(0, this.commandCursorPos);
+
+        // Check for filename context: LOAD "partial or LOAD partial (quote optional)
+        const fileMatch = beforeCursor.match(/^(?:\d+\s+)?(LOAD|SAVE|KILL)\s+"?([^"]*)$/i);
+        if (fileMatch) {
+            const hasQuote = beforeCursor.includes('"');
+            const partial = fileMatch[2].toUpperCase();
+            this.requestFileCompletion(partial, hasQuote);
+            return;
+        }
+
         const currentWord = this.getCurrentWord();
         if (!currentWord) return;
-        
-        const matches = this.basicKeywords.filter(keyword => 
+
+        const matches = this.basicKeywords.filter(keyword =>
             keyword.startsWith(currentWord.toUpperCase())
         );
-        
+
         if (matches.length === 1) {
             // Single match - complete it
             this.replaceCurrentWord(matches[0]);
@@ -403,18 +493,64 @@ class TextDisplay {
             this.redrawCurrentCommand();
         }
     }
-    
+
+    requestFileCompletion(partial, hasQuote) {
+        if (!this.onRequestFiles) return;
+        this.onRequestFiles((files) => {
+            const matches = files.filter(f => f.toUpperCase().startsWith(partial));
+            if (matches.length === 1) {
+                // Single match — complete with quotes
+                const prefix = hasQuote ? '' : '"';
+                this.replaceFilePartial(partial, prefix + matches[0] + '"', hasQuote);
+            } else if (matches.length > 1) {
+                // Complete common prefix
+                const common = this.commonPrefix(matches);
+                if (common.length > partial.length) {
+                    const prefix = hasQuote ? '' : '"';
+                    this.replaceFilePartial(partial, prefix + common, hasQuote);
+                } else if (!hasQuote) {
+                    // Insert opening quote even if no further completion
+                    this.replaceFilePartial(partial, '"' + partial, hasQuote);
+                }
+                this.printText('\n');
+                this.printText(matches.join('  ') + '\n');
+                this.showPrompt();
+                this.redrawCurrentCommand();
+            }
+        });
+    }
+
+    replaceFilePartial(oldPartial, newPartial) {
+        const beforeCursor = this.currentCommand.substring(0, this.commandCursorPos);
+        const afterCursor = this.currentCommand.substring(this.commandCursorPos);
+        const newBefore = beforeCursor.substring(0, beforeCursor.length - oldPartial.length) + newPartial;
+        this.currentCommand = newBefore + afterCursor;
+        this.commandCursorPos = newBefore.length;
+        this.redrawCurrentCommand();
+    }
+
+    commonPrefix(strings) {
+        if (strings.length === 0) return '';
+        let prefix = strings[0];
+        for (let i = 1; i < strings.length; i++) {
+            while (!strings[i].startsWith(prefix)) {
+                prefix = prefix.substring(0, prefix.length - 1);
+            }
+        }
+        return prefix;
+    }
+
     getCurrentWord() {
         const beforeCursor = this.currentCommand.substring(0, this.commandCursorPos);
         const match = beforeCursor.match(/[A-Z$]*$/i);
         return match ? match[0] : '';
     }
-    
+
     replaceCurrentWord(replacement) {
         const beforeCursor = this.currentCommand.substring(0, this.commandCursorPos);
         const afterCursor = this.currentCommand.substring(this.commandCursorPos);
         const wordStart = beforeCursor.match(/[A-Z$]*$/i);
-        
+
         if (wordStart) {
             const newBeforeCursor = beforeCursor.substring(0, beforeCursor.length - wordStart[0].length) + replacement;
             this.currentCommand = newBeforeCursor + afterCursor;
@@ -1323,7 +1459,14 @@ class DualMonitorEmulator {
     initialize() {
         // Initialize displays
         this.displayManager.initialize();
-        
+
+        // Wire file completion for LOAD/SAVE/KILL tab completion
+        const socket = this.socket;
+        this.displayManager.textDisplay.onRequestFiles = (callback) => {
+            socket.emit('list_files');
+            socket.once('file_list', (data) => callback(data.files));
+        };
+
         // Initialize panel resizer
         this.panelResizer = new PanelResizer();
         
@@ -1421,7 +1564,19 @@ class DualMonitorEmulator {
                 e.preventDefault();
                 return;
             }
-            
+
+            // Scroll-back: Shift+PageUp / Shift+PageDown
+            if (e.shiftKey && e.key === 'PageUp') {
+                this.displayManager.textDisplay.scrollBack(this.displayManager.textDisplay.rows - 1);
+                e.preventDefault();
+                return;
+            }
+            if (e.shiftKey && e.key === 'PageDown') {
+                this.displayManager.textDisplay.scrollForward(this.displayManager.textDisplay.rows - 1);
+                e.preventDefault();
+                return;
+            }
+
             // Handle Emacs/readline key bindings
             if (e.ctrlKey) {
                 let handled = this.displayManager.textDisplay.handleEmacsKeybinding(e.key);
@@ -1430,7 +1585,7 @@ class DualMonitorEmulator {
                     return;
                 }
             }
-            
+
             this.displayManager.textDisplay.handleKeyInput(e.key, (type, value) => {
                 if (type === 'command') {
                     this.executeCommand(value);
@@ -1439,6 +1594,18 @@ class DualMonitorEmulator {
                 }
             });
             e.preventDefault(); // Prevent default browser behavior
+        });
+
+        // Mouse wheel scroll-back
+        this.replContainer.addEventListener('wheel', (e) => {
+            const td = this.displayManager.textDisplay;
+            const lines = Math.ceil(Math.abs(e.deltaY) / 30);
+            if (e.deltaY < 0) {
+                td.scrollBack(lines);
+            } else {
+                td.scrollForward(lines);
+            }
+            e.preventDefault();
         });
         
         // Focus REPL when clicked

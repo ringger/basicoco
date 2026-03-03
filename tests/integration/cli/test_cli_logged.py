@@ -9,6 +9,8 @@ import sys
 import time
 from datetime import datetime
 
+from emulator.config import DEFAULT_PORT
+
 def test_cli_with_logging():
     print("=== TRS-80 CLI SESSION WITH DETAILED LOGGING ===")
 
@@ -24,7 +26,7 @@ def test_cli_with_logging():
         print(f"📝 Logging session to: {log_filename}")
         
         # Start the CLI client
-        child = pexpect.spawn('python cli_client.py --host localhost --port 5000', 
+        child = pexpect.spawn(f'python cli_client.py --host localhost --port {DEFAULT_PORT}',
                              encoding='utf-8', timeout=10)
         
         # Log everything to file AND stdout

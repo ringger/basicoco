@@ -9,6 +9,8 @@ import sys
 import time
 from datetime import datetime
 
+from emulator.config import DEFAULT_PORT
+
 def test_manual_lunar():
     print("🚀 === MANUAL LUNAR LANDER TEST === 🚀")
 
@@ -20,7 +22,7 @@ def test_manual_lunar():
         logfile.write(f"Manual Lunar Lander Test Log - {datetime.now()}\n")
         logfile.write("=" * 70 + "\n\n")
         
-        child = pexpect.spawn('python cli_client.py --host localhost --port 5000', 
+        child = pexpect.spawn(f'python cli_client.py --host localhost --port {DEFAULT_PORT}',
                              encoding='utf-8', timeout=15)
         child.logfile_read = logfile
         

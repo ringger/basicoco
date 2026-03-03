@@ -9,6 +9,8 @@ import sys
 import time
 from datetime import datetime
 
+from emulator.config import DEFAULT_PORT
+
 def test_complex_lunar_lander():
     print("🚀 === COMPLEX LUNAR LANDER SESSION === 🚀")
 
@@ -22,7 +24,7 @@ def test_complex_lunar_lander():
         
         print(f"📝 Logging session to: {log_filename}")
         
-        child = pexpect.spawn('python cli_client.py --host localhost --port 5000', 
+        child = pexpect.spawn(f'python cli_client.py --host localhost --port {DEFAULT_PORT}',
                              encoding='utf-8', timeout=20)
         child.logfile_read = logfile
         

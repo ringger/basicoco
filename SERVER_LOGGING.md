@@ -88,8 +88,8 @@ Virtual environment: /path/to/trs80/venv
  * Serving Flask app 'app'
  * Debug mode: on
  * Running on all addresses (0.0.0.0)
- * Running on http://127.0.0.1:5000
- * Running on http://172.28.211.212:5000
+ * Running on http://127.0.0.1:5001
+ * Running on http://172.28.211.212:5001
 Client connected
 DEBUG: Input response for A = 42
 DEBUG: basic.program_counter = (0, 0)

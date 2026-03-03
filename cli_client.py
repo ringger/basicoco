@@ -4,13 +4,17 @@ BasiCoCo - CLI Client
 A standalone terminal interface for the BASIC emulator that connects to the Flask-SocketIO server.
 """
 
+import glob
 import socketio
 import readline
 import os
+import re
 import threading
 
+from emulator.config import DEFAULT_PORT
+
 class TRS80CLI:
-    def __init__(self, host='localhost', port=5000):
+    def __init__(self, host='localhost', port=DEFAULT_PORT):
         self.host = host
         self.port = port
         self.sio = socketio.Client()
@@ -51,13 +55,40 @@ class TRS80CLI:
             'EXIT', 'QUIT', 'BYE'  # CLI convenience commands
         ]
         
+        def get_program_names():
+            """Get available .bas filenames (without extension) from programs/."""
+            names = []
+            for d in [os.getcwd(), os.path.join(os.getcwd(), 'programs')]:
+                if os.path.isdir(d):
+                    for path in glob.glob(os.path.join(d, '*.bas')):
+                        name = os.path.basename(path).removesuffix('.bas')
+                        if name not in names:
+                            names.append(name)
+            return sorted(names)
+
         def complete(text, state):
+            buf = readline.get_line_buffer()
+            # Check for LOAD/SAVE/KILL filename context (quote optional)
+            file_match = re.match(r'(?:\d+\s+)?(LOAD|SAVE|KILL)\s+"?([^"]*)', buf, re.IGNORECASE)
+            if file_match:
+                partial = file_match.group(2).upper()
+                has_quote = '"' in buf
+                names = [n for n in get_program_names() if n.upper().startswith(partial)]
+                # Wrap completions in quotes
+                matches = []
+                for n in names:
+                    prefix = '' if has_quote else '"'
+                    matches.append(prefix + n + '"')
+                if state < len(matches):
+                    return matches[state]
+                return None
             matches = [cmd for cmd in basic_keywords if cmd.startswith(text.upper())]
             if state < len(matches):
                 return matches[state]
             return None
-        
+
         readline.set_completer(complete)
+        readline.set_completer_delims(' \t\n')
         readline.parse_and_bind('tab: complete')
     
     def setup_socketio_handlers(self):
@@ -255,8 +286,8 @@ def main():
     parser = argparse.ArgumentParser(description='BasiCoCo CLI Client')
     parser.add_argument('--host', default='localhost', 
                        help='Server host (default: localhost)')
-    parser.add_argument('--port', type=int, default=5000,
-                       help='Server port (default: 5000)')
+    parser.add_argument('--port', type=int, default=DEFAULT_PORT,
+                       help=f'Server port (default: {DEFAULT_PORT})')
     
     args = parser.parse_args()
     

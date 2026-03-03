@@ -6,10 +6,12 @@ Test with a minimal BASIC program to see if the issue is with our lunar_lander p
 import pexpect
 import time
 
+from emulator.config import DEFAULT_PORT
+
 def test_minimal():
     print("🔍 === MINIMAL PROGRAM TEST === 🔍")
     
-    child = pexpect.spawn('python cli_client.py --host localhost --port 5000', 
+    child = pexpect.spawn(f'python cli_client.py --host localhost --port {DEFAULT_PORT}',
                          encoding='utf-8', timeout=15)
     
     try:

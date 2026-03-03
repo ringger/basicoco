@@ -42,7 +42,7 @@ pip install -r requirements.txt
 python app.py
 ```
 
-Then open `http://localhost:5000` for the dual monitor interface.
+Then open `http://localhost:5001` for the dual monitor interface.
 
 For a standalone terminal REPL (no server needed): `python basicoco.py`
 

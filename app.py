@@ -1,6 +1,8 @@
 from flask import Flask, render_template, request
 from flask_socketio import SocketIO, emit
 from emulator.core import CoCoBasic
+from emulator.config import DEFAULT_PORT, DEFAULT_HOST
+import glob
 import logging
 import os
 import uuid
@@ -55,6 +57,18 @@ def handle_disconnect():
         session_manager.remove_session(session_id)
         del client_sessions[request.sid]
         logger.debug("Client disconnected: %s", request.sid)
+
+@socketio.on('list_files')
+def handle_list_files():
+    """Return list of available .bas program names for tab completion"""
+    project_root = os.path.dirname(os.path.abspath(__file__))
+    programs_dir = os.path.join(project_root, 'programs')
+    filenames = []
+    if os.path.isdir(programs_dir):
+        for path in sorted(glob.glob(os.path.join(programs_dir, '*.bas'))):
+            name = os.path.basename(path)
+            filenames.append(name.removesuffix('.bas'))
+    emit('file_list', {'files': filenames})
 
 @app.route('/')
 def index():
@@ -410,4 +424,5 @@ def handle_break_execution(data=None):
 
 if __name__ == '__main__':
     debug = os.environ.get('DEBUG', 'false').lower() == 'true'
-    socketio.run(app, debug=debug, host='0.0.0.0', port=5000, allow_unsafe_werkzeug=True)
+    port = int(os.environ.get('PORT', DEFAULT_PORT))
+    socketio.run(app, debug=debug, host=DEFAULT_HOST, port=port, allow_unsafe_werkzeug=True)
