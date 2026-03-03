@@ -18,6 +18,7 @@ from .ast_parser import ASTParser, ASTEvaluator, basic_truthy
 from .output_manager import StreamingOutputManager, LegacyOutputAdapter
 from .error_context import ErrorContextManager, error_response, text_response
 from .file_manager import FileManager
+from .file_io import FileIOManager
 from .program_executor import ProgramExecutor
 
 class CoCoBasic:
@@ -99,6 +100,7 @@ class CoCoBasic:
 
         # Initialize file manager and program executor
         self.file_manager = FileManager(self)
+        self.file_io = FileIOManager(self)
         self.executor = ProgramExecutor(self)
 
         # Initialize command registry
@@ -201,6 +203,10 @@ class CoCoBasic:
             statements = BasicParser.split_on_delimiter(command)
             if len(statements) > 1:
                 return self.process_line(command)
+
+        # LINE INPUT must be intercepted before the registry sees LINE as a graphics command
+        if command.upper().startswith('LINE INPUT'):
+            return self.file_io.execute_line_input(command[10:].lstrip())
 
         # Try command registry first (plugin-like architecture)
         result = self.command_registry.execute(command)
@@ -494,6 +500,18 @@ class CoCoBasic:
                     return [{'type': 'skip_if_block'}]
                 else:
                     return []
+
+        # File I/O: PRINT#, INPUT#, LINE INPUT# intercepted before AST
+        if code_upper.startswith('LINE INPUT'):
+            return self.file_io.execute_line_input(code.strip()[10:].lstrip())
+        if code_upper.startswith('PRINT') and '#' in code_upper[:10]:
+            rest = code.strip()[5:].lstrip()
+            if rest.startswith('#'):
+                return self.file_io.execute_print_file(rest[1:])
+        if code_upper.startswith('INPUT') and '#' in code_upper[:10]:
+            rest = code.strip()[5:].lstrip()
+            if rest.startswith('#'):
+                return self.file_io.execute_input_file(rest[1:])
 
         # Try AST execution for migrated commands
         ast_result = self._try_ast_execute(code)
@@ -841,6 +859,7 @@ class CoCoBasic:
     def execute_new(self):
         """NEW command - clear program and variables"""
         self.clear_interpreter_state(clear_program=True)
+        self.file_io.close_all()
         self.trace_mode = False
         return text_response('READY')
     
@@ -1152,8 +1171,9 @@ class CoCoBasic:
     def _register_all_commands(self):
         """Register all BASIC commands by delegating to each module"""
         # Let each module register its own commands
-        self.graphics.register_commands(self.command_registry)  
+        self.graphics.register_commands(self.command_registry)
         self.variable_manager.register_commands(self.command_registry)
+        self.file_io.register_commands(self.command_registry)
         # Core commands - control flow
         # Note: IF, GOTO, GOSUB, RETURN, FOR, WHILE, EXIT, DO, END are handled by AST execution
         self.command_registry.register('ON', self.execute_on,

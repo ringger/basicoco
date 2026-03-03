@@ -9,7 +9,7 @@ Prioritized by how often real CoCo BASIC programs need them.
 - [x] RND argument semantics — `RND(0)` repeats last value, `RND(-n)` reseeds. `last_rnd` state on emulator.
 
 **Medium — useful but less common:**
-- [ ] OPEN/CLOSE/PRINT#/INPUT# — sequential file I/O
+- [x] OPEN/CLOSE/PRINT#/INPUT# — sequential file I/O (OPEN "I"/"O"/"A", CLOSE, PRINT#, INPUT#, LINE INPUT, EOF)
 - [ ] PPOINT — read pixel color as a function; collision detection in games
 - [ ] DRAW B/N/S — pen-up move, no-draw return, and scale are parsed but silently no-op'd
 - [ ] PCLEAR — allocate graphics pages

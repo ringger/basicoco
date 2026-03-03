@@ -355,11 +355,18 @@ def fn_val(evaluator, args: List[Any]) -> Union[int, float]:
 def fn_inkey(evaluator, args: List[Any]) -> str:
     """INKEY$ - return next key from keyboard buffer"""
     _check_args(evaluator, 'INKEY$', args, 0, 'INKEY$')
-    
+
     # Get key from emulator's keyboard buffer
     if evaluator.keyboard_buffer:
         return evaluator.keyboard_buffer.pop(0)
     return ""
+
+
+def fn_eof(evaluator, args: List[Any]) -> int:
+    """EOF(file_number) - return -1 at end of file, 0 otherwise"""
+    _check_args(evaluator, 'EOF', args, 1, 'EOF(file_number)')
+    file_num = _to_int(evaluator, args[0], 'EOF')
+    return evaluator.file_io.eof(file_num)
 
 # ============================================================================
 # Function Registration
@@ -402,6 +409,9 @@ def register_all_functions(registry):
     registry.register('VAL', fn_val)
     registry.register('HEX$', fn_hex)
     registry.register('OCT$', fn_oct)
+
+    # File I/O functions
+    registry.register('EOF', fn_eof)
 
 
 # ============================================================================
