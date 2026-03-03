@@ -25,8 +25,8 @@ Prioritized by how often real CoCo BASIC programs need them.
 
 ## Refactoring Opportunities
 
-Ordered by dependency and impact.
+Ordered by impact. Items 2 and 3 are independent of each other.
 
-1. [ ] **Migrate remaining registry commands to AST** — SOUND, DIM, READ, ON GOTO/GOSUB, and graphics commands currently use string-based argument splitting with `BasicParser.split_args()` before passing to `evaluate_expression()`. Full AST migration would add node types, parser rules, and evaluator visitors for each, eliminating structural string parsing entirely. Currently AST-migrated: FOR, IF, PRINT, LET, GOTO, GOSUB, RETURN, INPUT, END, EXIT FOR, WHILE, DO.
-2. [ ] **Eliminate AST converter round-trip** — the AST converter parses single-line control structures (e.g., `IF A=1 THEN B=2: C=3`) into AST nodes, then serializes them back to text strings for storage, and the AST parser re-parses those strings at execution time. Storing AST nodes directly in `expanded_program` would avoid the double parse, but requires rearchitecting the execution engine to work with AST nodes instead of text sublines.
+1. [ ] **Eliminate AST converter round-trip** — the AST converter parses single-line control structures (e.g., `IF A=1 THEN B=2: C=3`) into AST nodes, then serializes them back to text strings for storage, and the AST parser re-parses those strings at execution time. Storing AST nodes directly in `expanded_program` would avoid the double parse, but requires rearchitecting the execution engine to work with AST nodes instead of text sublines. Highest impact but largest lift.
+2. [ ] **Migrate ON GOTO/GOSUB to AST** — ON expr GOTO/GOSUB has enough control-flow structure to benefit from AST parsing. Other registry commands (SOUND, DIM, READ, graphics) are simple evaluate-and-act patterns where `split_args()` + `evaluate_expression()` is the right level of abstraction. Small, self-contained.
 3. [ ] **Pre-collect DATA at store-time** — DATA statements are currently re-parsed every RUN. Since their values are static, they could be collected into a structured map when program lines are stored, eliminating runtime parsing. Low impact (DATA-heavy programs are rare) but conceptually cleaner.

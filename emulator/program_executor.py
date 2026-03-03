@@ -317,7 +317,20 @@ class ProgramExecutor:
             if emu.trace_mode and sub_index == 0:
                 output.append({'type': 'text', 'text': f'[{line_num}]'})
 
-            result = emu.process_statement(statement)
+            # Check AST cache before text-based dispatch
+            cached_ast = emu.ast_cache.get((line_num, sub_index))
+            if cached_ast is not None:
+                try:
+                    result = emu.ast_evaluator.visit(cached_ast)
+                    if not isinstance(result, list):
+                        result = None  # Fall back to process_statement
+                except (ValueError, IndexError, KeyError, AttributeError,
+                        TypeError, ZeroDivisionError):
+                    result = None  # Fall back to process_statement
+                if result is None:
+                    result = emu.process_statement(statement)
+            else:
+                result = emu.process_statement(statement)
 
             if result:
                 new_pos, action = self._handle_flow_control(

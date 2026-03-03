@@ -27,6 +27,7 @@ class CoCoBasic:
     def __init__(self, output_callback=None, debug_mode=False):
         self.program = {}  # Line number -> code (original for LIST display)
         self.expanded_program = {}  # (line_num, sub_index) -> statement (for execution)
+        self.ast_cache = {}  # (line_num, sub_index) -> ASTNode (pre-parsed at store time)
         self.variables = {}
         self.data_statements = []
         self.data_pointer = 0
@@ -131,10 +132,11 @@ class CoCoBasic:
     
 
     def _remove_expanded_lines(self, line_num):
-        """Remove all expanded_program entries for a given line number."""
+        """Remove all expanded_program and ast_cache entries for a given line number."""
         keys = [k for k in self.expanded_program if k[0] == line_num]
         for k in keys:
             del self.expanded_program[k]
+            self.ast_cache.pop(k, None)
 
     @staticmethod
     def _system_ok():
@@ -227,6 +229,7 @@ class CoCoBasic:
     def clear_program(self):
         self.program.clear()
         self.expanded_program.clear()
+        self.ast_cache.clear()
         self.variable_manager.clear_variables()
         return self._system_ok()
     
@@ -301,10 +304,12 @@ class CoCoBasic:
                 converted = parse_and_convert_single_line(code, self.ast_parser)
 
                 if converted:
-                    # Add converted statements as sublines
+                    # Add converted statements as sublines and pre-parse for cache
                     for i, statement in enumerate(converted):
-                        if statement.strip():
-                            self.expanded_program[(line_num, i)] = statement.strip()
+                        stmt = statement.strip()
+                        if stmt:
+                            self.expanded_program[(line_num, i)] = stmt
+                            self._try_cache_statement(line_num, i, stmt)
                     return
             except (ValueError, IndexError, KeyError, AttributeError):
                 # Fall back to BasicParser if AST conversion fails
@@ -312,6 +317,27 @@ class CoCoBasic:
 
         # Use BasicParser for normal statements
         return BasicParser.expand_line_to_sublines(line_num, code, self.expanded_program)
+
+    # Structural markers that skip methods inspect via text — never cache these
+    _STRUCTURAL_MARKERS = frozenset({'ELSE', 'ENDIF'})
+    _STRUCTURAL_PREFIXES = ('IF ', 'NEXT ', 'NEXT', 'WEND', 'LOOP')
+
+    def _try_cache_statement(self, line_num, sub_index, stmt):
+        """Pre-parse a statement into AST and cache it if eligible."""
+        upper = stmt.upper().strip()
+        # Skip structural markers used by skip methods
+        if upper in self._STRUCTURAL_MARKERS:
+            return
+        if any(upper.startswith(p) for p in self._STRUCTURAL_PREFIXES):
+            return
+        # Skip bare multi-line IF headers (handled by process_statement directly)
+        if upper.startswith('IF ') and upper.endswith('THEN'):
+            return
+        try:
+            ast_node = self.ast_parser.parse_statement(stmt)
+            self.ast_cache[(line_num, sub_index)] = ast_node
+        except Exception:
+            pass  # Not cacheable — will fall through to process_statement
 
     # ------------------------------------------------------------------
     # Shared execution engine
@@ -386,6 +412,7 @@ class CoCoBasic:
             # Clear program and set up temporary program
             self.program = {temp_line_num: '# AST Converted statements'}  # Placeholder only
             self.expanded_program = {}
+            self.ast_cache = {}
 
             self.for_stack.clear()
             self.call_stack.clear()
@@ -806,6 +833,7 @@ class CoCoBasic:
         return {
             'program': self.program.copy(),
             'expanded_program': self.expanded_program.copy(),
+            'ast_cache': self.ast_cache.copy(),
             'running': self.running,
             'current_line': self.current_line,
             'current_sub_line': self.current_sub_line,
@@ -817,6 +845,7 @@ class CoCoBasic:
         """Restore a previously saved execution state snapshot."""
         self.program = state['program']
         self.expanded_program = state['expanded_program']
+        self.ast_cache = state.get('ast_cache', {})
         self.running = state['running']
         self.current_line = state['current_line']
         self.current_sub_line = state['current_sub_line']
@@ -828,6 +857,7 @@ class CoCoBasic:
         if clear_program:
             self.program.clear()
             self.expanded_program.clear()
+            self.ast_cache.clear()
         
         self.variables.clear()
         self.arrays.clear()  # Clear all dimensioned arrays
@@ -1757,8 +1787,9 @@ class CoCoBasic:
         # Replace the program
         self.program = new_program
         
-        # Rebuild expanded program
+        # Rebuild expanded program and ast_cache
         self.expanded_program = {}
+        self.ast_cache = {}
         for line_num in sorted(self.program.keys()):
             self.expand_line_to_sublines(line_num, self.program[line_num])
         
