@@ -20,6 +20,9 @@ process_statement()
         ├─ Multi-line IF handler (bare "IF cond THEN")
         |    Push to if_stack, return skip_if_block or []
         |
+        ├─ File I/O intercepts (PRINT#, INPUT#, LINE INPUT#)
+        |    Intercepted before AST (parser doesn't understand #)
+        |
         ├─ _try_ast_execute() — AST-first execution
         |    Parse → ASTEvaluator.visit_*() → return List[Dict]
         |    Handles: END, GOTO, LET, PRINT, GOSUB, RETURN,
@@ -132,7 +135,7 @@ When AST parsing fails for a migrated command, `_try_ast_execute()` returns the 
 - Unit tests: `python -m pytest tests/unit/ --tb=short -q` (~1s)
 - Full suite: `python -m pytest --ignore=tests/integration/test_websocket_completion_signals.py --tb=short -q` (~11s)
 - All changes must pass the full suite before committing
-- 619+ tests covering all migrated and non-migrated commands
+- 1054 tests covering all migrated and non-migrated commands
 
 ## Historical Context
 

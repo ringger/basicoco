@@ -16,6 +16,9 @@ This directory contains BASIC programs for BasiCoCo.
 - **bar_chart.bas** - Bar chart visualization (DIM, INPUT, LEN, LEFT$, WHILE/WEND)
 - **math_plotter.bas** - Math function plotter: sine, cosine, exp, sqrt, Lissajous, turtle star (SIN, COS, ATN, EXP, LOG, PMODE, SCREEN, LINE, DRAW, PAINT)
 
+### File I/O
+- **address_book.bas** - Contact manager with save/load (OPEN, CLOSE, PRINT#, INPUT#, LINE INPUT, EOF, ON ERROR GOTO)
+
 ### Graphics Demos
 - **bounce_pause.bas** - Bouncing animation with PAUSE command
 - **blue_circle.bas** - Graphics circle demo
