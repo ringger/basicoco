@@ -8,7 +8,6 @@ enabling better error reporting, optimization, and support for advanced language
 from typing import Any, List, Optional, Union, Dict
 from dataclasses import dataclass
 from enum import Enum
-import re
 from .error_context import ErrorContextManager, error_response
 
 
@@ -840,28 +839,11 @@ class ASTParser:
                     arguments=args,
                     location=self._make_location(name_token)
                 )
-            
-            # Array access
-            elif self._match('PUNCTUATION') and self._current_token()['value'] == '(':
-                # Note: This is the same as function call syntax - we'll distinguish in semantic analysis
-                self._advance()  # consume '('
-                indices = []
-                
-                if not (self._match('PUNCTUATION') and self._current_token()['value'] == ')'):
-                    indices.append(self._parse_or_expression())
-                    while self._match('PUNCTUATION') and self._current_token()['value'] == ',':
-                        self._advance()  # consume ','
-                        indices.append(self._parse_or_expression())
-                
-                self._consume('PUNCTUATION', "Expected ')' after array indices")
-                
-                return ArrayAccessNode(
-                    array_name=name,
-                    indices=indices,
-                    location=self._make_location(name_token)
-                )
-            
-            # Simple variable
+
+            # Simple variable (no parentheses after identifier).
+            # Array access uses the same syntax as function calls — both are
+            # parsed as FunctionCallNode and distinguished at evaluation time
+            # in visit_function_call().
             else:
                 return VariableNode(
                     name=name,
@@ -961,7 +943,7 @@ class ASTParser:
         if token and token['type'] == 'PUNCTUATION' and token['value'] == '(':
             paren_count = 1
             pos += 1
-            while pos <= len(self.tokens) and paren_count > 0:
+            while pos < len(self.tokens) and paren_count > 0:
                 token = self._peek_token(pos)
                 if not token:
                     break
@@ -1663,7 +1645,7 @@ class ASTEvaluator(ASTVisitor):
                 for item in (result if isinstance(result, list) else [result]):
                     if isinstance(item, dict) and item.get('type') in ['jump', 'jump_return', 'end']:
                         return results  # Exit program on control flow
-            except (ValueError, IndexError, KeyError, AttributeError, TypeError) as e:
+            except (ValueError, IndexError, KeyError, AttributeError, TypeError, ZeroDivisionError) as e:
                 err = self.emulator.error_context.runtime_error(
                     str(e), self.emulator.current_line)
                 results.append({'type': 'error', 'message': err.format_message()})
@@ -1690,7 +1672,7 @@ class ASTEvaluator(ASTVisitor):
                 formatted = self._format_print_value(value)
                 output_parts.append(formatted)
                 col += len(formatted)
-            except (ValueError, IndexError, KeyError, AttributeError, TypeError) as e:
+            except (ValueError, IndexError, KeyError, AttributeError, TypeError, ZeroDivisionError) as e:
                 error = self.emulator.error_context.runtime_error(
                     f"Error evaluating PRINT expression: {e}",
                     suggestions=[

@@ -65,7 +65,7 @@ class BasicParser:
                 paren_depth += 1
                 current += char
             elif char == ')' and not in_quotes:
-                paren_depth -= 1
+                paren_depth = max(0, paren_depth - 1)
                 current += char
             elif char == delimiter and not in_quotes and paren_depth == 0:
                 if current.strip():

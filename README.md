@@ -179,9 +179,19 @@ basicoco/
 
 The interpreter is implemented in Python and is designed to be readable. If you're interested in how interpreters work — AST parsing, expression evaluation, control flow stacks — the codebase is a working example at a manageable scale.
 
+### Command Dispatch
+
+BASIC's syntax is deeply context-dependent — `A(5)` could be an array or a function call, `LINE` could be graphics or `LINE INPUT`, and `PRINT#` uses a `#` that has no meaning elsewhere. The interpreter handles this with a layered dispatch model that balances static analysis with runtime flexibility:
+
+1. **Runtime intercepts** catch constructs the parser can't handle structurally — bare multi-line `IF...THEN`, file I/O with `#` syntax (`PRINT#`, `INPUT#`), and `LINE INPUT` (which would otherwise match the graphics `LINE` command).
+2. **AST parsing** handles the core control flow and I/O commands (IF, FOR, WHILE, DO, GOTO, GOSUB, PRINT, INPUT, LET, END) — these are fully parsed into typed AST nodes and executed by the evaluator.
+3. **Command registry** handles everything else — loop closers (NEXT, WEND, LOOP), data commands (DATA, READ, RESTORE), graphics, sound, and system commands. These use string-based argument splitting before passing to `evaluate_expression()`.
+
+Single-line compound statements like `IF A=1 THEN B=2: C=3` are expanded into multi-line form at store-time by the AST converter, then executed as multi-line code. See [ISSUES.md](ISSUES.md) for planned improvements to this pipeline.
+
 ## Testing
 
-1054 tests passing.
+1086 tests passing.
 
 ```bash
 # Run all tests

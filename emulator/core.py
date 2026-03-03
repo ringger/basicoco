@@ -304,7 +304,7 @@ class CoCoBasic:
                         if statement.strip():
                             self.expanded_program[(line_num, i)] = statement.strip()
                     return
-            except Exception:
+            except (ValueError, IndexError, KeyError, AttributeError):
                 # Fall back to BasicParser if AST conversion fails
                 pass
 
@@ -343,7 +343,7 @@ class CoCoBasic:
                 converted = parse_and_convert_single_line(code, self.ast_parser)
                 if converted:
                     return self._execute_converted_as_temporary_program(converted)
-            except Exception as e:
+            except (ValueError, IndexError, KeyError, AttributeError) as e:
                 if hasattr(self, 'emit_debug'):
                     self.emit_debug(f"AST conversion failed for '{code}': {str(e)}")
 
@@ -463,7 +463,7 @@ class CoCoBasic:
             if not isinstance(result, list):
                 return None  # Not a valid statement result, fall back
             return result
-        except Exception as e:
+        except (ValueError, IndexError, KeyError, AttributeError, TypeError, ZeroDivisionError) as e:
             error_msg = str(e)
             # For migrated commands, return parse/execution errors instead of falling through
             if first_word in self._ast_migrated_commands and error_msg:
@@ -548,7 +548,7 @@ class CoCoBasic:
             return self.ast_evaluator.visit(ast_node)
         except ValueError:
             raise
-        except Exception as e:
+        except (IndexError, KeyError, AttributeError, TypeError, ZeroDivisionError) as e:
             raise ValueError(str(e))
 
     def eval_int(self, expr, line=None):
@@ -630,7 +630,7 @@ class CoCoBasic:
         try:
             ast_node = self.ast_parser.parse_expression(condition, self.current_line)
             return bool(self.ast_evaluator.visit(ast_node))
-        except (ValueError, IndexError, KeyError, AttributeError, TypeError):
+        except (ValueError, IndexError, KeyError, AttributeError, TypeError, ZeroDivisionError):
             return False
     
     def execute_sound(self, args):
@@ -1477,7 +1477,7 @@ class CoCoBasic:
                     try:
                         do_info['loop_condition_ast'] = self.ast_parser.parse_expression(condition_str, self.current_line)
                         do_info['loop_condition_str'] = condition_str
-                    except Exception:
+                    except (ValueError, IndexError, KeyError, AttributeError):
                         do_info['loop_condition_ast'] = None
                 condition_ast = do_info.get('loop_condition_ast')
                 condition = condition_str if condition_ast is None else None
