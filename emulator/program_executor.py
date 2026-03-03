@@ -259,12 +259,8 @@ class ProgramExecutor:
                 return current_pos_index + 1, 'next'
 
             elif item_type != 'input_request':
-                # Regular output -- filter system OK messages
-                if not item.get('source') == 'system':
-                    output.append(item)
-                    emu.emit_output([item])
                 if item.get('type') == 'error':
-                    # ON ERROR GOTO handler intercept
+                    # ON ERROR GOTO handler intercept — suppress error output
                     if (emu.on_error_goto_line is not None
                             and not emu.in_error_handler):
                         line_num, sub_index = all_positions[current_pos_index]
@@ -278,9 +274,15 @@ class ProgramExecutor:
                         if handler_idx is not None:
                             return handler_idx, 'jumped'
                     # No handler or handler line not found
+                    output.append(item)
+                    emu.emit_output([item])
                     emu.running = False
                     emu.clear_all_stacks()
                     return current_pos_index, 'stop'
+                # Regular output -- filter system OK messages
+                if not item.get('source') == 'system':
+                    output.append(item)
+                    emu.emit_output([item])
 
         return current_pos_index + 1, 'next'
 
