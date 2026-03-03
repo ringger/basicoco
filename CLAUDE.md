@@ -5,8 +5,9 @@
 `process_statement()` in `core.py` tries these in order:
 
 1. **Multi-line IF** — bare `IF cond THEN` (no action). Must be first because the AST parser can't parse it.
-2. **`_try_ast_execute()`** — AST-migrated commands: END, GOTO, LET, PRINT, GOSUB, RETURN, FOR, EXIT FOR, WHILE, DO, IF, INPUT. Also implicit assignment (`X = 5`).
-3. **`CommandRegistry`** — everything else: NEXT, WEND, LOOP, ELSE, ENDIF, DIM, ON, STOP, CONT, DATA, READ, RESTORE, SOUND, PAUSE, etc.
+2. **File I/O intercepts** — PRINT#, INPUT#, LINE INPUT# (and console LINE INPUT). Intercepted before AST because the AST parser doesn't understand `#` syntax.
+3. **`_try_ast_execute()`** — AST-migrated commands: END, GOTO, LET, PRINT, GOSUB, RETURN, FOR, EXIT FOR, WHILE, DO, IF, INPUT. Also implicit assignment (`X = 5`).
+4. **`CommandRegistry`** — everything else: NEXT, WEND, LOOP, ELSE, ENDIF, DIM, ON, STOP, CONT, DATA, READ, RESTORE, SOUND, PAUSE, etc.
 
 New control flow → AST visitor in `ast_parser.py`. New utility command → registry via `execute_*`. New BASIC function → `functions.py` only.
 
@@ -67,7 +68,7 @@ Never duplicate this logic — always call through to `BasicParser`.
 
 ### Immediate mode flow
 
-`process_command()` detects multi-statement lines early (before the registry) and routes them to `process_line()`. `process_line()` then takes one of three paths:
+`process_command()` intercepts LINE INPUT before the registry (since `LINE` would otherwise match the graphics command), then detects multi-statement lines early and routes them to `process_line()`. `process_line()` then takes one of three paths:
 
 1. **REM** → `process_statement()` directly (never split).
 2. **Control structure + colons** (IF/FOR/WHILE/DO) → AST conversion → `_execute_converted_as_temporary_program()` → `run_program()`.

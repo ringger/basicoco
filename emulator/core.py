@@ -836,6 +836,7 @@ class CoCoBasic:
         self.waiting_for_pause_continuation = False
         self.pause_duration = 0
         self.program_counter = None
+        self.graphics.clear_pixel_buffer()
         self.stopped_position = None  # Clear stopped position
 
         # Reset TIMER (trace_mode intentionally NOT reset — persists across RUN like real CoCo)
@@ -857,6 +858,10 @@ class CoCoBasic:
         self.iteration_count = 0
         # Don't clear keyboard buffer - preserve keys for INKEY$
         self.graphics_mode = 0  # Reset to text mode
+        self.screen_mode = 1  # Reset screen/color mode
+        self.current_draw_color = 1  # Reset drawing color
+        self.turtle_x = 64  # Reset turtle to center
+        self.turtle_y = 48
         self.print_column = 0  # Reset print cursor
         self.last_rnd = 0.0  # Reset last RND value
 
@@ -1079,8 +1084,9 @@ class CoCoBasic:
                 self.on_error_goto_line = None
                 if self.in_error_handler:
                     self.in_error_handler = False
-                    return [{'type': 'error',
-                             'message': f'ERROR IN {self.error_line}'}]
+                    error = self.error_context.runtime_error(
+                        f"ERROR IN {self.error_line}")
+                    return error_response(error)
                 return []
             self.on_error_goto_line = target
             return []

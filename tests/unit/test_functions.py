@@ -601,3 +601,90 @@ class TestRandomize:
         result = basic.process_command('RANDOMIZE X * 4 + 2')
         errors = helpers.get_error_messages(result)
         assert errors == []
+
+
+class TestPpoint:
+    """Test PPOINT function for reading pixel colors"""
+
+    def _enter_graphics(self, basic):
+        """Enter graphics mode for testing"""
+        basic.process_command('PMODE 4,1')
+        basic.process_command('SCREEN 1,1')
+
+    def test_ppoint_unset_pixel_returns_zero(self, basic):
+        """PPOINT returns 0 for pixels that haven't been set"""
+        self._enter_graphics(basic)
+        result = basic.evaluate_expression('PPOINT(0, 0)')
+        assert result == 0
+
+    def test_ppoint_after_pset(self, basic):
+        """PPOINT returns the color set by PSET"""
+        self._enter_graphics(basic)
+        basic.process_command('PSET(100, 50), 1')
+        result = basic.evaluate_expression('PPOINT(100, 50)')
+        assert result == 1
+
+    def test_ppoint_after_pset_default_color(self, basic):
+        """PPOINT returns default draw color when PSET has no color arg"""
+        self._enter_graphics(basic)
+        basic.process_command('PSET(10, 20)')
+        result = basic.evaluate_expression('PPOINT(10, 20)')
+        assert result == basic.current_draw_color
+
+    def test_ppoint_after_preset(self, basic):
+        """PPOINT returns 0 after PRESET clears a pixel"""
+        self._enter_graphics(basic)
+        basic.process_command('PSET(50, 50), 3')
+        basic.process_command('PRESET(50, 50)')
+        result = basic.evaluate_expression('PPOINT(50, 50)')
+        assert result == 0
+
+    def test_ppoint_after_pcls(self, basic):
+        """PCLS clears all pixels so PPOINT returns 0"""
+        self._enter_graphics(basic)
+        basic.process_command('PSET(10, 10), 1')
+        basic.process_command('PSET(20, 20), 2')
+        basic.process_command('PCLS')
+        assert basic.evaluate_expression('PPOINT(10, 10)') == 0
+        assert basic.evaluate_expression('PPOINT(20, 20)') == 0
+
+    def test_ppoint_multiple_pixels(self, basic):
+        """PPOINT correctly distinguishes different pixel locations"""
+        self._enter_graphics(basic)
+        basic.process_command('PSET(10, 10), 1')
+        basic.process_command('PSET(20, 20), 2')
+        assert basic.evaluate_expression('PPOINT(10, 10)') == 1
+        assert basic.evaluate_expression('PPOINT(20, 20)') == 2
+        assert basic.evaluate_expression('PPOINT(15, 15)') == 0
+
+    def test_ppoint_requires_graphics_mode(self, basic, helpers):
+        """PPOINT raises error when not in graphics mode"""
+        result = basic.process_command('PRINT PPOINT(0, 0)')
+        errors = helpers.get_error_messages(result)
+        assert any('graphics mode' in e.lower() for e in errors)
+
+    def test_ppoint_wrong_arg_count(self, basic, helpers):
+        """PPOINT requires exactly 2 arguments"""
+        self._enter_graphics(basic)
+        result = basic.process_command('PRINT PPOINT(10)')
+        errors = helpers.get_error_messages(result)
+        assert len(errors) > 0
+
+    def test_ppoint_with_expressions(self, basic):
+        """PPOINT accepts expressions as arguments"""
+        self._enter_graphics(basic)
+        basic.variables['X'] = 50
+        basic.variables['Y'] = 75
+        basic.process_command('PSET(50, 75), 1')
+        result = basic.evaluate_expression('PPOINT(X, Y)')
+        assert result == 1
+
+    def test_ppoint_cleared_on_new_program(self, basic):
+        """Pixel buffer is cleared when interpreter state resets"""
+        self._enter_graphics(basic)
+        basic.process_command('PSET(10, 10), 1')
+        basic.clear_interpreter_state()
+        # Re-enter graphics mode after state clear
+        self._enter_graphics(basic)
+        result = basic.evaluate_expression('PPOINT(10, 10)')
+        assert result == 0

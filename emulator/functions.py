@@ -360,6 +360,20 @@ def fn_eof(evaluator, args: List[Any]) -> int:
     file_num = _to_int(evaluator, args[0], 'EOF')
     return evaluator.file_io.eof(file_num)
 
+
+def fn_ppoint(evaluator, args: List[Any]) -> int:
+    """PPOINT(x, y) - return color of pixel at coordinates"""
+    _check_args(evaluator, 'PPOINT', args, 2, 'PPOINT(x, y)')
+    x = _to_int(evaluator, args[0], 'PPOINT')
+    y = _to_int(evaluator, args[1], 'PPOINT')
+    if evaluator.graphics_mode == 0:
+        error = evaluator.error_context.runtime_error(
+            "PPOINT requires graphics mode",
+            suggestions=["Use PMODE to enter graphics mode first",
+                         "Example: PMODE 4,1: PCLS: SCREEN 1,1"])
+        raise ValueError(error.format_detailed())
+    return evaluator.graphics.get_pixel(x, y)
+
 # ============================================================================
 # Function Registration
 # ============================================================================
@@ -404,6 +418,9 @@ def register_all_functions(registry):
 
     # File I/O functions
     registry.register('EOF', fn_eof)
+
+    # Graphics functions
+    registry.register('PPOINT', fn_ppoint)
 
 
 # ============================================================================

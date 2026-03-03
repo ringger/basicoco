@@ -10,7 +10,7 @@ Prioritized by how often real CoCo BASIC programs need them.
 
 **Medium — useful but less common:**
 - [x] OPEN/CLOSE/PRINT#/INPUT# — sequential file I/O (OPEN "I"/"O"/"A", CLOSE, PRINT#, INPUT#, LINE INPUT, EOF)
-- [ ] PPOINT — read pixel color as a function; collision detection in games
+- [x] PPOINT — read pixel color as a function; collision detection in games (tracks PSET/PRESET/PCLS only; LINE/CIRCLE/PAINT/DRAW pixels not tracked)
 - [ ] DRAW B/N/S — pen-up move, no-draw return, and scale are parsed but silently no-op'd
 - [ ] PCLEAR — allocate graphics pages
 

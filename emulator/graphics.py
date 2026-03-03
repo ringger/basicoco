@@ -40,6 +40,7 @@ class BasicGraphics:
     def __init__(self, emulator):
         """Initialize graphics handler with reference to main emulator"""
         self.emulator = emulator
+        self.pixel_buffer = {}  # Sparse dict: (x, y) -> color
     
     def register_commands(self, registry):
         """Register graphics commands with the command registry"""
@@ -54,7 +55,7 @@ class BasicGraphics:
         registry.register('GET', self.execute_get)
         registry.register('PUT', self.execute_put)
         registry.register('DRAW', self.execute_draw)
-        registry.register('PCLS', lambda args: [{'type': 'pcls'}])
+        registry.register('PCLS', self.execute_pcls)
     
     def _eval_int(self, expr):
         """Evaluate an expression string and return an integer."""
@@ -66,16 +67,31 @@ class BasicGraphics:
             message, self.emulator.current_line, suggestions=suggestions)
         return error_response(error)
 
-    @staticmethod
-    def _illegal_function_call():
+    def _illegal_function_call(self):
         """Return an ILLEGAL FUNCTION CALL error response."""
-        return [{'type': 'error', 'message': 'ILLEGAL FUNCTION CALL'}]
+        error = self.emulator.error_context.runtime_error(
+            "ILLEGAL FUNCTION CALL",
+            self.emulator.current_line)
+        return error_response(error)
 
     def _require_graphics_mode(self):
         """Return error response if not in graphics mode, else None."""
         if self.emulator.graphics_mode == 0:
             return self._illegal_function_call()
         return None
+
+    def execute_pcls(self, args):
+        """Execute PCLS command to clear graphics screen"""
+        self.pixel_buffer.clear()
+        return [{'type': 'pcls'}]
+
+    def get_pixel(self, x, y):
+        """Return color at (x, y), or 0 if unset."""
+        return self.pixel_buffer.get((x, y), 0)
+
+    def clear_pixel_buffer(self):
+        """Clear the pixel buffer."""
+        self.pixel_buffer.clear()
 
     def _parse_coord_pair(self, args, command_name):
         """Parse (x,y) from args. Returns (x, y, remainder_after_paren) or error list."""
@@ -183,6 +199,8 @@ class BasicGraphics:
                 color_str = remainder[1:].strip()
                 if color_str:
                     color = self._eval_int(color_str)
+            effective_color = color if color is not None else self.emulator.current_draw_color
+            self.pixel_buffer[(x, y)] = effective_color
             return [{'type': 'pset', 'x': x, 'y': y, 'color': color}]
         else:
             parts = _split_args(args)
@@ -196,6 +214,8 @@ class BasicGraphics:
             color = None
             if len(parts) > 2 and parts[2].strip():
                 color = self._eval_int(parts[2])
+            effective_color = color if color is not None else self.emulator.current_draw_color
+            self.pixel_buffer[(x, y)] = effective_color
             return [{'type': 'pset', 'x': x, 'y': y, 'color': color}]
     
     @_graphics_command('PRESET', require_graphics=True)
@@ -207,6 +227,7 @@ class BasicGraphics:
             if isinstance(result, list):
                 return result
             x, y, _ = result
+            self.pixel_buffer[(x, y)] = 0
             return [{'type': 'preset', 'x': x, 'y': y}]
         else:
             parts = _split_args(args)
@@ -216,6 +237,7 @@ class BasicGraphics:
                      'Specify both X and Y coordinates'])
             x = self._eval_int(parts[0])
             y = self._eval_int(parts[1])
+            self.pixel_buffer[(x, y)] = 0
             return [{'type': 'preset', 'x': x, 'y': y}]
     
     @_graphics_command('LINE', require_graphics=True)
