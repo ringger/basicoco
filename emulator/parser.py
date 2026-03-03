@@ -96,13 +96,11 @@ class BasicParser:
     
     @staticmethod
     def expand_line_to_sublines(line_num, code, expanded_program):
-        """Expand a line containing multiple statements into sublines"""
-        # IF/THEN single-line statements should not be split
-        code_upper = code.upper().strip()
-        if code_upper.startswith('IF ') and ' THEN ' in code_upper:
-            expanded_program[(line_num, 0)] = code.strip()
-            return
+        """Expand a line containing multiple statements into sublines.
 
+        Simple colon-splitting fallback. Control structures (IF, FOR, WHILE, DO)
+        are handled by core.py via AST conversion before reaching this method.
+        """
         statements = BasicParser.split_on_delimiter(code)
         for i, statement in enumerate(statements):
             expanded_program[(line_num, i)] = statement

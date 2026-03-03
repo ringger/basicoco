@@ -153,13 +153,14 @@ class TestExpandLineToSublines:
             (10, 2): 'PRINT A + B',
         }
 
-    def test_if_then_not_split(self):
-        """IF/THEN single-line statements should NOT be split on colons"""
+    def test_if_then_split(self):
+        """Parser-level expand splits IF/THEN on colons (core.py handles
+        AST conversion for control structures before reaching this method)"""
         expanded = {}
         BasicParser.expand_line_to_sublines(10, 'IF A = 5 THEN PRINT "YES": GOTO 100', expanded)
-        # Should be stored as a single subline
-        assert len(expanded) == 1
-        assert (10, 0) in expanded
+        assert len(expanded) == 2
+        assert expanded[(10, 0)] == 'IF A = 5 THEN PRINT "YES"'
+        assert expanded[(10, 1)] == 'GOTO 100'
 
     def test_rem_not_split(self):
         """REM lines should never be split on colons.

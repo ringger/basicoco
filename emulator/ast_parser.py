@@ -1111,8 +1111,8 @@ class ASTParser:
                     if (self._match('PUNCTUATION') and
                         self._current_token().get('value') == ':'):
                         self._advance()
-                except Exception:
-                    # If we can't parse a statement, break
+                except (ValueError, IndexError, KeyError, AttributeError):
+                    # If we can't parse a statement, break out of body
                     break
 
         body = BlockNode(statements=body_statements, location=self._make_location(for_token))

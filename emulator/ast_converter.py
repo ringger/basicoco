@@ -397,36 +397,18 @@ def parse_and_convert_single_line(statement: str, parser) -> Optional[List[str]]
         # Other control structures require colons to be considered single-line
         return None
 
-    try:
-        # Use enhanced AST-based parsing for better structure analysis
-        converter = ASTStatementConverter()
+    converter = ASTStatementConverter()
 
-        # Parse the complete statement and convert to multi-line format
-        if statement_upper.startswith('IF '):
-            return _parse_ast_if_statement(statement, parser, converter)
-        elif statement_upper.startswith('FOR '):
-            return _parse_ast_for_statement(statement, parser, converter)
-        elif statement_upper.startswith('WHILE '):
-            return _parse_ast_while_statement(statement, parser, converter)
-        elif statement_upper.startswith('DO:') or statement_upper.startswith('DO '):
-            return _parse_ast_do_statement(statement, parser, converter)
-
-    except Exception:
-        # If AST parsing fails, fall back to manual parsing for backward compatibility
-        try:
-            converter = ASTStatementConverter()
-
-            if statement_upper.startswith('IF '):
-                return _parse_single_line_if(statement, parser, converter)
-            elif statement_upper.startswith('FOR '):
-                return _parse_single_line_for(statement, parser, converter)
-            elif statement_upper.startswith('WHILE '):
-                return _parse_single_line_while(statement, parser, converter)
-            elif statement_upper.startswith('DO:') or statement_upper.startswith('DO '):
-                return _parse_single_line_do(statement, parser, converter)
-        except Exception:
-            # If all parsing fails, return None to let normal processing handle it
-            return None
+    # Parse the complete statement and convert to multi-line format
+    # Returns None on failure, letting core.py fall back to normal processing
+    if statement_upper.startswith('IF '):
+        return _parse_ast_if_statement(statement, parser, converter)
+    elif statement_upper.startswith('FOR '):
+        return _parse_ast_for_statement(statement, parser, converter)
+    elif statement_upper.startswith('WHILE '):
+        return _parse_ast_while_statement(statement, parser, converter)
+    elif statement_upper.startswith('DO:') or statement_upper.startswith('DO '):
+        return _parse_ast_do_statement(statement, parser, converter)
 
     return None
 
@@ -476,14 +458,14 @@ def _parse_ast_if_statement(statement: str, parser, converter) -> Optional[List[
             else_statements = _parse_if_body(else_body, parser)
 
         # Create IF statement AST node
-        then_branch = BlockNode(body_statements) if len(body_statements) > 1 else (body_statements[0] if body_statements else None)
-        else_branch = BlockNode(else_statements) if len(else_statements) > 1 else (else_statements[0] if else_statements else None)
+        then_branch = _make_body_node(body_statements)
+        else_branch = _make_body_node(else_statements)
 
         if_node = IfStatementNode(condition_ast, then_branch, else_branch)
         return converter.convert(if_node)
 
-    except Exception:
-        # If AST parsing fails, return None to trigger fallback
+    except (ValueError, IndexError, KeyError, AttributeError):
+        # Parsing/conversion error — return None to let core.py handle normally
         return None
 
 
@@ -528,12 +510,12 @@ def _parse_ast_for_statement(statement: str, parser, converter) -> Optional[List
                 body_statements.append(_parse_body_statement(part_stripped, parser))
 
         # Create FOR statement AST node
-        body_node = BlockNode(body_statements) if len(body_statements) > 1 else (body_statements[0] if body_statements else None)
+        body_node = _make_body_node(body_statements)
         for_node = ForStatementNode(variable_node, start_node, end_node, step_node, body_node)
         return converter.convert(for_node)
 
-    except Exception:
-        # If AST parsing fails, return None to trigger fallback
+    except (ValueError, IndexError, KeyError, AttributeError):
+        # Parsing/conversion error — return None to let core.py handle normally
         return None
 
 
@@ -568,12 +550,12 @@ def _parse_ast_while_statement(statement: str, parser, converter) -> Optional[Li
                 body_statements.append(_parse_body_statement(part_stripped, parser))
 
         # Create WHILE statement AST node
-        body_node = BlockNode(body_statements) if len(body_statements) > 1 else (body_statements[0] if body_statements else None)
+        body_node = _make_body_node(body_statements)
         while_node = WhileStatementNode(condition_node, body_node)
         return converter.convert(while_node)
 
-    except Exception:
-        # If AST parsing fails, return None to trigger fallback
+    except (ValueError, IndexError, KeyError, AttributeError):
+        # Parsing/conversion error — return None to let core.py handle normally
         return None
 
 
@@ -637,180 +619,30 @@ def _parse_ast_do_statement(statement: str, parser, converter) -> Optional[List[
                 body_statements.append(_parse_body_statement(part_stripped, parser))
 
         # Create DO/LOOP statement AST node
-        body_node = BlockNode(body_statements) if len(body_statements) > 1 else (body_statements[0] if body_statements else None)
+        body_node = _make_body_node(body_statements)
         do_node = DoLoopStatementNode(body_node, condition_node, condition_type, condition_position)
         return converter.convert(do_node)
 
-    except Exception:
-        # If AST parsing fails, return None to trigger fallback
+    except (ValueError, IndexError, KeyError, AttributeError):
+        # Parsing/conversion error — return None to let core.py handle normally
         return None
 
 
-def _parse_single_line_if(statement: str, parser, converter) -> Optional[List[str]]:
-    """Parse and convert single-line IF statement"""
-    # Extract components: IF condition THEN body [:ELSE body]
-    statement_upper = statement.upper()
+def _has_file_io_command(text: str) -> bool:
+    """Check if text contains file I/O commands that the AST parser can't handle."""
+    upper = text.upper()
+    return ('PRINT#' in upper or 'PRINT #' in upper or
+            'INPUT#' in upper or 'INPUT #' in upper or
+            'LINE INPUT' in upper)
 
-    # Find THEN position
-    then_pos = statement_upper.find(' THEN ')
-    if then_pos < 0:
+
+def _make_body_node(statements: list) -> Optional[ASTNode]:
+    """Create a body node from a list of AST statements."""
+    if not statements:
         return None
-
-    # Extract condition
-    condition_part = statement[3:then_pos].strip()  # Skip 'IF '
-    rest = statement[then_pos + 6:].strip()  # Skip ' THEN '
-
-    # Split body by colons, but need to handle nested structures
-    # For now, create a simple multi-line IF
-    statements = ['IF ' + condition_part + ' THEN']
-
-    # Parse the body - could contain multiple statements
-    body_parts = BasicParser.split_on_delimiter(rest)
-
-    # Check for ELSE in the body
-    for i, part in enumerate(body_parts):
-        part_upper = part.strip().upper()
-        if part_upper.startswith('ELSE '):
-            statements.append('ELSE')
-            # Rest after ELSE
-            else_body = part[5:].strip()  # Skip 'ELSE '
-            if else_body:
-                statements.append(else_body)
-            # Add remaining parts after ELSE
-            for j in range(i + 1, len(body_parts)):
-                statements.append(body_parts[j].strip())
-            break
-        else:
-            # Regular statement in THEN part
-            statements.append(part.strip())
-
-    statements.append('ENDIF')
-    return statements
-
-
-def _parse_single_line_for(statement: str, parser, converter) -> Optional[List[str]]:
-    """Parse and convert single-line FOR loop"""
-    # Extract components: FOR var = start TO end [STEP step]: body : NEXT [var]
-    statement_upper = statement.upper()
-
-    # Find the colon that starts the body
-    colon_pos = statement.find(':')
-    if colon_pos < 0:
-        return None
-
-    # Extract FOR header
-    for_header = statement[:colon_pos].strip()
-    body = statement[colon_pos + 1:].strip()
-
-    # Start with FOR statement
-    statements = [for_header]
-
-    # Process body statements
-    body_parts = BasicParser.split_on_delimiter(body)
-
-    # Find NEXT statement
-    next_found = False
-    for i, part in enumerate(body_parts):
-        part_upper = part.strip().upper()
-        if part_upper.startswith('NEXT'):
-            # Found NEXT, add it and stop
-            statements.append(part.strip())
-            next_found = True
-            break
-        else:
-            # Regular body statement
-            statements.append(part.strip())
-
-    # If no NEXT found, add it
-    if not next_found:
-        # Extract variable name from FOR header
-        match = re.match(r'FOR\s+(\w+)', for_header, re.IGNORECASE)
-        if match:
-            var_name = match.group(1)
-            statements.append(f'NEXT {var_name}')
-        else:
-            statements.append('NEXT')
-
-    return statements
-
-
-def _parse_single_line_while(statement: str, parser, converter) -> Optional[List[str]]:
-    """Parse and convert single-line WHILE loop"""
-    # Extract components: WHILE condition: body : WEND
-    colon_pos = statement.find(':')
-    if colon_pos < 0:
-        return None
-
-    # Extract WHILE header
-    while_header = statement[:colon_pos].strip()
-    body = statement[colon_pos + 1:].strip()
-
-    # Start with WHILE statement
-    statements = [while_header]
-
-    # Process body statements
-    body_parts = BasicParser.split_on_delimiter(body)
-
-    # Find WEND statement
-    wend_found = False
-    for part in body_parts:
-        part_upper = part.strip().upper()
-        if part_upper == 'WEND':
-            wend_found = True
-            statements.append('WEND')
-            break
-        else:
-            # Regular body statement
-            statements.append(part.strip())
-
-    # If no WEND found, add it
-    if not wend_found:
-        statements.append('WEND')
-
-    return statements
-
-
-def _parse_single_line_do(statement: str, parser, converter) -> Optional[List[str]]:
-    """Parse and convert single-line DO loop"""
-    # Extract components: DO [WHILE/UNTIL condition]: body : LOOP [WHILE/UNTIL condition]
-    statement_upper = statement.upper()
-
-    # Handle plain DO without condition
-    if statement_upper.startswith('DO:') or statement_upper.startswith('DO :'):
-        # Plain DO statement
-        colon_pos = statement.find(':')
-        do_header = statement[:colon_pos].strip()
-        body = statement[colon_pos + 1:].strip()
-    else:
-        colon_pos = statement.find(':')
-        if colon_pos < 0:
-            return None
-        do_header = statement[:colon_pos].strip()
-        body = statement[colon_pos + 1:].strip()
-
-    # Start with DO statement
-    statements = [do_header]
-
-    # Process body statements
-    body_parts = BasicParser.split_on_delimiter(body)
-
-    # Find LOOP statement
-    loop_found = False
-    for part in body_parts:
-        part_upper = part.strip().upper()
-        if part_upper.startswith('LOOP'):
-            loop_found = True
-            statements.append(part.strip())
-            break
-        else:
-            # Regular body statement
-            statements.append(part.strip())
-
-    # If no LOOP found, add it
-    if not loop_found:
-        statements.append('LOOP')
-
-    return statements
+    if len(statements) == 1:
+        return statements[0]
+    return BlockNode(statements)
 
 
 def _parse_if_body(body: str, parser) -> list:
@@ -828,19 +660,22 @@ def _parse_if_body(body: str, parser) -> list:
         ForStatementNode, WhileStatementNode, DoLoopStatementNode,
     )
 
-    try:
-        result = parser.parse_statement(body)
-        if parser.current >= len(parser.tokens):
-            # Parser consumed everything — use this result
-            return [result]
-        # Partial consumption is OK for control structures (FOR leaves NEXT
-        # unconsumed, WHILE leaves WEND, etc.) — the converter handles it
-        if isinstance(result, _CONTROL_STRUCTURES):
-            return [result]
-    except Exception:
-        pass
+    # Skip whole-body parse if body contains file I/O commands — the AST
+    # parser's PRINT handler would silently drop the '#' from PRINT#
+    if not _has_file_io_command(body):
+        try:
+            result = parser.parse_statement(body)
+            if parser.current >= len(parser.tokens):
+                # Parser consumed everything — use this result
+                return [result]
+            # Partial consumption is OK for control structures (FOR leaves NEXT
+            # unconsumed, WHILE leaves WEND, etc.) — the converter handles it
+            if isinstance(result, _CONTROL_STRUCTURES):
+                return [result]
+        except (ValueError, IndexError, KeyError, AttributeError):
+            pass
 
-    # Whole-body parse failed or was incomplete — split on colons
+    # Whole-body parse failed, incomplete, or contains file I/O — split on colons
     statements = []
     for part in BasicParser.split_on_delimiter_paren_aware(body):
         part_stripped = part.strip()
@@ -860,6 +695,15 @@ def _parse_body_statement(statement: str, parser) -> ASTNode:
     if not statement.strip():
         return LiteralNode("")
 
+    # File I/O commands must bypass AST parsing — PRINT# would be mis-parsed
+    # as PRINT (dropping the #), and INPUT#/LINE INPUT need process_statement()
+    # intercepts that the AST parser doesn't have
+    stmt_upper = statement.upper().lstrip()
+    if (stmt_upper.startswith('PRINT#') or stmt_upper.startswith('PRINT #') or
+            stmt_upper.startswith('INPUT#') or stmt_upper.startswith('INPUT #') or
+            stmt_upper.startswith('LINE INPUT')):
+        return LiteralNode(statement)
+
     try:
         result = parser.parse_statement(statement)
         # Verify the parser consumed all tokens — a partial parse means
@@ -868,7 +712,7 @@ def _parse_body_statement(statement: str, parser) -> ASTNode:
         if parser.current < len(parser.tokens):
             return LiteralNode(statement)
         return result
-    except Exception:
+    except (ValueError, IndexError, KeyError, AttributeError):
         return LiteralNode(statement)
 
 

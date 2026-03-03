@@ -332,11 +332,12 @@ class CoCoBasic:
         if BasicParser.is_rem_line(code):
             return self.process_statement(code)
 
-        # Try AST conversion for single-line control structures with colons
+        # Try AST conversion for single-line control structures
         has_control = BasicParser.has_control_keyword(code)
         has_colons = ':' in code
+        is_if_statement = code.upper().strip().startswith('IF ')
 
-        if has_control and has_colons:
+        if (has_control and has_colons) or is_if_statement:
             try:
                 from .ast_converter import parse_and_convert_single_line
                 converted = parse_and_convert_single_line(code, self.ast_parser)
