@@ -432,3 +432,93 @@ class TestNestedIfElseEndif:
         results = helpers.execute_program(basic, program)
         text = helpers.get_text_output(results)
         assert 'KHOOR' in text
+
+
+class TestIfThenRegistryCommands:
+    """Test registry commands (SOUND, POKE, PAINT, etc.) in IF/THEN bodies.
+
+    These commands are not handled by the AST parser — they must be passed
+    through verbatim to the command registry. The AST converter must not
+    silently drop their arguments.
+    """
+
+    def test_sound_in_then_body(self, basic, helpers):
+        """SOUND with arguments should not be silently truncated"""
+        program = [
+            '10 F = 440',
+            '20 IF F > 0 THEN SOUND F, 1',
+            '30 PRINT "DONE"',
+        ]
+        results = helpers.execute_program(basic, program)
+        text = helpers.get_text_output(results)
+        assert 'DONE' in text
+        # Should have a sound output (not an error about missing args)
+        assert not any('ERROR' in t.upper() for t in text)
+
+    def test_sound_with_expression_in_then(self, basic, helpers):
+        """SOUND with expression args in IF/THEN body"""
+        program = [
+            '10 F1 = 200',
+            '20 RF = 100',
+            '30 SC = 5',
+            '40 IF SC >= 3 THEN SOUND F1+RF, 8: SC = 0',
+            '50 PRINT SC',
+        ]
+        results = helpers.execute_program(basic, program)
+        text = helpers.get_text_output(results)
+        assert any('0' in t for t in text), "SC should be 0 after assignment"
+
+    def test_sound_preserves_both_args(self, basic, helpers):
+        """SOUND with two arguments should not lose the second arg"""
+        program = [
+            '10 IF 1=1 THEN SOUND 440, 1',
+            '20 PRINT "DONE"',
+        ]
+        results = helpers.execute_program(basic, program)
+        # Should produce a sound event, not an error
+        has_sound = any(item.get('type') == 'sound' for item in results)
+        assert has_sound, "Should produce sound output"
+        text = helpers.get_text_output(results)
+        assert 'DONE' in text
+
+    def test_registry_command_with_colon_and_assignment(self, basic, helpers):
+        """Registry command followed by assignment in IF/THEN body"""
+        program = [
+            '10 X = 1',
+            '20 IF X = 1 THEN SOUND 440, 1: X = 99',
+            '30 PRINT X',
+        ]
+        results = helpers.execute_program(basic, program)
+        text = helpers.get_text_output(results)
+        assert any('99' in t for t in text)
+
+    def test_multiple_registry_commands_in_then(self, basic, helpers):
+        """Multiple registry commands separated by colons in IF/THEN"""
+        program = [
+            '10 IF 1=1 THEN SOUND 440, 1: SOUND 880, 1',
+            '20 PRINT "DONE"',
+        ]
+        results = helpers.execute_program(basic, program)
+        sound_count = sum(1 for item in results if item.get('type') == 'sound')
+        assert sound_count == 2, f"Should produce 2 sound events, got {sound_count}"
+
+    def test_dim_in_then_body(self, basic, helpers):
+        """DIM in IF/THEN body should work"""
+        program = [
+            '10 IF 1=1 THEN DIM A(5)',
+            '20 A(3) = 42',
+            '30 PRINT A(3)',
+        ]
+        results = helpers.execute_program(basic, program)
+        text = helpers.get_text_output(results)
+        assert any('42' in t for t in text)
+
+    def test_registry_command_in_else_body(self, basic, helpers):
+        """Registry command in ELSE body should preserve arguments"""
+        program = [
+            '10 IF 0=1 THEN PRINT "NO" ELSE SOUND 880, 1',
+            '20 PRINT "DONE"',
+        ]
+        results = helpers.execute_program(basic, program)
+        has_sound = any(item.get('type') == 'sound' for item in results)
+        assert has_sound, "ELSE body should produce sound output"

@@ -466,32 +466,14 @@ def _parse_ast_if_statement(statement: str, parser, converter) -> Optional[List[
             then_body = body_part
             else_body = None
 
-        # Parse THEN body using proper AST parsing
+        # Parse THEN body: try whole-body parse first (needed for FOR loops),
+        # fall back to colon-splitting if parse is incomplete
         if then_body:
-            # For single-line control structures with colons, parse as complete statement
-            try:
-                then_ast = parser.parse_statement(then_body)
-                body_statements = [then_ast]
-            except Exception:
-                # Fallback to colon splitting for complex cases
-                then_parts = BasicParser.split_on_delimiter_paren_aware(then_body)
-                for part in then_parts:
-                    part_stripped = part.strip()
-                    if part_stripped:
-                        body_statements.append(_parse_body_statement(part_stripped, parser))
+            body_statements = _parse_if_body(then_body, parser)
 
-        # Parse ELSE body similarly
+        # Parse ELSE body the same way
         if else_body:
-            try:
-                else_ast = parser.parse_statement(else_body)
-                else_statements = [else_ast]
-            except Exception:
-                # Fallback to colon splitting for complex cases
-                else_parts = BasicParser.split_on_delimiter_paren_aware(else_body)
-                for part in else_parts:
-                    part_stripped = part.strip()
-                    if part_stripped:
-                        else_statements.append(_parse_body_statement(part_stripped, parser))
+            else_statements = _parse_if_body(else_body, parser)
 
         # Create IF statement AST node
         then_branch = BlockNode(body_statements) if len(body_statements) > 1 else (body_statements[0] if body_statements else None)
@@ -831,20 +813,62 @@ def _parse_single_line_do(statement: str, parser, converter) -> Optional[List[st
     return statements
 
 
+def _parse_if_body(body: str, parser) -> list:
+    """Parse an IF/THEN or ELSE body into a list of AST nodes.
+
+    Tries parsing the whole body at once first (needed for FOR loops where
+    the FOR, body statements, and NEXT must be parsed together). If the
+    whole-body parse is incomplete (e.g., registry commands like SOUND whose
+    arguments get silently dropped), falls back to splitting on colons and
+    parsing each part individually.
+    """
+    # Control structure types that intentionally leave closing keywords
+    # (NEXT, WEND, LOOP) unconsumed — the converter adds them
+    _CONTROL_STRUCTURES = (
+        ForStatementNode, WhileStatementNode, DoLoopStatementNode,
+    )
+
+    try:
+        result = parser.parse_statement(body)
+        if parser.current >= len(parser.tokens):
+            # Parser consumed everything — use this result
+            return [result]
+        # Partial consumption is OK for control structures (FOR leaves NEXT
+        # unconsumed, WHILE leaves WEND, etc.) — the converter handles it
+        if isinstance(result, _CONTROL_STRUCTURES):
+            return [result]
+    except Exception:
+        pass
+
+    # Whole-body parse failed or was incomplete — split on colons
+    statements = []
+    for part in BasicParser.split_on_delimiter_paren_aware(body):
+        part_stripped = part.strip()
+        if part_stripped:
+            statements.append(_parse_body_statement(part_stripped, parser))
+    return statements
+
+
 def _parse_body_statement(statement: str, parser) -> ASTNode:
-    """Parse a single body statement and return appropriate AST node"""
+    """Parse a single body statement and return appropriate AST node.
+
+    Tries AST parsing first, but verifies the parser consumed ALL tokens.
+    If the parse was incomplete (e.g., SOUND parsed as a variable, dropping
+    its arguments), falls back to a LiteralNode that preserves the original
+    statement text for the command registry to handle at runtime.
+    """
     if not statement.strip():
         return LiteralNode("")
 
     try:
-        # Try to parse as a complete statement first
-        return parser.parse_statement(statement)
-    except Exception:
-        # If that fails, try as an expression
-        try:
-            return parser.parse_expression(statement)
-        except Exception:
-            # If all else fails, return as a literal string
+        result = parser.parse_statement(statement)
+        # Verify the parser consumed all tokens — a partial parse means
+        # the parser didn't understand the full statement (e.g., it parsed
+        # "SOUND" as a variable name and dropped "F1+RF,8")
+        if parser.current < len(parser.tokens):
             return LiteralNode(statement)
+        return result
+    except Exception:
+        return LiteralNode(statement)
 
 
