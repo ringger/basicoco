@@ -8,6 +8,7 @@ CoCo BASIC supports file numbers 1-15 with modes I (input), O (output), A (appen
 import os
 
 from .error_context import error_response, text_response
+from .file_manager import FileManager
 from .parser import BasicParser
 
 
@@ -63,13 +64,33 @@ class FileIOManager:
             return error_response(error)
         return None
 
+    def _parse_file_number(self, file_num_str):
+        """Parse and validate a file number from a string like '#1' or '1'.
+        Returns (file_num, None) on success or (None, error_response) on failure.
+        """
+        file_num_str = file_num_str.strip()
+        if file_num_str.startswith('#'):
+            file_num_str = file_num_str[1:]
+        try:
+            file_num = self.emulator.eval_int(file_num_str)
+        except (ValueError, TypeError):
+            error = self.emulator.error_context.runtime_error(
+                f"FILE NUMBER ERROR: invalid file number '{file_num_str}'",
+                self.emulator.current_line,
+                suggestions=[
+                    f"File number must be 1-{self.MAX_FILE_NUMBER}",
+                    'Example: OPEN "O", #1, "DATA.DAT"'
+                ]
+            )
+            return None, error_response(error)
+        err = self._validate_file_number(file_num)
+        if err:
+            return None, err
+        return file_num, None
+
     def _resolve_filename(self, filename):
         """Resolve a filename relative to the programs directory."""
-        filename = filename.strip()
-        # Strip quotes
-        if (filename.startswith('"') and filename.endswith('"')) or \
-           (filename.startswith("'") and filename.endswith("'")):
-            filename = filename[1:-1]
+        filename = FileManager._strip_quotes(filename)
         # Resolve relative to programs/ directory
         if not os.path.isabs(filename):
             programs_dir = os.path.join(os.getcwd(), 'programs')
@@ -110,21 +131,8 @@ class FileIOManager:
             )
             return error_response(error)
 
-        # Parse file number — expect #n
-        file_num_str = parts[1].strip()
-        if file_num_str.startswith('#'):
-            file_num_str = file_num_str[1:]
-        try:
-            file_num = int(self.emulator.evaluate_expression(file_num_str))
-        except (ValueError, TypeError):
-            error = self.emulator.error_context.runtime_error(
-                f"FILE NUMBER ERROR: invalid file number '{parts[1].strip()}'",
-                self.emulator.current_line,
-                suggestions=["File number must be a number 1-15", 'Example: OPEN "O", #1, "FILE"']
-            )
-            return error_response(error)
-
-        err = self._validate_file_number(file_num)
+        # Parse file number
+        file_num, err = self._parse_file_number(parts[1])
         if err:
             return err
 
@@ -192,19 +200,7 @@ class FileIOManager:
             self.close_all()
             return []
 
-        if args.startswith('#'):
-            args = args[1:]
-        try:
-            file_num = int(self.emulator.evaluate_expression(args))
-        except (ValueError, TypeError):
-            error = self.emulator.error_context.runtime_error(
-                f"FILE NUMBER ERROR: invalid file number '{args}'",
-                self.emulator.current_line,
-                suggestions=["Example: CLOSE #1", "Use CLOSE with no arguments to close all files"]
-            )
-            return error_response(error)
-
-        err = self._validate_file_number(file_num)
+        file_num, err = self._parse_file_number(args)
         if err:
             return err
 
@@ -242,17 +238,7 @@ class FileIOManager:
             file_num_str = args[:comma_pos].strip()
             expr_part = args[comma_pos + 1:]
 
-        try:
-            file_num = int(self.emulator.evaluate_expression(file_num_str))
-        except (ValueError, TypeError):
-            error = self.emulator.error_context.runtime_error(
-                f"FILE NUMBER ERROR: invalid file number",
-                self.emulator.current_line,
-                suggestions=["Example: PRINT #1, X"]
-            )
-            return error_response(error)
-
-        err = self._validate_file_number(file_num)
+        file_num, err = self._parse_file_number(file_num_str)
         if err:
             return err
         err = self._require_open(file_num, ('O', 'A'))
@@ -371,17 +357,7 @@ class FileIOManager:
         file_num_str = args[:comma_pos].strip()
         var_part = args[comma_pos + 1:]
 
-        try:
-            file_num = int(self.emulator.evaluate_expression(file_num_str))
-        except (ValueError, TypeError):
-            error = self.emulator.error_context.runtime_error(
-                f"FILE NUMBER ERROR: invalid file number",
-                self.emulator.current_line,
-                suggestions=["Example: INPUT #1, X"]
-            )
-            return error_response(error)
-
-        err = self._validate_file_number(file_num)
+        file_num, err = self._parse_file_number(file_num_str)
         if err:
             return err
         err = self._require_open(file_num, 'I')
@@ -434,7 +410,7 @@ class FileIOManager:
             index_str = var_str[paren_pos + 1:-1]
             indices = []
             for idx in BasicParser.split_args(index_str):
-                indices.append(int(self.emulator.evaluate_expression(idx.strip())))
+                indices.append(self.emulator.eval_int(idx))
             return {'name': array_name, 'array': True, 'indices': indices}
         return {'name': var_str, 'array': False}
 
@@ -518,17 +494,7 @@ class FileIOManager:
         file_num_str = args[:comma_pos].strip()
         var_str = args[comma_pos + 1:].strip()
 
-        try:
-            file_num = int(self.emulator.evaluate_expression(file_num_str))
-        except (ValueError, TypeError):
-            error = self.emulator.error_context.runtime_error(
-                "FILE NUMBER ERROR: invalid file number",
-                self.emulator.current_line,
-                suggestions=["Example: LINE INPUT #1, A$"]
-            )
-            return error_response(error)
-
-        err = self._validate_file_number(file_num)
+        file_num, err = self._parse_file_number(file_num_str)
         if err:
             return err
         err = self._require_open(file_num, 'I')

@@ -83,7 +83,7 @@ class VariableManager:
                 try:
                     dimensions = []
                     for dim_str in BasicParser.split_args(dimensions_str):
-                        dim_value = int(self.emulator.evaluate_expression(dim_str.strip()))
+                        dim_value = self.emulator.eval_int(dim_str)
                         if dim_value <= 0:
                             error = self.emulator.error_context.syntax_error(
                                 f"Array dimension must be positive: {dim_value}",

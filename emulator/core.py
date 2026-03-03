@@ -234,7 +234,7 @@ class CoCoBasic:
         args = args.strip()
         if args:
             try:
-                string_space = int(self.evaluate_expression(args))
+                string_space = self.eval_int(args)
                 # In TRS-80 BASIC, this would set string space
                 # For our implementation, we'll just acknowledge it
                 self.variable_manager.clear_variables()
@@ -550,6 +550,10 @@ class CoCoBasic:
         except Exception as e:
             raise ValueError(str(e))
 
+    def eval_int(self, expr, line=None):
+        """Evaluate an expression and return an integer."""
+        return int(self.evaluate_expression(expr, line))
+
     def execute_next(self, args):
         if not self.for_stack:
             error = self.error_context.runtime_error(
@@ -601,7 +605,7 @@ class CoCoBasic:
         indices = []
         try:
             for idx in indices_str.split(','):
-                indices.append(int(self.evaluate_expression(idx.strip())))
+                indices.append(self.eval_int(idx))
         except ValueError as e:
             error = self.error_context.type_error(
                 "Invalid array index",
@@ -646,8 +650,8 @@ class CoCoBasic:
             return error_response(error)
 
         try:
-            frequency = int(self.evaluate_expression(parts[0], self.current_line))
-            duration = int(self.evaluate_expression(parts[1], self.current_line))
+            frequency = self.eval_int(parts[0], self.current_line)
+            duration = self.eval_int(parts[1], self.current_line)
             
             if frequency < 1 or frequency > 4095:
                 error = self.error_context.runtime_error(
@@ -692,7 +696,7 @@ class CoCoBasic:
         args = args.strip()
         if args:
             try:
-                seed = int(self.evaluate_expression(args, self.current_line))
+                seed = self.eval_int(args, self.current_line)
                 random.seed(seed)
             except (ValueError, TypeError) as e:
                 error = self.error_context.runtime_error(
@@ -904,7 +908,7 @@ class CoCoBasic:
             return [{'type': 'resume_next', 'position': self.error_resume_position}]
         else:
             try:
-                line = int(self.evaluate_expression(args, self.current_line))
+                line = self.eval_int(args, self.current_line)
             except (ValueError, TypeError):
                 error = self.error_context.syntax_error(
                     f"Invalid RESUME target: {args}",
@@ -1016,7 +1020,7 @@ class CoCoBasic:
 
         # Parse indices using parenthesis-aware split
         try:
-            indices = [int(self.evaluate_expression(idx)) for idx in BasicParser.split_args(indices_str)]
+            indices = [self.eval_int(idx) for idx in BasicParser.split_args(indices_str)]
             
             # Use VariableManager to set array element
             err_msg = self.variable_manager.set_array_element(array_name.upper(), indices, value)
@@ -1135,7 +1139,7 @@ class CoCoBasic:
             line_numbers = []
             for part in line_parts:
                 if part:
-                    line_numbers.append(int(self.evaluate_expression(part, self.current_line)))
+                    line_numbers.append(self.eval_int(part, self.current_line))
         except (ValueError, TypeError) as e:
             error = self.error_context.syntax_error(
                 f"INVALID line numbers in ON statement: {str(e)}",

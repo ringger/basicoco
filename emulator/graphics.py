@@ -58,7 +58,7 @@ class BasicGraphics:
     
     def _eval_int(self, expr):
         """Evaluate an expression string and return an integer."""
-        return int(self.emulator.evaluate_expression(expr.strip()))
+        return self.emulator.eval_int(expr)
 
     def _syntax_error(self, message, suggestions):
         """Create a standardized syntax error response list."""

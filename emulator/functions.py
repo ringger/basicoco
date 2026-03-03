@@ -53,6 +53,15 @@ def _to_int(evaluator, value, func_name):
         raise ValueError(error.format_detailed())
 
 
+def _check_non_negative(evaluator, value, param_name, func_name):
+    """Raise ValueError if value is negative."""
+    if value < 0:
+        error = evaluator.error_context.runtime_error(
+            f"{func_name} {param_name} cannot be negative: {value}",
+            suggestions=["Use a positive number or zero"])
+        raise ValueError(error.format_detailed())
+
+
 # ============================================================================
 # String Functions
 # ============================================================================
@@ -62,13 +71,7 @@ def fn_left(evaluator, args: List[Any]) -> str:
     _check_args(evaluator, 'LEFT$', args, 2, 'LEFT$(string, count)')
     string_val = str(args[0])
     n_val = _to_int(evaluator, args[1], 'LEFT$')
-    if n_val < 0:
-        error = evaluator.error_context.runtime_error(
-            f"LEFT$ count cannot be negative: {n_val}",
-            suggestions=["Use a positive number or zero",
-                         'Example: LEFT$("HELLO", 3) not LEFT$("HELLO", -1)',
-                         "Zero returns empty string"])
-        raise ValueError(error.format_detailed())
+    _check_non_negative(evaluator, n_val, 'count', 'LEFT$')
     return string_val[:n_val]
 
 
@@ -77,13 +80,7 @@ def fn_right(evaluator, args: List[Any]) -> str:
     _check_args(evaluator, 'RIGHT$', args, 2, 'RIGHT$(string, count)')
     string_val = str(args[0])
     n_val = _to_int(evaluator, args[1], 'RIGHT$')
-    if n_val < 0:
-        error = evaluator.error_context.runtime_error(
-            f"RIGHT$ count cannot be negative: {n_val}",
-            suggestions=["Use a positive number or zero",
-                         'Example: RIGHT$("HELLO", 3) not RIGHT$("HELLO", -1)',
-                         "Zero returns empty string"])
-        raise ValueError(error.format_detailed())
+    _check_non_negative(evaluator, n_val, 'count', 'RIGHT$')
     return string_val[-n_val:] if n_val > 0 else ""
 
 
@@ -106,12 +103,7 @@ def fn_mid(evaluator, args: List[Any]) -> str:
     start_index = start_val - 1
     if len(args) == 3:
         length_val = _to_int(evaluator, args[2], 'MID$')
-        if length_val < 0:
-            error = evaluator.error_context.runtime_error(
-                f"MID$ length cannot be negative: {length_val}",
-                suggestions=["Use a positive length or omit for rest of string",
-                             'Example: MID$("HELLO", 2, 3) not MID$("HELLO", 2, -1)'])
-            raise ValueError(error.format_detailed())
+        _check_non_negative(evaluator, length_val, 'length', 'MID$')
         return string_val[start_index:start_index + length_val]
     else:
         return string_val[start_index:]
@@ -443,12 +435,7 @@ def fn_space(evaluator, args: List[Any]) -> str:
     """SPACE$(n) - return string of n spaces"""
     _check_args(evaluator, 'SPACE$', args, 1, 'SPACE$(count)')
     n = _to_int(evaluator, args[0], 'SPACE$')
-    if n < 0:
-        error = evaluator.error_context.runtime_error(
-            f"SPACE$ count cannot be negative: {n}",
-            suggestions=["Use a positive number or zero",
-                         'Example: SPACE$(5) returns "     "'])
-        raise ValueError(error.format_detailed())
+    _check_non_negative(evaluator, n, 'count', 'SPACE$')
     return " " * n
 
 
@@ -456,12 +443,7 @@ def fn_string(evaluator, args: List[Any]) -> str:
     """STRING$(n, char) - return string of n repeated characters"""
     _check_args(evaluator, 'STRING$', args, 2, 'STRING$(count, char)')
     n = _to_int(evaluator, args[0], 'STRING$')
-    if n < 0:
-        error = evaluator.error_context.runtime_error(
-            f"STRING$ count cannot be negative: {n}",
-            suggestions=["Use a positive number or zero",
-                         'Example: STRING$(5, "*") returns "*****"'])
-        raise ValueError(error.format_detailed())
+    _check_non_negative(evaluator, n, 'count', 'STRING$')
     char_arg = args[1]
     if isinstance(char_arg, (int, float)):
         char = chr(int(char_arg))
