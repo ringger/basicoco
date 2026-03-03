@@ -211,15 +211,21 @@ class TestWebSocketCompletionSignals:
             self.skip_test("Cannot connect to WebSocket server")
             return
 
-        # Create a program to save
-        _, _ = self.send_command_and_wait('10 PRINT "SAVE TEST"')
+        server_programs_dir = os.path.join(os.path.dirname(__file__), '..', '..', 'programs')
+        filepath = os.path.join(server_programs_dir, 'test_save.bas')
+        try:
+            # Create a program to save
+            _, _ = self.send_command_and_wait('10 PRINT "SAVE TEST"')
 
-        # Save it
-        completed, messages = self.send_command_and_wait('SAVE "test_save"')
+            # Save it
+            completed, messages = self.send_command_and_wait('SAVE "test_save"')
 
-        assert completed, "SAVE command should complete"
-        assert self.has_message_type(messages, 'command_complete'), \
-            "Should have completion signal"
+            assert completed, "SAVE command should complete"
+            assert self.has_message_type(messages, 'command_complete'), \
+                "Should have completion signal"
+        finally:
+            if os.path.exists(filepath):
+                os.remove(filepath)
 
     def test_files_command_completion(self):
         """Test FILES command sends completion signal"""
@@ -239,15 +245,20 @@ class TestWebSocketCompletionSignals:
             self.skip_test("Cannot connect to WebSocket server")
             return
 
-        # Create a file to load
-        with open('programs/load_test.bas', 'w') as f:
-            f.write('10 PRINT "LOADED"\n')
+        filepath = os.path.join(os.path.dirname(__file__), '..', '..', 'programs', 'load_test.bas')
+        try:
+            # Create a file to load
+            with open(filepath, 'w') as f:
+                f.write('10 PRINT "LOADED"\n')
 
-        completed, messages = self.send_command_and_wait('LOAD "load_test"')
+            completed, messages = self.send_command_and_wait('LOAD "load_test"')
 
-        assert completed, "LOAD command should complete"
-        assert self.has_message_type(messages, 'command_complete'), \
-            "Should have completion signal"
+            assert completed, "LOAD command should complete"
+            assert self.has_message_type(messages, 'command_complete'), \
+                "Should have completion signal"
+        finally:
+            if os.path.exists(filepath):
+                os.remove(filepath)
 
     # KILL Command and Confirmation Tests
     def test_kill_confirmation_request(self):
@@ -291,23 +302,27 @@ class TestWebSocketCompletionSignals:
         server_programs_dir = os.path.join(os.path.dirname(__file__), '..', '..', 'programs')
         os.makedirs(server_programs_dir, exist_ok=True)
         filepath = f'{server_programs_dir}/cancel_test.bas'
-        with open(filepath, 'w') as f:
-            f.write('10 PRINT "DONT DELETE"\n')
+        try:
+            with open(filepath, 'w') as f:
+                f.write('10 PRINT "DONT DELETE"\n')
 
-        # Start KILL command
-        self.sio.emit('execute_command', {'command': 'KILL "cancel_test"'})
-        time.sleep(0.5)  # Wait for confirmation request
+            # Start KILL command
+            self.sio.emit('execute_command', {'command': 'KILL "cancel_test"'})
+            time.sleep(0.5)  # Wait for confirmation request
 
-        # Cancel the kill
-        completed, messages = self.send_input_response('_kill_confirm', 'N',
-                                                      {'filename': filepath})
+            # Cancel the kill
+            completed, messages = self.send_input_response('_kill_confirm', 'N',
+                                                          {'filename': filepath})
 
-        assert completed, "KILL cancellation should complete"
-        assert self.has_message_type(messages, 'command_complete'), \
-            "Should have completion signal after cancellation"
+            assert completed, "KILL cancellation should complete"
+            assert self.has_message_type(messages, 'command_complete'), \
+                "Should have completion signal after cancellation"
 
-        # File should still exist
-        assert os.path.exists(filepath), "File should not be deleted after cancel"
+            # File should still exist
+            assert os.path.exists(filepath), "File should not be deleted after cancel"
+        finally:
+            if os.path.exists(filepath):
+                os.remove(filepath)
 
     def test_kill_confirmation_delete_completion(self):
         """Test KILL confirmation deletion sends completion signal"""
