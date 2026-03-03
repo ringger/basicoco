@@ -304,3 +304,133 @@ class TestGraphicsCommand:
         
         result6 = basic.process_command('PSET(110, 110), ABS(-2)')
         assert len([r for r in result6 if r.get('type') == 'error']) == 0
+
+
+class TestDrawModifiers:
+    """Test DRAW B/N/S modifiers"""
+
+    @pytest.fixture(autouse=True)
+    def setup_graphics(self, basic):
+        basic.process_command('PMODE 4,1')
+        # Reset turtle to known position
+        basic.turtle_x = 100
+        basic.turtle_y = 100
+
+    def test_blank_move_no_output(self, basic, helpers):
+        """B prefix moves turtle without drawing"""
+        result = basic.process_command('DRAW "BU20"')
+        graphics = helpers.get_graphics_output(result)
+        assert len(graphics) == 0
+        # Turtle should have moved
+        assert basic.turtle_y == 80
+
+    def test_blank_only_affects_next_command(self, basic, helpers):
+        """B prefix is one-shot — only suppresses the next movement"""
+        result = basic.process_command('DRAW "BU20R10"')
+        graphics = helpers.get_graphics_output(result)
+        # Only R10 should draw (U20 was blank)
+        assert len(graphics) == 1
+        line = graphics[0]
+        assert line['type'] == 'line'
+        # R10 starts from (100, 80) after blank U20
+        assert line['x1'] == 100
+        assert line['y1'] == 80
+
+    def test_no_update_draws_but_restores_position(self, basic, helpers):
+        """N prefix draws but returns turtle to starting position"""
+        result = basic.process_command('DRAW "NU20"')
+        graphics = helpers.get_graphics_output(result)
+        # Should produce a line
+        assert len(graphics) == 1
+        assert graphics[0]['y2'] == 80  # Drew up to y=80
+        # But turtle should be back at start
+        assert basic.turtle_x == 100
+        assert basic.turtle_y == 100
+
+    def test_no_update_only_affects_next_command(self, basic, helpers):
+        """N prefix is one-shot — only restores position for next movement"""
+        result = basic.process_command('DRAW "NU20R10"')
+        graphics = helpers.get_graphics_output(result)
+        # Both should draw
+        assert len(graphics) == 2
+        # After N, turtle returns to (100,100), so R10 starts there
+        r_line = graphics[1]
+        assert r_line['x1'] == 100
+        assert r_line['y1'] == 100
+        # Final turtle position is (110, 100) — R10 applied normally
+        assert basic.turtle_x == 110
+        assert basic.turtle_y == 100
+
+    def test_scale_default(self, basic, helpers):
+        """Default scale S4 produces normal distance"""
+        result = basic.process_command('DRAW "U10"')
+        graphics = helpers.get_graphics_output(result)
+        assert len(graphics) == 1
+        # Default scale 4: 10 * 4 / 4 = 10
+        assert graphics[0]['y1'] == 100
+        assert graphics[0]['y2'] == 90
+
+    def test_scale_double(self, basic, helpers):
+        """S8 doubles the distance"""
+        result = basic.process_command('DRAW "S8U10"')
+        graphics = helpers.get_graphics_output(result)
+        assert len(graphics) == 1
+        # Scale 8: 10 * 8 / 4 = 20
+        assert graphics[0]['y1'] == 100
+        assert graphics[0]['y2'] == 80
+
+    def test_scale_half(self, basic, helpers):
+        """S2 halves the distance"""
+        result = basic.process_command('DRAW "S2U10"')
+        graphics = helpers.get_graphics_output(result)
+        assert len(graphics) == 1
+        # Scale 2: 10 * 2 / 4 = 5
+        assert graphics[0]['y1'] == 100
+        assert graphics[0]['y2'] == 95
+
+    def test_scale_persists(self, basic, helpers):
+        """Scale persists for remaining commands in the string"""
+        result = basic.process_command('DRAW "S8U10R10"')
+        graphics = helpers.get_graphics_output(result)
+        assert len(graphics) == 2
+        # Both should be scaled: 10 * 8 / 4 = 20
+        assert graphics[0]['y2'] == 80   # U20 from y=100
+        assert graphics[1]['x2'] == 120  # R20 from x=100
+
+    def test_scale_resets_between_draw_calls(self, basic, helpers):
+        """Scale is per-DRAW-string, resets between calls"""
+        basic.process_command('DRAW "S8U10"')
+        basic.turtle_x = 100
+        basic.turtle_y = 100
+        result = basic.process_command('DRAW "U10"')
+        graphics = helpers.get_graphics_output(result)
+        # Should be back to default scale: 10 * 4 / 4 = 10
+        assert graphics[0]['y2'] == 90
+
+    def test_blank_and_scale_combined(self, basic, helpers):
+        """B and S work together"""
+        result = basic.process_command('DRAW "S8BU10R10"')
+        graphics = helpers.get_graphics_output(result)
+        # U10 scaled to 20, but blank — no output
+        # R10 scaled to 20, drawn
+        assert len(graphics) == 1
+        assert graphics[0]['x1'] == 100
+        assert graphics[0]['y1'] == 80   # After blank U20
+        assert graphics[0]['x2'] == 120  # R20
+
+    def test_no_update_and_scale_combined(self, basic, helpers):
+        """N and S work together"""
+        result = basic.process_command('DRAW "S8NU10"')
+        graphics = helpers.get_graphics_output(result)
+        assert len(graphics) == 1
+        # Scaled: 10 * 8 / 4 = 20
+        assert graphics[0]['y2'] == 80
+        # N restores position
+        assert basic.turtle_y == 100
+
+    def test_color_unaffected_by_modifiers(self, basic, helpers):
+        """C command works alongside B/N/S"""
+        result = basic.process_command('DRAW "C3R10"')
+        graphics = helpers.get_graphics_output(result)
+        assert len(graphics) == 1
+        assert graphics[0]['color'] == 3

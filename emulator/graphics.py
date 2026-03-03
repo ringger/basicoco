@@ -435,24 +435,54 @@ class BasicGraphics:
         commands = BasicParser.parse_draw_commands(draw_string)
 
         output = []
+        blank = False       # B prefix: next move is pen-up
+        no_update = False   # N prefix: next move returns to start
+        scale = 4           # S factor: distance * scale / 4 (S4 = 1x)
+
         for command in commands:
-            result = self._execute_draw_command(command)
-            if result:
+            cmd = command.get('command', '')
+
+            if cmd == 'B':
+                blank = True
+                continue
+            elif cmd == 'N':
+                no_update = True
+                continue
+            elif cmd == 'S':
+                scale = command.get('scale', 4)
+                continue
+            elif cmd == 'C':
+                self.emulator.current_draw_color = command.get('color', 1)
+                continue
+
+            # Movement command — save position, apply scale, execute
+            saved_x = self.emulator.turtle_x
+            saved_y = self.emulator.turtle_y
+            result = self._execute_move_command(command, scale)
+
+            if blank:
+                blank = False
+                # Turtle moved but don't emit draw output
+            elif no_update:
+                no_update = False
+                output.extend(result)
+                # Restore turtle to pre-move position
+                self.emulator.turtle_x = saved_x
+                self.emulator.turtle_y = saved_y
+            else:
                 output.extend(result)
 
         return output
-    
-    def _execute_draw_command(self, command):
-        """Execute a single DRAW command"""
+
+    def _execute_move_command(self, command, scale):
+        """Execute a movement DRAW command with scale applied."""
         cmd_type = command.get('command', '')
-        
+
         if cmd_type in ['U', 'D', 'L', 'R', 'E', 'F', 'G', 'H']:
-            # Movement commands
-            distance = command.get('distance', 1)
-            
+            distance = command.get('distance', 1) * scale // 4
+
             old_x, old_y = self.emulator.turtle_x, self.emulator.turtle_y
-            
-            # Calculate new position
+
             if cmd_type == 'U':
                 self.emulator.turtle_y -= distance
             elif cmd_type == 'D':
@@ -473,28 +503,21 @@ class BasicGraphics:
             elif cmd_type == 'H':  # Up-Left diagonal
                 self.emulator.turtle_x -= distance
                 self.emulator.turtle_y -= distance
-            
-            # Draw line from old position to new position
-            return [{'type': 'line', 'x1': old_x, 'y1': old_y, 
-                    'x2': self.emulator.turtle_x, 'y2': self.emulator.turtle_y, 
+
+            return [{'type': 'line', 'x1': old_x, 'y1': old_y,
+                    'x2': self.emulator.turtle_x, 'y2': self.emulator.turtle_y,
                     'color': self.emulator.current_draw_color}]
-        
+
         elif cmd_type == 'M':
-            # Move to position
             x = command.get('x', self.emulator.turtle_x)
             y = command.get('y', self.emulator.turtle_y)
             relative = command.get('relative', False)
-            
+
             if relative:
-                self.emulator.turtle_x += x
-                self.emulator.turtle_y += y
+                self.emulator.turtle_x += x * scale // 4
+                self.emulator.turtle_y += y * scale // 4
             else:
                 self.emulator.turtle_x = x
                 self.emulator.turtle_y = y
-        
-        elif cmd_type == 'C':
-            # Set color
-            color = command.get('color', 1)
-            self.emulator.current_draw_color = color
-        
+
         return []
