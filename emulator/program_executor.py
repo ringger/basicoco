@@ -82,7 +82,7 @@ class ProgramExecutor:
         keyword_upper = keyword.upper()
         for pos_idx in range(current_pos_index + 1, len(all_positions)):
             stmt = emu.expanded_program.get(all_positions[pos_idx], '')
-            if stmt.strip().upper().startswith(keyword_upper):
+            if isinstance(stmt, str) and stmt.strip().upper().startswith(keyword_upper):
                 return pos_idx
         return None
 
@@ -93,7 +93,10 @@ class ProgramExecutor:
         """
         emu = self.emulator
         for pos_idx in range(current_pos_index + 1, len(all_positions)):
-            stmt = emu.expanded_program.get(all_positions[pos_idx], '').strip()
+            stmt = emu.expanded_program.get(all_positions[pos_idx], '')
+            if not isinstance(stmt, str):
+                continue
+            stmt = stmt.strip()
             if stmt.startswith('NEXT'):
                 parts = stmt.split()
                 if len(parts) == 1 or (len(parts) > 1 and parts[1] == var_name):
@@ -111,7 +114,10 @@ class ProgramExecutor:
         emu = self.emulator
         nest_level = 0
         for pos_idx in range(current_pos_index + 1, len(all_positions)):
-            stmt = emu.expanded_program.get(all_positions[pos_idx], '').strip().upper()
+            entry = emu.expanded_program.get(all_positions[pos_idx], '')
+            if not isinstance(entry, str):
+                continue
+            stmt = entry.strip().upper()
             if stmt.startswith('IF ') and 'THEN' in stmt:
                 nest_level += 1
             elif stop_at_else and stmt.startswith('ELSE') and nest_level == 0:
@@ -317,18 +323,15 @@ class ProgramExecutor:
             if emu.trace_mode and sub_index == 0:
                 output.append({'type': 'text', 'text': f'[{line_num}]'})
 
-            # Check AST cache before text-based dispatch
-            cached_ast = emu.ast_cache.get((line_num, sub_index))
-            if cached_ast is not None:
+            # ASTNode entries execute directly; text entries go through dispatch
+            if not isinstance(statement, str):
                 try:
-                    result = emu.ast_evaluator.visit(cached_ast)
+                    result = emu.ast_evaluator.visit(statement)
                     if not isinstance(result, list):
-                        result = None  # Fall back to process_statement
+                        result = None
                 except (ValueError, IndexError, KeyError, AttributeError,
                         TypeError, ZeroDivisionError):
-                    result = None  # Fall back to process_statement
-                if result is None:
-                    result = emu.process_statement(statement)
+                    result = None
             else:
                 result = emu.process_statement(statement)
 
