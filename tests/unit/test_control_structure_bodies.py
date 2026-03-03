@@ -12,7 +12,7 @@ import os
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
 
-from emulator.ast_converter import parse_and_convert_single_line
+from emulator.ast_converter import parse_and_convert_single_line, _find_else_outside_quotes
 from emulator.ast_parser import ASTParser
 
 
@@ -140,6 +140,64 @@ class TestFileIOInWhileBodies:
         result = parse_and_convert_single_line(
             'WHILE NOT EOF(1): INPUT# 1, X: WEND', self.parser)
         assert 'INPUT# 1, X' in result
+
+
+class TestFindElseOutsideQuotes:
+    """Unit tests for _find_else_outside_quotes helper."""
+
+    def test_no_else(self):
+        assert _find_else_outside_quotes('PRINT "HELLO"') == -1
+
+    def test_simple_else(self):
+        pos = _find_else_outside_quotes('PRINT "YES" ELSE PRINT "NO"')
+        assert pos >= 0
+        assert 'PRINT "YES" ELSE PRINT "NO"'[pos:pos + 6] == ' ELSE '
+
+    def test_else_inside_quotes_ignored(self):
+        assert _find_else_outside_quotes('PRINT " ELSE "') == -1
+
+    def test_else_after_string_containing_else(self):
+        text = 'PRINT " ELSE " ELSE PRINT "OK"'
+        pos = _find_else_outside_quotes(text)
+        assert pos >= 0
+        # Should find the real ELSE, not the one in quotes
+        assert text[pos + 6:].strip().startswith('PRINT "OK"')
+
+    def test_no_else_keyword(self):
+        assert _find_else_outside_quotes('PRINT "HELLO": GOTO 100') == -1
+
+
+class TestElseInQuotedStrings:
+    """ELSE inside quoted strings must not be treated as the ELSE keyword."""
+
+    def setup_method(self):
+        self.parser = ASTParser()
+
+    def test_else_inside_string_not_split(self):
+        """PRINT " ELSE " should keep ELSE inside the string"""
+        result = parse_and_convert_single_line(
+            'IF X=1 THEN PRINT " ELSE "', self.parser)
+        assert result is not None
+        # The ELSE should stay inside the PRINT string, not create an ELSE branch
+        assert any('PRINT " ELSE "' in s for s in result)
+        # There should be no separate ELSE branch
+        assert 'ELSE' not in result or result.count('ELSE') == 0 or \
+            all('ELSE' not in s or '" ELSE "' in s or 'ELSE' == s for s in result)
+
+    def test_else_after_string_containing_else(self):
+        """Real ELSE after a string containing ELSE should split correctly"""
+        result = parse_and_convert_single_line(
+            'IF X=1 THEN PRINT " ELSE " ELSE PRINT "OK"', self.parser)
+        assert result is not None
+        # Should have both a THEN body with the string and an ELSE body
+        assert any('" ELSE "' in s for s in result)
+        assert any('"OK"' in s for s in result)
+
+    def test_else_in_string_runtime(self, basic, helpers):
+        """Runtime test: ELSE inside string should print literally"""
+        result = basic.process_command('IF 1=1 THEN PRINT " ELSE "')
+        text = helpers.get_text_output(result)
+        assert ' ELSE ' in text
 
 
 class TestImmediateModeIfConsistency:

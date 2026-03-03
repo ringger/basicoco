@@ -630,7 +630,7 @@ class CoCoBasic:
         try:
             ast_node = self.ast_parser.parse_expression(condition, self.current_line)
             return bool(self.ast_evaluator.visit(ast_node))
-        except Exception:
+        except (ValueError, IndexError, KeyError, AttributeError, TypeError):
             return False
     
     def execute_sound(self, args):

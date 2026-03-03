@@ -292,7 +292,7 @@ class ASTParser:
                     statement = self.parse_statement(code)
                     if statement:
                         statements.append(statement)
-                except Exception:
+                except (ValueError, IndexError, KeyError, AttributeError):
                     # If parsing fails, create a literal node for the raw line
                     statements.append(LiteralNode(code))
 
@@ -524,7 +524,10 @@ class ASTParser:
                 column += 1
                 continue
             
-            # Unknown character
+            # Unknown character — silently skipped. This includes '#' which is
+            # used by file I/O commands (PRINT#, INPUT#). Those commands are
+            # intercepted before reaching the AST parser (see process_statement()
+            # in core.py and _parse_body_statement() in ast_converter.py).
             i += 1
             column += 1
         
@@ -1660,7 +1663,7 @@ class ASTEvaluator(ASTVisitor):
                 for item in (result if isinstance(result, list) else [result]):
                     if isinstance(item, dict) and item.get('type') in ['jump', 'jump_return', 'end']:
                         return results  # Exit program on control flow
-            except Exception as e:
+            except (ValueError, IndexError, KeyError, AttributeError, TypeError) as e:
                 err = self.emulator.error_context.runtime_error(
                     str(e), self.emulator.current_line)
                 results.append({'type': 'error', 'message': err.format_message()})
@@ -1687,7 +1690,7 @@ class ASTEvaluator(ASTVisitor):
                 formatted = self._format_print_value(value)
                 output_parts.append(formatted)
                 col += len(formatted)
-            except Exception as e:
+            except (ValueError, IndexError, KeyError, AttributeError, TypeError) as e:
                 error = self.emulator.error_context.runtime_error(
                     f"Error evaluating PRINT expression: {e}",
                     suggestions=[

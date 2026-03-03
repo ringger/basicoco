@@ -6,12 +6,12 @@ multi-line equivalents using the AST parser infrastructure.
 """
 
 import re
-from typing import List, Optional, Union
+from typing import List, Optional
 from .parser import BasicParser
 from .ast_parser import (
     ASTNode, IfStatementNode, ForStatementNode, WhileStatementNode,
     DoLoopStatementNode, ExitForStatementNode, EndStatementNode, GotoStatementNode, PrintStatementNode,
-    GosubStatementNode, ReturnStatementNode, InputStatementNode, ProgramNode,
+    GosubStatementNode, ReturnStatementNode, InputStatementNode,
     AssignmentNode, BlockNode, VariableNode, LiteralNode,
     BinaryOpNode, UnaryOpNode, FunctionCallNode, ArrayAccessNode,
     Operator, NodeType, ASTVisitor
@@ -174,10 +174,7 @@ class ASTStatementConverter(ASTVisitor):
                 var_list.append(self._expression_to_string(var_node))
 
         if var_list:
-            if node.prompt:
-                input_str += " " + ", ".join(var_list)
-            else:
-                input_str += " " + ", ".join(var_list)
+            input_str += " " + ", ".join(var_list)
 
         self.statements.append(input_str)
 
@@ -435,12 +432,9 @@ def _parse_ast_if_statement(statement: str, parser, converter) -> Optional[List[
         body_statements = []
         else_statements = []
 
-        # Split by colons but respect quotes and nested structures
-        body_parts = BasicParser.split_on_delimiter_paren_aware(body_part)
-
-        # Parse the entire THEN body as structured statements using AST parser
-        # Split by ELSE first to separate THEN and ELSE parts
-        else_pos = body_part.upper().find(' ELSE ')
+        # Split by ELSE first to separate THEN and ELSE parts.
+        # Must be quote-aware — PRINT " ELSE " contains ELSE inside a string.
+        else_pos = _find_else_outside_quotes(body_part)
         if else_pos >= 0:
             then_body = body_part[:else_pos].strip()
             else_body = body_part[else_pos + 6:].strip()  # Skip ' ELSE '
@@ -626,6 +620,22 @@ def _parse_ast_do_statement(statement: str, parser, converter) -> Optional[List[
     except (ValueError, IndexError, KeyError, AttributeError):
         # Parsing/conversion error — return None to let core.py handle normally
         return None
+
+
+def _find_else_outside_quotes(text: str) -> int:
+    """Find position of ' ELSE ' in text, ignoring occurrences inside quoted strings.
+
+    Returns the index of the space before ELSE, or -1 if not found.
+    """
+    upper = text.upper()
+    in_quotes = False
+    # Search for ' ELSE ' — need at least 6 chars remaining
+    for i, char in enumerate(text):
+        if char == '"':
+            in_quotes = not in_quotes
+        elif not in_quotes and char == ' ' and upper[i:i + 6] == ' ELSE ':
+            return i
+    return -1
 
 
 def _has_file_io_command(text: str) -> bool:
