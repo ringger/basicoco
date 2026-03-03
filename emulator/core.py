@@ -14,7 +14,9 @@ from .variables import VariableManager
 from .commands import CommandRegistry
 from .expressions import FunctionRegistry
 from .functions import register_all_functions
-from .ast_parser import ASTParser, ASTEvaluator, basic_truthy
+from .ast_nodes import basic_truthy
+from .ast_parser import ASTParser
+from .ast_evaluator import ASTEvaluator
 from .output_manager import StreamingOutputManager, LegacyOutputAdapter
 from .error_context import ErrorContextManager, error_response, text_response
 from .file_manager import FileManager

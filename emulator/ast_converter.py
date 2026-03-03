@@ -8,7 +8,7 @@ multi-line equivalents using the AST parser infrastructure.
 import re
 from typing import List, Optional
 from .parser import BasicParser
-from .ast_parser import (
+from .ast_nodes import (
     ASTNode, IfStatementNode, ForStatementNode, WhileStatementNode,
     DoLoopStatementNode, ExitForStatementNode, EndStatementNode, GotoStatementNode, PrintStatementNode,
     GosubStatementNode, ReturnStatementNode, InputStatementNode,

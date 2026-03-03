@@ -1,283 +1,40 @@
 """
-Advanced AST Parser for TRS-80 Color Computer BASIC Emulator
+AST Parser for TRS-80 Color Computer BASIC Emulator
 
-This module provides Abstract Syntax Tree generation for BASIC expressions and statements,
-enabling better error reporting, optimization, and support for advanced language constructs.
+This module provides the parser that generates Abstract Syntax Trees for BASIC
+expressions and statements. Node definitions are in ast_nodes.py; the evaluator
+is in ast_evaluator.py.
 """
 
-from typing import Any, List, Optional, Union, Dict
-from dataclasses import dataclass
-from enum import Enum
-from .error_context import ErrorContextManager, error_response
+from typing import Any, List, Optional, Dict
 
-
-def basic_truthy(value) -> bool:
-    """Convert a BASIC value to Python bool using CoCo semantics."""
-    if isinstance(value, str):
-        return len(value) > 0
-    if isinstance(value, (int, float)):
-        return bool(value)
-    return value != 0
-
-
-class NodeType(Enum):
-    """Types of AST nodes"""
-    # Literals
-    NUMBER = "number"
-    STRING = "string"
-    VARIABLE = "variable"
-    
-    # Expressions
-    BINARY_OP = "binary_op"
-    UNARY_OP = "unary_op"
-    FUNCTION_CALL = "function_call"
-    ARRAY_ACCESS = "array_access"
-    
-    # Statements
-    ASSIGNMENT = "assignment"
-    IF_STATEMENT = "if_statement"
-    FOR_STATEMENT = "for_statement"
-    WHILE_STATEMENT = "while_statement"
-    GOTO_STATEMENT = "goto_statement"
-    GOSUB_STATEMENT = "gosub_statement"
-    RETURN_STATEMENT = "return_statement"
-    PRINT_STATEMENT = "print_statement"
-    INPUT_STATEMENT = "input_statement"
-    END_STATEMENT = "end_statement"
-    
-    DO_LOOP_STATEMENT = "do_loop_statement"
-
-    # Control Flow
-    BLOCK = "block"
-    PROGRAM = "program"
-    EXIT_FOR_STATEMENT = "exit_for_statement"
-
-
-class Operator(Enum):
-    """Binary and unary operators"""
-    # Arithmetic
-    ADD = "+"
-    SUBTRACT = "-"
-    MULTIPLY = "*"
-    DIVIDE = "/"
-    POWER = "^"
-    MOD = "MOD"
-    
-    # Comparison
-    EQUAL = "="
-    NOT_EQUAL = "<>"
-    LESS_THAN = "<"
-    GREATER_THAN = ">"
-    LESS_EQUAL = "<="
-    GREATER_EQUAL = ">="
-    
-    # Logical
-    AND = "AND"
-    OR = "OR"
-    NOT = "NOT"
-    
-    # String
-    CONCATENATE = "+"
-
-
-@dataclass
-class SourceLocation:
-    """Source code location for error reporting"""
-    line: int
-    column: int
-    length: int = 1
-
-
-@dataclass 
-class ASTNode:
-    """Base class for all AST nodes"""
-    node_type: NodeType
-    location: Optional[SourceLocation] = None
-    
-    def accept(self, visitor):
-        """Visitor pattern support"""
-        method_name = f"visit_{self.node_type.value}"
-        method = getattr(visitor, method_name, None)
-        if method:
-            return method(self)
-        else:
-            return visitor.generic_visit(self)
-
-
-class LiteralNode(ASTNode):
-    """Node for literal values (numbers, strings)"""
-    def __init__(self, value: Union[int, float, str], location: Optional[SourceLocation] = None):
-        if isinstance(value, str):
-            node_type = NodeType.STRING
-        else:
-            node_type = NodeType.NUMBER
-        super().__init__(node_type, location)
-        self.value = value
-
-
-class VariableNode(ASTNode):
-    """Node for variable references"""
-    def __init__(self, name: str, location: Optional[SourceLocation] = None):
-        super().__init__(NodeType.VARIABLE, location)
-        self.name = name
-
-
-class BinaryOpNode(ASTNode):
-    """Node for binary operations"""
-    def __init__(self, operator: Operator, left: ASTNode, right: ASTNode, location: Optional[SourceLocation] = None):
-        super().__init__(NodeType.BINARY_OP, location)
-        self.operator = operator
-        self.left = left
-        self.right = right
-
-
-class UnaryOpNode(ASTNode):
-    """Node for unary operations"""
-    def __init__(self, operator: Operator, operand: ASTNode, location: Optional[SourceLocation] = None):
-        super().__init__(NodeType.UNARY_OP, location)
-        self.operator = operator
-        self.operand = operand
-
-
-class FunctionCallNode(ASTNode):
-    """Node for function calls"""
-    def __init__(self, function_name: str, arguments: List[ASTNode], location: Optional[SourceLocation] = None):
-        super().__init__(NodeType.FUNCTION_CALL, location)
-        self.function_name = function_name
-        self.arguments = arguments
-
-
-class ArrayAccessNode(ASTNode):
-    """Node for array element access"""
-    def __init__(self, array_name: str, indices: List[ASTNode], location: Optional[SourceLocation] = None):
-        super().__init__(NodeType.ARRAY_ACCESS, location)
-        self.array_name = array_name
-        self.indices = indices
-
-
-class AssignmentNode(ASTNode):
-    """Node for variable assignments"""
-    def __init__(self, target: Union[VariableNode, ArrayAccessNode], value: ASTNode, location: Optional[SourceLocation] = None):
-        super().__init__(NodeType.ASSIGNMENT, location)
-        self.target = target
-        self.value = value
-
-
-class IfStatementNode(ASTNode):
-    """Node for IF statements"""
-    def __init__(self, condition: ASTNode, then_branch: ASTNode, else_branch: Optional[ASTNode] = None, location: Optional[SourceLocation] = None):
-        super().__init__(NodeType.IF_STATEMENT, location)
-        self.condition = condition
-        self.then_branch = then_branch
-        self.else_branch = else_branch
-
-
-class ForStatementNode(ASTNode):
-    """Node for FOR loops"""
-    def __init__(self, variable: VariableNode, start_value: ASTNode, end_value: ASTNode, step_value: Optional[ASTNode], body: ASTNode, location: Optional[SourceLocation] = None):
-        super().__init__(NodeType.FOR_STATEMENT, location)
-        self.variable = variable
-        self.start_value = start_value
-        self.end_value = end_value
-        self.step_value = step_value
-        self.body = body
-
-
-class WhileStatementNode(ASTNode):
-    """Node for WHILE loops"""
-    def __init__(self, condition: ASTNode, body: ASTNode, location: Optional[SourceLocation] = None):
-        super().__init__(NodeType.WHILE_STATEMENT, location)
-        self.condition = condition
-        self.body = body
-
-
-class DoLoopStatementNode(ASTNode):
-    """Node for DO/LOOP constructs"""
-    def __init__(self, body: ASTNode, condition: Optional[ASTNode] = None, condition_type: str = 'WHILE', condition_position: str = 'BOTTOM', location: Optional[SourceLocation] = None):
-        super().__init__(NodeType.DO_LOOP_STATEMENT, location)
-        self.body = body
-        self.condition = condition
-        self.condition_type = condition_type  # 'WHILE' or 'UNTIL' 
-        self.condition_position = condition_position  # 'TOP' (DO WHILE) or 'BOTTOM' (LOOP WHILE)
-
-
-class ExitForStatementNode(ASTNode):
-    """Node for EXIT FOR statements"""
-    def __init__(self, location: Optional[SourceLocation] = None):
-        super().__init__(NodeType.EXIT_FOR_STATEMENT, location)
-
-
-class EndStatementNode(ASTNode):
-    """Node for END statements"""
-    def __init__(self, location: Optional[SourceLocation] = None):
-        super().__init__(NodeType.END_STATEMENT, location)
-
-
-class GotoStatementNode(ASTNode):
-    """Node for GOTO statements"""
-    def __init__(self, target_line: ASTNode, location: Optional[SourceLocation] = None):
-        super().__init__(NodeType.GOTO_STATEMENT, location)
-        self.target_line = target_line
-
-
-class PrintStatementNode(ASTNode):
-    """Node for PRINT statements"""
-    def __init__(self, expressions: List[ASTNode], separators: List[str], location: Optional[SourceLocation] = None):
-        super().__init__(NodeType.PRINT_STATEMENT, location)
-        self.expressions = expressions
-        self.separators = separators
-
-
-class GosubStatementNode(ASTNode):
-    """Node for GOSUB statements"""
-    def __init__(self, target_line: ASTNode, location: Optional[SourceLocation] = None):
-        super().__init__(NodeType.GOSUB_STATEMENT, location)
-        self.target_line = target_line
-
-
-class ReturnStatementNode(ASTNode):
-    """Node for RETURN statements"""
-    def __init__(self, location: Optional[SourceLocation] = None):
-        super().__init__(NodeType.RETURN_STATEMENT, location)
-
-
-class InputStatementNode(ASTNode):
-    """Node for INPUT statements"""
-    def __init__(self, prompt: Optional[ASTNode], variables: List[ASTNode], location: Optional[SourceLocation] = None):
-        super().__init__(NodeType.INPUT_STATEMENT, location)
-        self.prompt = prompt
-        self.variables = variables
-
-
-class ProgramNode(ASTNode):
-    """Node for complete BASIC programs"""
-    def __init__(self, statements: List[ASTNode], location: Optional[SourceLocation] = None):
-        super().__init__(NodeType.PROGRAM, location)
-        self.statements = statements
-
-
-class BlockNode(ASTNode):
-    """Node for statement blocks"""
-    def __init__(self, statements: List[ASTNode], location: Optional[SourceLocation] = None):
-        super().__init__(NodeType.BLOCK, location)
-        self.statements = statements
+from .ast_nodes import (
+    ASTNode, SourceLocation, NodeType, Operator,
+    LiteralNode, VariableNode, BinaryOpNode, UnaryOpNode,
+    FunctionCallNode, ArrayAccessNode, AssignmentNode,
+    IfStatementNode, ForStatementNode, WhileStatementNode,
+    DoLoopStatementNode, ExitForStatementNode, EndStatementNode,
+    GotoStatementNode, PrintStatementNode, GosubStatementNode,
+    ReturnStatementNode, InputStatementNode, ProgramNode, BlockNode
+)
+from .error_context import ErrorContextManager
 
 
 class ASTParser:
     """
     Advanced parser that generates Abstract Syntax Trees for BASIC code.
-    
+
     This parser provides better error reporting, supports complex nested expressions,
     and lays the foundation for advanced language features.
     """
-    
+
     def __init__(self):
         self.tokens = []
         self.current = 0
         self.error_context = ErrorContextManager()
         self.current_line = 1
         self.current_column = 1
-    
+
     def parse_program(self, program_lines: Dict[int, str]) -> ProgramNode:
         """Parse a complete BASIC program into a PROGRAM node"""
         statements = []
@@ -300,11 +57,11 @@ class ASTParser:
     def parse_expression(self, expr_str: str, line: int = 1) -> ASTNode:
         """
         Parse a BASIC expression into an AST.
-        
+
         Args:
             expr_str: The expression string to parse
             line: Source line number for error reporting
-            
+
         Returns:
             AST node representing the expression
         """
@@ -312,10 +69,10 @@ class ASTParser:
         self.error_context.set_context(line, expr_str)
         self.tokens = self._tokenize(expr_str)
         self.current = 0
-        
+
         if not self.tokens:
             error = self.error_context.syntax_error(
-                "Empty expression", 
+                "Empty expression",
                 line,
                 suggestions=[
                     "Provide a valid expression",
@@ -323,17 +80,17 @@ class ASTParser:
                 ]
             )
             raise ValueError(error.format_message())
-        
+
         return self._parse_or_expression()
-    
+
     def parse_statement(self, stmt_str: str, line: int = 1) -> ASTNode:
         """
         Parse a BASIC statement into an AST.
-        
+
         Args:
             stmt_str: The statement string to parse
             line: Source line number for error reporting
-            
+
         Returns:
             AST node representing the statement
         """
@@ -341,10 +98,10 @@ class ASTParser:
         self.error_context.set_context(line, stmt_str)
         self.tokens = self._tokenize(stmt_str)
         self.current = 0
-        
+
         if not self.tokens:
             error = self.error_context.syntax_error(
-                "Empty statement", 
+                "Empty statement",
                 line,
                 suggestions=[
                     "Provide a valid BASIC statement",
@@ -352,7 +109,7 @@ class ASTParser:
                 ]
             )
             raise ValueError(error.format_message())
-        
+
         return self._parse_statement_sequence()
 
     def _parse_statement_sequence(self) -> ASTNode:
@@ -388,7 +145,7 @@ class ASTParser:
     def _tokenize(self, text: str) -> List[Dict[str, Any]]:
         """
         Tokenize BASIC code into a list of tokens.
-        
+
         Returns:
             List of token dictionaries with 'type', 'value', 'line', 'column'
         """
@@ -396,10 +153,10 @@ class ASTParser:
         i = 0
         line = self.current_line
         column = 1
-        
+
         while i < len(text):
             char = text[i]
-            
+
             # Skip whitespace
             if char.isspace():
                 if char == '\n':
@@ -409,7 +166,7 @@ class ASTParser:
                     column += 1
                 i += 1
                 continue
-            
+
             # String literals
             if char == '"':
                 start_col = column
@@ -442,7 +199,7 @@ class ASTParser:
                     )
                     raise ValueError(error.format_message())
                 continue
-            
+
             # Numbers
             if char.isdigit() or char == '.':
                 start_col = column
@@ -451,7 +208,7 @@ class ASTParser:
                     value += text[i]
                     i += 1
                     column += 1
-                
+
                 # Handle scientific notation
                 if i < len(text) and text[i].upper() == 'E':
                     value += text[i]
@@ -465,7 +222,7 @@ class ASTParser:
                         value += text[i]
                         i += 1
                         column += 1
-                
+
                 tokens.append({
                     'type': 'NUMBER',
                     'value': float(value) if '.' in value or 'E' in value.upper() else int(value),
@@ -474,7 +231,7 @@ class ASTParser:
                     'length': column - start_col
                 })
                 continue
-            
+
             # Identifiers and keywords
             if char.isalpha() or char == '_':
                 start_col = column
@@ -483,7 +240,7 @@ class ASTParser:
                     value += text[i]
                     i += 1
                     column += 1
-                
+
                 # Check if it's a keyword or identifier
                 token_type = 'KEYWORD' if value.upper() in self._get_keywords() else 'IDENTIFIER'
                 tokens.append({
@@ -494,7 +251,7 @@ class ASTParser:
                     'length': column - start_col
                 })
                 continue
-            
+
             # Two-character operators
             if i + 1 < len(text):
                 two_char = text[i:i+2]
@@ -509,7 +266,7 @@ class ASTParser:
                     i += 2
                     column += 2
                     continue
-            
+
             # Single-character operators and punctuation
             if char in '+-*/^=<>()[],:;':
                 tokens.append({
@@ -522,16 +279,16 @@ class ASTParser:
                 i += 1
                 column += 1
                 continue
-            
+
             # Unknown character — silently skipped. This includes '#' which is
             # used by file I/O commands (PRINT#, INPUT#). Those commands are
             # intercepted before reaching the AST parser (see process_statement()
             # in core.py and _parse_body_statement() in ast_converter.py).
             i += 1
             column += 1
-        
+
         return tokens
-    
+
     def _get_keywords(self) -> set:
         """Return set of BASIC keywords"""
         return {
@@ -544,37 +301,37 @@ class ASTParser:
             'DIM', 'DATA', 'READ', 'RESTORE',
             'END', 'STOP', 'CONT', 'NEW', 'RUN', 'LIST'
         }
-    
+
     def _current_token(self) -> Optional[Dict[str, Any]]:
         """Get the current token"""
         if self.current < len(self.tokens):
             return self.tokens[self.current]
         return None
-    
+
     def _peek_token(self, offset: int = 1) -> Optional[Dict[str, Any]]:
         """Peek at a token ahead of current position"""
         pos = self.current + offset
         if pos < len(self.tokens):
             return self.tokens[pos]
         return None
-    
+
     def _advance(self) -> Optional[Dict[str, Any]]:
         """Consume and return the current token"""
         token = self._current_token()
         if token:
             self.current += 1
         return token
-    
+
     def _match(self, *token_types: str) -> bool:
         """Check if current token matches any of the given types"""
         token = self._current_token()
         return token is not None and token['type'] in token_types
-    
+
     def _match_value(self, value: str) -> bool:
         """Check if current token has the given value"""
         token = self._current_token()
         return token is not None and token['value'] == value
-    
+
     def _consume(self, token_type: str, message: str = "") -> Dict[str, Any]:
         """Consume a token of the expected type or raise an error"""
         token = self._current_token()
@@ -599,7 +356,7 @@ class ASTParser:
             )
             raise ValueError(error.format_message())
         return self._advance()
-    
+
     def _make_location(self, token: Dict[str, Any]) -> SourceLocation:
         """Create a source location from a token"""
         return SourceLocation(
@@ -607,12 +364,12 @@ class ASTParser:
             column=token['column'],
             length=token.get('length', 1)
         )
-    
+
     # Expression parsing with proper precedence
     def _parse_or_expression(self) -> ASTNode:
         """Parse OR expressions (lowest precedence)"""
         left = self._parse_and_expression()
-        
+
         while self._match_value('OR'):
             op_token = self._advance()
             right = self._parse_and_expression()
@@ -622,13 +379,13 @@ class ASTParser:
                 right=right,
                 location=self._make_location(op_token)
             )
-        
+
         return left
-    
+
     def _parse_and_expression(self) -> ASTNode:
         """Parse AND expressions"""
         left = self._parse_equality_expression()
-        
+
         while self._match_value('AND'):
             op_token = self._advance()
             right = self._parse_equality_expression()
@@ -638,13 +395,13 @@ class ASTParser:
                 right=right,
                 location=self._make_location(op_token)
             )
-        
+
         return left
-    
+
     def _parse_equality_expression(self) -> ASTNode:
         """Parse equality/comparison expressions"""
         left = self._parse_relational_expression()
-        
+
         while self._match('OPERATOR') and self._current_token()['value'] in ['=', '<>']:
             op_token = self._advance()
             right = self._parse_relational_expression()
@@ -655,37 +412,37 @@ class ASTParser:
                 right=right,
                 location=self._make_location(op_token)
             )
-        
+
         return left
-    
+
     def _parse_relational_expression(self) -> ASTNode:
         """Parse relational expressions (<, >, <=, >=)"""
         left = self._parse_additive_expression()
-        
+
         while self._match('OPERATOR') and self._current_token()['value'] in ['<', '>', '<=', '>=']:
             op_token = self._advance()
             right = self._parse_additive_expression()
-            
+
             op_map = {
                 '<': Operator.LESS_THAN,
                 '>': Operator.GREATER_THAN,
                 '<=': Operator.LESS_EQUAL,
                 '>=': Operator.GREATER_EQUAL
             }
-            
+
             left = BinaryOpNode(
                 operator=op_map[op_token['value']],
                 left=left,
                 right=right,
                 location=self._make_location(op_token)
             )
-        
+
         return left
-    
+
     def _parse_additive_expression(self) -> ASTNode:
         """Parse addition and subtraction"""
         left = self._parse_multiplicative_expression()
-        
+
         while self._match('OPERATOR') and self._current_token()['value'] in ['+', '-']:
             op_token = self._advance()
             right = self._parse_multiplicative_expression()
@@ -696,38 +453,38 @@ class ASTParser:
                 right=right,
                 location=self._make_location(op_token)
             )
-        
+
         return left
-    
+
     def _parse_multiplicative_expression(self) -> ASTNode:
         """Parse multiplication, division, and modulo"""
         left = self._parse_power_expression()
-        
+
         while (self._match('OPERATOR') and self._current_token()['value'] in ['*', '/']) or \
               (self._match('KEYWORD') and self._current_token()['value'].upper() == 'MOD'):
             op_token = self._advance()
             right = self._parse_power_expression()
-            
+
             if op_token['value'] == '*':
                 op = Operator.MULTIPLY
             elif op_token['value'] == '/':
                 op = Operator.DIVIDE
             else:  # MOD
                 op = Operator.MOD
-                
+
             left = BinaryOpNode(
                 operator=op,
                 left=left,
                 right=right,
                 location=self._make_location(op_token)
             )
-        
+
         return left
-    
+
     def _parse_power_expression(self) -> ASTNode:
         """Parse exponentiation (right-associative)"""
         left = self._parse_unary_expression()
-        
+
         if self._match('OPERATOR') and self._current_token()['value'] in ['^', '**']:
             op_token = self._advance()
             right = self._parse_power_expression()  # Right associative
@@ -737,9 +494,9 @@ class ASTParser:
                 right=right,
                 location=self._make_location(op_token)
             )
-        
+
         return left
-    
+
     def _parse_unary_expression(self) -> ASTNode:
         """Parse unary expressions"""
         if self._match('OPERATOR') and self._current_token()['value'] in ['+', '-']:
@@ -751,7 +508,7 @@ class ASTParser:
                 operand=operand,
                 location=self._make_location(op_token)
             )
-        
+
         if self._match_value('NOT'):
             op_token = self._advance()
             operand = self._parse_unary_expression()
@@ -760,13 +517,13 @@ class ASTParser:
                 operand=operand,
                 location=self._make_location(op_token)
             )
-        
+
         return self._parse_primary_expression()
-    
+
     def _parse_primary_expression(self) -> ASTNode:
         """Parse primary expressions (literals, variables, function calls, parentheses)"""
         token = self._current_token()
-        
+
         if not token:
             error = self.error_context.syntax_error(
                 "Unexpected end of expression",
@@ -778,14 +535,14 @@ class ASTParser:
                 ]
             )
             raise ValueError(error.format_message())
-        
+
         # Parentheses
         if self._match('PUNCTUATION') and token['value'] == '(':
             self._advance()  # consume '('
             expr = self._parse_or_expression()
             self._consume('PUNCTUATION', "Expected ')' after expression")
             return expr
-        
+
         # String literal
         if self._match('STRING'):
             token = self._advance()
@@ -793,7 +550,7 @@ class ASTParser:
                 value=token['value'],
                 location=self._make_location(token)
             )
-        
+
         # Number literal
         if self._match('NUMBER'):
             token = self._advance()
@@ -801,12 +558,12 @@ class ASTParser:
                 value=token['value'],
                 location=self._make_location(token)
             )
-        
+
         # Identifier (variable, function call, or array access)
         if self._match('IDENTIFIER'):
             name_token = self._advance()
             name = name_token['value']
-            
+
             # Special case for INKEY$ which can be called without parentheses
             if name.upper() == 'INKEY$':
                 # Check if it has parentheses
@@ -820,36 +577,34 @@ class ASTParser:
                     arguments=[],
                     location=self._make_location(name_token)
                 )
-            
-            # Function call
+
+            # Function call (also handles array access — distinguished at evaluation
+            # time in visit_function_call)
             if self._match('PUNCTUATION') and self._current_token()['value'] == '(':
                 self._advance()  # consume '('
                 args = []
-                
+
                 if not (self._match('PUNCTUATION') and self._current_token()['value'] == ')'):
                     args.append(self._parse_or_expression())
                     while self._match('PUNCTUATION') and self._current_token()['value'] == ',':
                         self._advance()  # consume ','
                         args.append(self._parse_or_expression())
-                
+
                 self._consume('PUNCTUATION', "Expected ')' after function arguments")
-                
+
                 return FunctionCallNode(
                     function_name=name,
                     arguments=args,
                     location=self._make_location(name_token)
                 )
 
-            # Simple variable (no parentheses after identifier).
-            # Array access uses the same syntax as function calls — both are
-            # parsed as FunctionCallNode and distinguished at evaluation time
-            # in visit_function_call().
+            # Simple variable (no parentheses after identifier)
             else:
                 return VariableNode(
                     name=name,
                     location=self._make_location(name_token)
                 )
-        
+
         error = self.error_context.syntax_error(
             f"Unexpected token: {token['value']} ({token['type']})",
             self.current_line,
@@ -860,11 +615,11 @@ class ASTParser:
             ]
         )
         raise ValueError(error.format_message())
-    
+
     def _parse_statement(self) -> ASTNode:
         """Parse a BASIC statement"""
         token = self._current_token()
-        
+
         if not token:
             error = self.error_context.syntax_error(
                 "Empty statement",
@@ -875,31 +630,31 @@ class ASTParser:
                 ]
             )
             raise ValueError(error.format_message())
-        
+
         # Assignment (LET X = 5 or X = 5)
         if (self._match('KEYWORD') and token['value'] == 'LET') or self._is_assignment():
             return self._parse_assignment()
-        
+
         # IF statement
         if self._match('KEYWORD') and token['value'] == 'IF':
             return self._parse_if_statement()
-        
+
         # FOR statement
         if self._match('KEYWORD') and token['value'] == 'FOR':
             return self._parse_for_statement()
-        
+
         # WHILE statement
         if self._match('KEYWORD') and token['value'] == 'WHILE':
             return self._parse_while_statement()
-        
+
         # DO statement
         if self._match('KEYWORD') and token['value'] == 'DO':
             return self._parse_do_loop_statement()
-        
+
         # EXIT statement
         if self._match('KEYWORD') and token['value'] == 'EXIT':
             return self._parse_exit_statement()
-        
+
         # PRINT statement
         if self._match('KEYWORD') and token['value'] == 'PRINT':
             return self._parse_print_statement()
@@ -928,17 +683,17 @@ class ASTParser:
 
         # Fallback: treat as expression
         return self._parse_or_expression()
-    
+
     def _is_assignment(self) -> bool:
         """Check if the current tokens form an assignment"""
         # Look for pattern: IDENTIFIER [indices] = expression
         if not self._match('IDENTIFIER'):
             return False
-        
+
         # Look ahead for = sign
         pos = 1
         token = self._peek_token(pos)
-        
+
         # Skip array indices if present
         if token and token['type'] == 'PUNCTUATION' and token['value'] == '(':
             paren_count = 1
@@ -952,34 +707,34 @@ class ASTParser:
                 elif token['value'] == ')':
                     paren_count -= 1
                 pos += 1
-            
+
             token = self._peek_token(pos)
-        
+
         return token is not None and token['type'] == 'OPERATOR' and token['value'] == '='
-    
+
     def _parse_assignment(self) -> AssignmentNode:
         """Parse assignment statement"""
         # Skip LET if present
         if self._match_value('LET'):
             self._advance()
-        
+
         # Parse target (variable or array element)
         name_token = self._consume('IDENTIFIER', "Expected variable name")
         target_location = self._make_location(name_token)
-        
+
         if self._match('PUNCTUATION') and self._current_token()['value'] == '(':
             # Array assignment
             self._advance()  # consume '('
             indices = []
-            
+
             if not (self._match('PUNCTUATION') and self._current_token()['value'] == ')'):
                 indices.append(self._parse_or_expression())
                 while self._match('PUNCTUATION') and self._current_token()['value'] == ',':
                     self._advance()  # consume ','
                     indices.append(self._parse_or_expression())
-            
+
             self._consume('PUNCTUATION', "Expected ')' after array indices")
-            
+
             target = ArrayAccessNode(
                 array_name=name_token['value'],
                 indices=indices,
@@ -991,16 +746,16 @@ class ASTParser:
                 name=name_token['value'],
                 location=target_location
             )
-        
+
         self._consume('OPERATOR', "Expected '=' in assignment")
         value = self._parse_or_expression()
-        
+
         return AssignmentNode(
             target=target,
             value=value,
             location=target_location
         )
-    
+
     def _parse_colon_separated_statements(self) -> ASTNode:
         """Parse a sequence of colon-separated statements"""
         statements = []
@@ -1040,28 +795,28 @@ class ASTParser:
             else_branch=else_branch,
             location=self._make_location(if_token)
         )
-    
+
     def _parse_for_statement(self) -> ForStatementNode:
         """Parse FOR statement"""
         for_token = self._advance()  # consume 'FOR'
-        
+
         var_token = self._consume('IDENTIFIER', "Expected variable name after FOR")
         variable = VariableNode(
             name=var_token['value'],
             location=self._make_location(var_token)
         )
-        
+
         self._consume('OPERATOR', "Expected '=' after FOR variable")
         start_value = self._parse_or_expression()
-        
+
         self._consume('KEYWORD', "Expected 'TO' in FOR statement")
         end_value = self._parse_or_expression()
-        
+
         step_value = None
         if self._match_value('STEP'):
             self._advance()  # consume 'STEP'
             step_value = self._parse_or_expression()
-        
+
         # Parse body statements if there are colons (single-line FOR loop)
         body_statements = []
 
@@ -1101,7 +856,7 @@ class ASTParser:
                     break
 
         body = BlockNode(statements=body_statements, location=self._make_location(for_token))
-        
+
         return ForStatementNode(
             variable=variable,
             start_value=start_value,
@@ -1110,31 +865,31 @@ class ASTParser:
             body=body,
             location=self._make_location(for_token)
         )
-    
+
     def _parse_while_statement(self) -> WhileStatementNode:
         """Parse WHILE statement"""
         while_token = self._advance()  # consume 'WHILE'
         condition = self._parse_or_expression()
-        
+
         # For now, body is empty - will be filled by statement grouping
         # In a full implementation, we'd parse until WEND
         body = BlockNode(statements=[], location=self._make_location(while_token))
-        
+
         return WhileStatementNode(
             condition=condition,
             body=body,
             location=self._make_location(while_token)
         )
-    
+
     def _parse_do_loop_statement(self) -> DoLoopStatementNode:
         """Parse DO/LOOP statement"""
         do_token = self._advance()  # consume 'DO'
-        
+
         # Check for DO WHILE or DO UNTIL
         condition = None
         condition_type = 'WHILE'
         condition_position = 'BOTTOM'
-        
+
         if self._match_value('WHILE'):
             self._advance()  # consume 'WHILE'
             condition = self._parse_or_expression()
@@ -1144,11 +899,11 @@ class ASTParser:
             condition = self._parse_or_expression()
             condition_type = 'UNTIL'
             condition_position = 'TOP'
-        
+
         # For now, body is empty - will be filled by statement grouping
         # In a full implementation, we'd parse until LOOP
         body = BlockNode(statements=[], location=self._make_location(do_token))
-        
+
         return DoLoopStatementNode(
             body=body,
             condition=condition,
@@ -1156,11 +911,11 @@ class ASTParser:
             condition_position=condition_position,
             location=self._make_location(do_token)
         )
-    
+
     def _parse_exit_statement(self) -> ExitForStatementNode:
         """Parse EXIT FOR statement"""
         exit_token = self._advance()  # consume 'EXIT'
-        
+
         # Expect 'FOR' after EXIT
         if not (self._match('KEYWORD') and self._current_token()['value'] == 'FOR'):
             current_token = self._current_token()
@@ -1174,9 +929,9 @@ class ASTParser:
                 ]
             )
             raise ValueError(error.format_message())
-        
+
         self._advance()  # consume 'FOR'
-        
+
         return ExitForStatementNode(location=self._make_location(exit_token))
 
     def _parse_end_statement(self) -> EndStatementNode:
@@ -1340,614 +1095,3 @@ class ASTParser:
             )
 
         return VariableNode(name=var_token['value'], location=var_location)
-
-
-class ASTVisitor:
-    """Base class for AST visitors"""
-    
-    def visit(self, node: ASTNode) -> Any:
-        """Visit a node using the visitor pattern"""
-        return node.accept(self)
-    
-    def generic_visit(self, node: ASTNode) -> Any:
-        """Default visit method for unhandled node types"""
-        return None
-
-
-class ASTEvaluator(ASTVisitor):
-    """Evaluator that executes AST nodes"""
-    
-    def __init__(self, emulator):
-        self.emulator = emulator
-    
-    @staticmethod
-    def _format_print_value(value):
-        """Format a value for PRINT output.
-
-        CoCo BASIC numeric formatting: a leading space for the sign position
-        (positive numbers get a space, negative get '-') and a trailing space.
-        """
-        if isinstance(value, str):
-            return value
-        elif isinstance(value, (int, float)):
-            if isinstance(value, float) and value.is_integer():
-                num_str = str(int(value))
-            else:
-                num_str = str(value)
-            if value < 0:
-                return num_str + ' '
-            else:
-                return ' ' + num_str + ' '
-        else:
-            return str(value)
-
-    def visit_number(self, node: LiteralNode) -> Union[int, float]:
-        """Visit number literal"""
-        return node.value
-    
-    def visit_string(self, node: LiteralNode) -> str:
-        """Visit string literal"""
-        return node.value
-    
-    def visit_variable(self, node: VariableNode) -> Any:
-        """Visit variable reference"""
-        var_name = node.name.upper()
-        if var_name == 'ERR':
-            return self.emulator.error_number
-        if var_name == 'ERL':
-            return self.emulator.error_line
-        if var_name == 'TIMER':
-            import time
-            return int((time.time() - self.emulator.timer_epoch) * 60)
-        if var_name in self.emulator.variables:
-            return self.emulator.variables[var_name]
-        return 0 if not var_name.endswith('$') else ""
-    
-    def visit_binary_op(self, node: BinaryOpNode) -> Any:
-        """Visit binary operation"""
-        left_val = self.visit(node.left)
-        right_val = self.visit(node.right)
-        
-        if node.operator == Operator.ADD:
-            return left_val + right_val
-        elif node.operator == Operator.SUBTRACT:
-            return left_val - right_val
-        elif node.operator == Operator.MULTIPLY:
-            return left_val * right_val
-        elif node.operator == Operator.DIVIDE:
-            if right_val == 0:
-                raise ZeroDivisionError("Division by zero")
-            return left_val / right_val
-        elif node.operator == Operator.POWER:
-            return left_val ** right_val
-        elif node.operator == Operator.EQUAL:
-            return left_val == right_val
-        elif node.operator == Operator.NOT_EQUAL:
-            return left_val != right_val
-        elif node.operator == Operator.LESS_THAN:
-            return left_val < right_val
-        elif node.operator == Operator.GREATER_THAN:
-            return left_val > right_val
-        elif node.operator == Operator.LESS_EQUAL:
-            return left_val <= right_val
-        elif node.operator == Operator.GREATER_EQUAL:
-            return left_val >= right_val
-        elif node.operator == Operator.AND:
-            return bool(left_val) and bool(right_val)
-        elif node.operator == Operator.OR:
-            return bool(left_val) or bool(right_val)
-        elif node.operator == Operator.MOD:
-            # Modulo operation
-            if right_val == 0:
-                raise ZeroDivisionError("Modulo by zero")
-            return left_val % right_val
-        else:
-            error = self.emulator.error_context.runtime_error(
-                f"Unknown binary operator: {node.operator}",
-                suggestions=[
-                    "Supported operators: +, -, *, /, ^, MOD, =, <>, <, >, <=, >=, AND, OR",
-                    "Check operator spelling and spacing"
-                ]
-            )
-            raise ValueError(error.format_message())
-    
-    def visit_unary_op(self, node: UnaryOpNode) -> Any:
-        """Visit unary operation"""
-        operand_val = self.visit(node.operand)
-        
-        if node.operator == Operator.SUBTRACT:
-            return -operand_val
-        elif node.operator == Operator.ADD:
-            return +operand_val
-        elif node.operator == Operator.NOT:
-            return not bool(operand_val)
-        else:
-            error = self.emulator.error_context.runtime_error(
-                f"Unknown unary operator: {node.operator}",
-                suggestions=[
-                    "Supported unary operators: -, +, NOT",
-                    "Check operator spelling"
-                ]
-            )
-            raise ValueError(error.format_message())
-    
-    def visit_function_call(self, node: FunctionCallNode) -> Any:
-        """Visit function call"""
-        # Delegate to the expression evaluator's function registry
-        func_name = node.function_name.upper()
-        
-        # Evaluate arguments to their actual values
-        arg_values = []
-        for arg in node.arguments:
-            arg_values.append(self.visit(arg))
-        
-        # Check if it's a function first
-        handler = self.emulator.function_registry.get_handler(func_name)
-        if handler:
-            return handler(self.emulator, arg_values)
-        
-        # If not a function, check if it's an array access (dimensioned or not)
-        # We need to treat anything with parentheses that's not a function as potential array access
-        if len(arg_values) > 0:  # Has arguments, likely array access
-            # Convert arguments to indices and delegate to array access
-            indices = [int(val) for val in arg_values]
-            return self.emulator._evaluate_array_access(func_name, ','.join(map(str, indices)))
-        
-        # Neither function nor array access
-        available_functions = list(self.emulator.function_registry.list_functions()[:10])
-        error = self.emulator.error_context.reference_error(
-            func_name,
-            "UNDEFINED FUNCTION",
-            suggestions=[
-                f"Available functions: {', '.join(available_functions[:5])}",
-                "Check function name spelling",
-                f"Use DIM {func_name}() to create an array instead"
-            ]
-        )
-        raise ValueError(error.format_message())
-    
-    def visit_array_access(self, node: ArrayAccessNode) -> Any:
-        """Visit array access"""
-        array_name = node.array_name.upper()
-        
-        # Evaluate indices
-        indices = []
-        for index_node in node.indices:
-            indices.append(int(self.visit(index_node)))
-        
-        # Get array element
-        value, error = self.emulator.variable_manager.get_array_element(array_name, indices)
-        if error:
-            raise ValueError(error)
-        
-        return value
-    
-    def visit_while_statement(self, node: WhileStatementNode) -> Any:
-        """Visit WHILE statement - evaluate condition, push to stack or skip"""
-        condition_result = self.visit(node.condition)
-        condition_true = basic_truthy(condition_result)
-
-        if condition_true:
-            self.emulator.while_stack.append({
-                'condition_ast': node.condition,
-                'line': self.emulator.current_line,
-                'sub_line': self.emulator.current_sub_line
-            })
-            return []
-        else:
-            return [{'type': 'skip_while_loop'}]
-
-    def visit_do_loop_statement(self, node: DoLoopStatementNode) -> Any:
-        """Visit DO statement - evaluate top condition if present, push to stack"""
-        if node.condition and node.condition_position == 'TOP':
-            condition_result = self.visit(node.condition)
-            condition_true = basic_truthy(condition_result)
-
-            if node.condition_type == 'WHILE' and not condition_true:
-                return [{'type': 'skip_do_loop'}]
-            elif node.condition_type == 'UNTIL' and condition_true:
-                return [{'type': 'skip_do_loop'}]
-
-        self.emulator.do_stack.append({
-            'condition_ast': node.condition,
-            'condition_type': node.condition_type,
-            'line': self.emulator.current_line,
-            'sub_line': self.emulator.current_sub_line
-        })
-        return []
-    
-    def visit_exit_for_statement(self, node: ExitForStatementNode) -> Any:
-        """Visit EXIT FOR statement - signal to exit current FOR loop"""
-        if not self.emulator.for_stack:
-            error = self.emulator.error_context.syntax_error(
-                "EXIT FOR without matching FOR",
-                self.emulator.current_line,
-                suggestions=[
-                    'EXIT FOR can only be used inside a FOR loop',
-                    'Check that FOR loops are properly nested',
-                    'Example: FOR I=1 TO 10 ... EXIT FOR ... NEXT I'
-                ]
-            )
-            return error_response(error)
-        return [{'type': 'exit_for_loop'}]
-    
-    def visit_if_statement(self, node: IfStatementNode) -> Any:
-        """Visit IF statement - evaluate condition and execute appropriate branch"""
-        condition_result = self.visit(node.condition)
-
-        condition_true = basic_truthy(condition_result)
-
-        if condition_true:
-            result = self.visit(node.then_branch)
-            # THEN with number = GOTO
-            if isinstance(result, (int, float)) and not isinstance(result, bool):
-                line_num = int(result)
-                if line_num <= 0:
-                    error = self.emulator.error_context.runtime_error(
-                        f"Invalid line number {line_num}",
-                        self.emulator.current_line,
-                        suggestions=[
-                            "Line numbers must be positive integers",
-                            "Example: IF X > 5 THEN 100",
-                            "Check with LIST command to see available lines"
-                        ]
-                    )
-                    return error_response(error)
-                return [{'type': 'jump', 'line': line_num}]
-            # None means visitor couldn't handle it — fall back to registry
-            if result is None:
-                return None
-            return result if isinstance(result, list) else []
-        elif node.else_branch:
-            result = self.visit(node.else_branch)
-            if isinstance(result, (int, float)) and not isinstance(result, bool):
-                return [{'type': 'jump', 'line': int(result)}]
-            if result is None:
-                return None
-            return result if isinstance(result, list) else []
-        else:
-            return []
-    
-    def visit_block(self, node: BlockNode) -> Any:
-        """Visit block statement - execute all statements in sequence"""
-        results = []
-        
-        for statement in node.statements:
-            result = self.visit(statement)
-            if result:
-                if isinstance(result, list):
-                    results.extend(result)
-                else:
-                    results.append(result)
-                    
-                # Check for control flow signals
-                for item in (result if isinstance(result, list) else [result]):
-                    if isinstance(item, dict) and item.get('type') in ['exit_for', 'jump', 'jump_return']:
-                        return results  # Exit block early on control flow
-
-        return results
-
-
-
-
-    def visit_program(self, node: ProgramNode) -> Any:
-        """Visit PROGRAM node - execute all statements in sequence"""
-        results = []
-        for statement in node.statements:
-            try:
-                result = self.visit(statement)
-                if isinstance(result, list):
-                    results.extend(result)
-                elif result is not None:
-                    results.append(result)
-
-                # Check for control flow that should exit program
-                for item in (result if isinstance(result, list) else [result]):
-                    if isinstance(item, dict) and item.get('type') in ['jump', 'jump_return', 'end']:
-                        return results  # Exit program on control flow
-            except (ValueError, IndexError, KeyError, AttributeError, TypeError, ZeroDivisionError) as e:
-                err = self.emulator.error_context.runtime_error(
-                    str(e), self.emulator.current_line)
-                results.append({'type': 'error', 'message': err.format_message()})
-
-        return results
-
-    def visit_print_statement(self, node: PrintStatementNode) -> Any:
-        """Visit PRINT statement"""
-        ZONE_WIDTH = 16  # CoCo uses 16-column comma zones
-
-        # Handle empty PRINT (blank line)
-        if not node.expressions:
-            self.emulator.print_column = 0
-            return [{'type': 'text', 'text': ''}]
-
-        # Build output from expressions and separators
-        output_parts = []
-        col = self.emulator.print_column
-
-        for i, expr in enumerate(node.expressions):
-            # Evaluate expression
-            try:
-                value = self.visit(expr)
-                formatted = self._format_print_value(value)
-                output_parts.append(formatted)
-                col += len(formatted)
-            except (ValueError, IndexError, KeyError, AttributeError, TypeError, ZeroDivisionError) as e:
-                error = self.emulator.error_context.runtime_error(
-                    f"Error evaluating PRINT expression: {e}",
-                    suggestions=[
-                        'Check that all variables are defined',
-                        'Verify expression syntax is correct',
-                        'Example: PRINT X, "Hello", Y+5'
-                    ]
-                )
-                return error_response(error)
-
-            # Add separator spacing (not for trailing separator)
-            if i < len(node.separators) and i < len(node.expressions) - 1:
-                sep = node.separators[i]
-                if sep == ',':
-                    # Advance to next 16-column zone boundary
-                    next_zone = ((col // ZONE_WIDTH) + 1) * ZONE_WIDTH
-                    spaces = next_zone - col
-                    output_parts.append(' ' * spaces)
-                    col = next_zone
-                # Semicolon = no spacing
-
-        # Join parts
-        output_text = ''.join(output_parts)
-
-        # Trailing separator means inline output (no newline)
-        has_trailing_separator = len(node.separators) >= len(node.expressions)
-        if has_trailing_separator:
-            # Trailing comma: advance to next zone
-            if node.separators[-1] == ',':
-                next_zone = ((col // ZONE_WIDTH) + 1) * ZONE_WIDTH
-                spaces = next_zone - col
-                output_text += ' ' * spaces
-                col = next_zone
-            self.emulator.print_column = col
-            return [{'type': 'text', 'text': output_text, 'inline': True}]
-        self.emulator.print_column = 0
-        if '\r' in output_text:
-            return [{'type': 'text', 'text': output_text, 'inline': True}]
-        return [{'type': 'text', 'text': output_text}]
-
-    def visit_assignment(self, node: AssignmentNode) -> Any:
-        """Visit assignment statement"""
-        value = self.visit(node.value)
-
-        if isinstance(node.target, ArrayAccessNode):
-            # Array element assignment: A(5) = 42
-            array_name = node.target.array_name.upper()
-            err = self.emulator.check_reserved_name(array_name)
-            if err:
-                return err
-            try:
-                indices = [int(self.visit(idx)) for idx in node.target.indices]
-            except (ValueError, TypeError) as e:
-                err = self.emulator.error_context.runtime_error(
-                    f"Invalid array index: {e}",
-                    self.emulator.current_line,
-                    suggestions=["Array indices must be numeric integers"])
-                return error_response(err)
-            err_msg = self.emulator.variable_manager.set_array_element(array_name, indices, value)
-            if err_msg:
-                err = self.emulator.error_context.runtime_error(
-                    err_msg, self.emulator.current_line,
-                    suggestions=["Check array dimensions with DIM"])
-                return error_response(err)
-        elif hasattr(node.target, 'name'):
-            var_name = node.target.name.upper()
-            if var_name == 'TIMER':
-                import time
-                try:
-                    ticks = int(value)
-                except (ValueError, TypeError):
-                    err = self.emulator.error_context.type_error(
-                        "TIMER value must be a number", "integer",
-                        f"{type(value).__name__}")
-                    return error_response(err)
-                self.emulator.timer_epoch = time.time() - ticks / 60.0
-                return []
-            err = self.emulator.check_reserved_name(var_name)
-            if err:
-                return err
-            self.emulator.variables[var_name] = value
-        else:
-            var_name = str(node.target).upper()
-            self.emulator.variables[var_name] = value
-
-        return []
-
-    def visit_input_statement(self, node: InputStatementNode) -> Any:
-        """Visit INPUT statement - request input from user"""
-        # Extract prompt
-        if node.prompt:
-            prompt_text = self.visit(node.prompt)
-            if not isinstance(prompt_text, str):
-                prompt_text = str(prompt_text)
-        else:
-            prompt_text = "? "
-
-        # Build variable descriptors (handle both simple variables and array elements)
-        variables = []
-        for var_node in node.variables:
-            if isinstance(var_node, ArrayAccessNode):
-                indices = [int(self.visit(idx)) for idx in var_node.indices]
-                var_name = var_node.array_name.upper()
-                variables.append({
-                    'name': var_name,
-                    'array': True,
-                    'indices': indices
-                })
-            elif hasattr(var_node, 'name'):
-                variables.append({
-                    'name': var_node.name.upper(),
-                    'array': False
-                })
-            else:
-                variables.append({
-                    'name': str(var_node).upper(),
-                    'array': False
-                })
-
-        if not variables:
-            error = self.emulator.error_context.syntax_error(
-                "No variables specified in INPUT statement",
-                self.emulator.current_line,
-                suggestions=[
-                    'Correct syntax: INPUT variable1, variable2, ...',
-                    'Example: INPUT X, Y, NAME$',
-                    'Specify at least one variable to input'
-                ]
-            )
-            return error_response(error)
-
-        # Store multi-variable INPUT state
-        self.emulator.input_variables = variables
-        self.emulator.input_prompt = prompt_text
-        self.emulator.current_input_index = 0
-
-        # Set flags and request input
-        self.emulator.waiting_for_input = True
-        self.emulator.program_counter = (self.emulator.current_line, self.emulator.current_sub_line)
-
-        first_var = variables[0]
-        return [{'type': 'input_request', 'prompt': prompt_text, 'variable': first_var['name'],
-                 'array': first_var['array'], 'indices': first_var.get('indices')}]
-
-    def visit_end_statement(self, node: EndStatementNode) -> Any:
-        """Visit END statement - stop program execution"""
-        self.emulator.running = False
-        self.emulator.stopped_position = None
-        return []
-
-    def visit_goto_statement(self, node: GotoStatementNode) -> Any:
-        """Visit GOTO statement"""
-        try:
-            target_line = self.visit(node.target_line)
-            line_num = int(target_line)
-        except (ValueError, TypeError) as e:
-            error = self.emulator.error_context.syntax_error(
-                "Invalid GOTO target",
-                self.emulator.current_line,
-                suggestions=[
-                    "Correct syntax: GOTO line_number",
-                    "Example: GOTO 100 or GOTO L where L is a numeric variable",
-                    "Line number must be a positive integer"
-                ]
-            )
-            return error_response(error)
-
-        if line_num <= 0:
-            error = self.emulator.error_context.runtime_error(
-                f"Invalid line number {line_num}",
-                self.emulator.current_line,
-                suggestions=[
-                    "Line numbers must be positive integers",
-                    "Use line numbers that exist in your program",
-                    "Check with LIST command to see available lines"
-                ]
-            )
-            return error_response(error)
-
-        return [{'type': 'jump', 'line': line_num}]
-
-    def visit_gosub_statement(self, node: GosubStatementNode) -> Any:
-        """Visit GOSUB statement"""
-        try:
-            target_line = self.visit(node.target_line)
-            line_num = int(target_line)
-        except (ValueError, TypeError) as e:
-            error = self.emulator.error_context.syntax_error(
-                "Invalid GOSUB target",
-                self.emulator.current_line,
-                suggestions=[
-                    "Correct syntax: GOSUB line_number",
-                    "Example: GOSUB 1000 or GOSUB SUB_LINE where SUB_LINE is a variable",
-                    "Make sure target line contains a subroutine that ends with RETURN"
-                ]
-            )
-            return error_response(error)
-
-        if line_num <= 0:
-            error = self.emulator.error_context.runtime_error(
-                f"Invalid subroutine line number {line_num}",
-                self.emulator.current_line,
-                suggestions=[
-                    "Line numbers must be positive integers",
-                    "Use line numbers that exist in your program",
-                    "Subroutine should end with RETURN statement"
-                ]
-            )
-            return error_response(error)
-
-        self.emulator.call_stack.append((self.emulator.current_line, self.emulator.current_sub_line))
-        return [{'type': 'jump', 'line': line_num}]
-
-    def visit_return_statement(self, node: ReturnStatementNode) -> Any:
-        """Visit RETURN statement"""
-        if not self.emulator.call_stack:
-            error = self.emulator.error_context.runtime_error(
-                "RETURN WITHOUT GOSUB",
-                self.emulator.current_line,
-                suggestions=[
-                    "RETURN must be preceded by a GOSUB statement",
-                    "Example: GOSUB 1000: ... : 1000 RETURN",
-                    "Check that subroutines are called with GOSUB before RETURN"
-                ]
-            )
-            return error_response(error)
-
-        return_line, return_sub_line = self.emulator.call_stack.pop()
-        return [{'type': 'jump_return', 'line': return_line, 'sub_line': return_sub_line}]
-
-    def visit_for_statement(self, node: ForStatementNode) -> Any:
-        """Visit FOR statement - initialize loop variable and push to for_stack"""
-        var_name = node.variable.name.upper() if hasattr(node.variable, 'name') else str(node.variable).upper()
-
-        try:
-            start_val = self.visit(node.start_value)
-            end_val = self.visit(node.end_value)
-            step_val = self.visit(node.step_value) if node.step_value else 1
-        except (ValueError, TypeError) as e:
-            err = self.emulator.error_context.runtime_error(
-                str(e), self.emulator.current_line,
-                suggestions=["FOR loop bounds must be numeric"])
-            return error_response(err)
-
-        # Ensure numeric values
-        try:
-            start_val = float(start_val) if isinstance(start_val, str) else start_val
-            end_val = float(end_val) if isinstance(end_val, str) else end_val
-            step_val = float(step_val) if isinstance(step_val, str) else step_val
-        except (ValueError, TypeError):
-            error = self.emulator.error_context.type_error(
-                "FOR loop values must be numeric",
-                "number",
-                "non-numeric expression",
-                suggestions=[
-                    "Use numeric expressions: FOR I = 1 TO 10",
-                    "Variables must contain numbers: LET N = 5; FOR I = 1 TO N",
-                    "Check that all expressions evaluate to numbers"
-                ]
-            )
-            return error_response(error)
-
-        # Check if loop should execute at all
-        if ((step_val > 0 and start_val > end_val) or
-            (step_val < 0 and start_val < end_val)):
-            self.emulator.variables[var_name] = start_val
-            return [{'type': 'skip_for_loop', 'var': var_name}]
-
-        self.emulator.variables[var_name] = start_val
-        self.emulator.for_stack.append({
-            'var': var_name,
-            'end': end_val,
-            'step': step_val,
-            'line': self.emulator.current_line,
-            'sub_line': self.emulator.current_sub_line
-        })
-
-        return []

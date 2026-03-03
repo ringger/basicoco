@@ -9,7 +9,7 @@
 3. **`_try_ast_execute()`** — AST-migrated commands: END, GOTO, LET, PRINT, GOSUB, RETURN, FOR, EXIT FOR, WHILE, DO, IF, INPUT. Also implicit assignment (`X = 5`).
 4. **`CommandRegistry`** — everything else: NEXT, WEND, LOOP, ELSE, ENDIF, DIM, ON, STOP, CONT, DATA, READ, RESTORE, SOUND, PAUSE, etc.
 
-New control flow → AST visitor in `ast_parser.py`. New utility command → registry via `execute_*`. New BASIC function → `functions.py` only.
+New control flow → AST visitor in `ast_evaluator.py`. New utility command → registry via `execute_*`. New BASIC function → `functions.py` only.
 
 ## Execution Engine
 
@@ -94,7 +94,7 @@ Never duplicate this logic — always call through to `BasicParser`.
 - File-creating tests must use autouse temp directory fixtures — never write to real `programs/`
 - All errors use `error_context.syntax_error()` / `runtime_error()` with 2-3 suggestions. `syntax_error()` auto-prefixes "SYNTAX ERROR:" — don't add it manually.
 - Use `error_response(error)` and `text_response(text)` from `error_context` to build response lists — never hand-build `[{'type': 'error', ...}]` or `[{'type': 'text', ...}]`
-- Use `basic_truthy(value)` from `ast_parser` for BASIC boolean conversion — never inline the `isinstance` check
+- Use `basic_truthy(value)` from `ast_nodes` for BASIC boolean conversion — never inline the `isinstance` check
 - Use `check_reserved_name(name)` on `CoCoBasic` to guard against reserved function names in assignments and DIM
 - Use `clear_all_stacks()`, `save_execution_state()`, `restore_execution_state()` for stack/state management
 - `source venv/bin/activate` before running anything

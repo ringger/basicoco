@@ -8,13 +8,15 @@ better error reporting, and foundation for complex language features.
 """
 
 import pytest
-from emulator.ast_parser import (
-    ASTParser, ASTEvaluator, NodeType, Operator, SourceLocation,
+from emulator.ast_nodes import (
+    NodeType, Operator, SourceLocation,
     LiteralNode, VariableNode, BinaryOpNode, UnaryOpNode,
     FunctionCallNode, ArrayAccessNode, AssignmentNode, IfStatementNode,
     ForStatementNode, PrintStatementNode, BlockNode, GosubStatementNode,
     ReturnStatementNode, InputStatementNode
 )
+from emulator.ast_parser import ASTParser
+from emulator.ast_evaluator import ASTEvaluator
 from emulator.ast_converter import parse_and_convert_single_line
 from emulator.core import CoCoBasic
 

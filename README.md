@@ -159,7 +159,9 @@ basicoco/
 │   ├── program_executor.py # Program execution loop and flow control
 │   ├── file_manager.py     # File I/O: LOAD, SAVE, DIR, KILL, CD
 │   ├── parser.py           # Command parsing and tokenization
-│   ├── ast_parser.py       # AST node types, parser, and evaluator
+│   ├── ast_nodes.py        # AST node types, enums, and visitor base class
+│   ├── ast_parser.py       # AST parser (tokenizer and recursive descent)
+│   ├── ast_evaluator.py    # AST evaluator (visitor pattern execution)
 │   ├── ast_converter.py    # Single-line to multi-line control structure conversion
 │   ├── expressions.py      # Function registry
 │   ├── functions.py        # BASIC function implementations (all registered here)
