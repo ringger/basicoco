@@ -220,6 +220,7 @@ class ASTStatementConverter(ASTVisitor):
         for statement in node.statements:
             self.visit(statement)
 
+
     def visit_number(self, node: LiteralNode) -> None:
         """Convert number literal nodes - handle bare numbers as GOTO statements"""
         # Convert bare numbers to GOTO statements
@@ -229,13 +230,6 @@ class ASTStatementConverter(ASTVisitor):
     def visit_string(self, node: LiteralNode) -> None:
         """Convert string literal nodes"""
         self.statements.append(str(node.value))
-
-    def visit_binary_op(self, node: BinaryOpNode) -> None:
-        """Convert binary operation nodes - treat as GOTO expressions when used as statements"""
-        # When a binary operation appears as a statement in THEN branch,
-        # it should be treated as a GOTO target expression
-        expr_str = self._expression_to_string(node)
-        self.statements.append(f"GOTO {expr_str}")
 
     def visit_on_branch_statement(self, node: OnBranchStatementNode) -> None:
         """Convert ON expr GOTO/GOSUB back to string form"""
@@ -698,11 +692,25 @@ def _parse_if_body(body: str, parser) -> list:
             pass
 
     # Whole-body parse failed, incomplete, or contains file I/O — split on colons
+    parts = BasicParser.split_on_delimiter_paren_aware(body)
     statements = []
-    for part in BasicParser.split_on_delimiter_paren_aware(body):
+    for part in parts:
         part_stripped = part.strip()
         if part_stripped:
-            statements.append(_parse_body_statement(part_stripped, parser))
+            node = _parse_body_statement(part_stripped, parser)
+            # In IF/THEN bodies, a LiteralNode that isn't a registry command is
+            # an implicit GOTO target (e.g., IF A=5 THEN A*B means GOTO A*B).
+            # Try parsing as expression and wrap in GotoStatementNode.
+            if isinstance(node, LiteralNode) and node.value == part_stripped:
+                try:
+                    expr = parser.parse_expression(part_stripped)
+                    # Only use if the parser consumed all tokens (otherwise
+                    # it partially parsed e.g. "SOUND" and dropped args)
+                    if parser.current >= len(parser.tokens):
+                        node = GotoStatementNode(expr, location=expr.location)
+                except (ValueError, IndexError, KeyError, AttributeError):
+                    pass
+            statements.append(node)
     return statements
 
 

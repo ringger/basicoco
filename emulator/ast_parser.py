@@ -686,13 +686,18 @@ class ASTParser:
         if self._match('KEYWORD') and token['value'] == 'ON':
             return self._parse_on_statement()
 
+        # Bare number = implicit GOTO (e.g., IF A=5 THEN 50)
+        if self._match('NUMBER'):
+            target = self._parse_or_expression()
+            return GotoStatementNode(target, location=target.location)
+
         # Known registry command — parser can't handle it
         token_value = str(token['value']).upper()
         if token_value in self.registry_commands:
             raise RegistryCommandError(f"Registry command: {token_value}")
 
-        # Fallback: treat as expression
-        return self._parse_or_expression()
+        # Reject anything else — bare expressions aren't valid statements
+        raise ValueError(f"Unrecognized command: {token_value}")
 
     def _is_assignment(self) -> bool:
         """Check if the current tokens form an assignment"""

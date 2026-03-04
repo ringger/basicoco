@@ -325,23 +325,11 @@ class CoCoBasic:
                 any(upper.startswith(p) for p in self._STRUCTURAL_PREFIXES)):
             self.expanded_program[(line_num, sub_index)] = stmt
             return
-        # Only try to parse statements that start with a letter (commands/assignments).
-        # Bare numbers like '50' (implicit GOTO) must stay as text for process_statement.
-        first_char = upper[0] if upper else ''
-        if not first_char.isalpha():
-            self.expanded_program[(line_num, sub_index)] = stmt
-            return
         # Try to pre-parse as AST; parser raises RegistryCommandError for
-        # commands it can't handle, so no need to check a migrated-commands set
+        # commands it can't handle and ValueError for anything it doesn't
+        # recognize (bare expressions, numbers, unknown identifiers)
         try:
-            from .ast_nodes import VariableNode, LiteralNode
-            node = self.ast_parser.parse_statement(stmt)
-            # Bare expressions (variable refs, literals) aren't valid statements —
-            # keep as text so process_statement can route them properly
-            if isinstance(node, (VariableNode, LiteralNode)):
-                self.expanded_program[(line_num, sub_index)] = stmt
-            else:
-                self.expanded_program[(line_num, sub_index)] = node
+            self.expanded_program[(line_num, sub_index)] = self.ast_parser.parse_statement(stmt)
         except Exception:
             self.expanded_program[(line_num, sub_index)] = stmt
 
@@ -452,17 +440,12 @@ class CoCoBasic:
         from .ast_parser import RegistryCommandError
 
         code_stripped = code.strip()
+        if not code_stripped:
+            return None
+
         code_upper = code_stripped.upper()
         parts = code_upper.split(None, 1)
         first_word = parts[0] if parts else ''
-
-        # Registry commands skip AST parsing (cheap early-out)
-        if first_word in self.ast_parser.registry_commands:
-            return None
-
-        # Must start with a letter to be a valid statement
-        if not code_stripped or not code_stripped[0].isalpha():
-            return None
 
         # Validate IF statements require THEN keyword
         if first_word == 'IF' and 'THEN' not in code_upper:
