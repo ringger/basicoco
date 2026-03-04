@@ -434,3 +434,169 @@ class TestDrawModifiers:
         graphics = helpers.get_graphics_output(result)
         assert len(graphics) == 1
         assert graphics[0]['color'] == 3
+
+
+class TestDrawAngle:
+    """Test DRAW A (angle rotation) command"""
+
+    @pytest.fixture(autouse=True)
+    def setup_graphics(self, basic):
+        basic.process_command('PMODE 4,1')
+        basic.turtle_x = 100
+        basic.turtle_y = 100
+
+    def test_angle_0_no_rotation(self, basic, helpers):
+        """A0 is identity — U moves up"""
+        result = basic.process_command('DRAW "A0U10"')
+        graphics = helpers.get_graphics_output(result)
+        assert len(graphics) == 1
+        assert graphics[0]['x2'] == 100
+        assert graphics[0]['y2'] == 90  # up = -Y
+
+    def test_angle_1_rotates_90_ccw(self, basic, helpers):
+        """A1 rotates 90° CCW — U becomes left"""
+        result = basic.process_command('DRAW "A1U10"')
+        graphics = helpers.get_graphics_output(result)
+        assert len(graphics) == 1
+        assert graphics[0]['x2'] == 90   # left
+        assert graphics[0]['y2'] == 100
+
+    def test_angle_1_right_becomes_up(self, basic, helpers):
+        """A1 — R becomes up"""
+        result = basic.process_command('DRAW "A1R10"')
+        graphics = helpers.get_graphics_output(result)
+        assert graphics[0]['x2'] == 100
+        assert graphics[0]['y2'] == 90
+
+    def test_angle_2_rotates_180(self, basic, helpers):
+        """A2 rotates 180° — U becomes down"""
+        result = basic.process_command('DRAW "A2U10"')
+        graphics = helpers.get_graphics_output(result)
+        assert graphics[0]['x2'] == 100
+        assert graphics[0]['y2'] == 110  # down = +Y
+
+    def test_angle_3_rotates_270_ccw(self, basic, helpers):
+        """A3 rotates 270° CCW — U becomes right"""
+        result = basic.process_command('DRAW "A3U10"')
+        graphics = helpers.get_graphics_output(result)
+        assert graphics[0]['x2'] == 110  # right
+        assert graphics[0]['y2'] == 100
+
+    def test_angle_with_diagonal(self, basic, helpers):
+        """A1 rotates E (up-right) to H (up-left)"""
+        result = basic.process_command('DRAW "A1E10"')
+        graphics = helpers.get_graphics_output(result)
+        # E = (+1,-1), A1 rotation: (dy,-dx) = (-1,-1) = H direction
+        assert graphics[0]['x2'] == 90
+        assert graphics[0]['y2'] == 90
+
+    def test_angle_resets_between_draw_calls(self, basic, helpers):
+        """Angle resets to 0 on each DRAW call"""
+        basic.process_command('DRAW "A2U10"')
+        basic.turtle_x = 100
+        basic.turtle_y = 100
+        result = basic.process_command('DRAW "U10"')
+        graphics = helpers.get_graphics_output(result)
+        assert graphics[0]['y2'] == 90  # up, not down
+
+    def test_angle_persists_within_draw(self, basic, helpers):
+        """Angle persists for multiple movements in one DRAW"""
+        result = basic.process_command('DRAW "A2U10R10"')
+        graphics = helpers.get_graphics_output(result)
+        assert len(graphics) == 2
+        # A2: U becomes D, R becomes L
+        assert graphics[0]['y2'] == 110  # U→D
+        assert graphics[1]['x2'] == 90   # R→L
+
+    def test_angle_with_scale(self, basic, helpers):
+        """Angle and scale work together"""
+        result = basic.process_command('DRAW "A1S8U10"')
+        graphics = helpers.get_graphics_output(result)
+        # A1: U→L, S8: distance*8//4 = 20
+        assert graphics[0]['x2'] == 80
+        assert graphics[0]['y2'] == 100
+
+
+class TestDrawSubstring:
+    """Test DRAW X (execute substring) command"""
+
+    @pytest.fixture(autouse=True)
+    def setup_graphics(self, basic):
+        basic.process_command('PMODE 4,1')
+        basic.turtle_x = 100
+        basic.turtle_y = 100
+
+    def test_execute_string_variable(self, basic, helpers):
+        """X executes a draw string from a variable"""
+        basic.variables['A$'] = 'U10R10'
+        result = basic.process_command('DRAW "XA$;"')
+        graphics = helpers.get_graphics_output(result)
+        assert len(graphics) == 2
+        assert graphics[0]['y2'] == 90   # U10
+        assert graphics[1]['x2'] == 110  # R10
+
+    def test_substring_inherits_scale(self, basic, helpers):
+        """X substring inherits current scale"""
+        basic.variables['A$'] = 'U10'
+        result = basic.process_command('DRAW "S8XA$;"')
+        graphics = helpers.get_graphics_output(result)
+        # S8: distance*8//4 = 20
+        assert graphics[0]['y2'] == 80
+
+    def test_substring_inherits_angle(self, basic, helpers):
+        """X substring inherits current angle"""
+        basic.variables['A$'] = 'U10'
+        result = basic.process_command('DRAW "A2XA$;"')
+        graphics = helpers.get_graphics_output(result)
+        # A2: U becomes D
+        assert graphics[0]['y2'] == 110
+
+    def test_missing_variable_is_silent(self, basic, helpers):
+        """X with undefined variable produces no output"""
+        result = basic.process_command('DRAW "XZ$;U10"')
+        graphics = helpers.get_graphics_output(result)
+        # Only U10 produces output
+        assert len(graphics) == 1
+
+    def test_commands_after_substring(self, basic, helpers):
+        """Commands after X continue normally"""
+        basic.variables['A$'] = 'U10'
+        result = basic.process_command('DRAW "XA$;R10"')
+        graphics = helpers.get_graphics_output(result)
+        assert len(graphics) == 2
+        assert graphics[0]['y2'] == 90   # U10 from substring
+        assert graphics[1]['x2'] == 110  # R10 after
+
+
+class TestDrawMoveSign:
+    """Test DRAW M command sign handling"""
+
+    @pytest.fixture(autouse=True)
+    def setup_graphics(self, basic):
+        basic.process_command('PMODE 4,1')
+        basic.turtle_x = 100
+        basic.turtle_y = 100
+
+    def test_m_negative_x(self, basic, helpers):
+        """M-10,0 moves left (negative x)"""
+        basic.process_command('DRAW "M-10,0"')
+        assert basic.turtle_x == 90
+        assert basic.turtle_y == 100
+
+    def test_m_positive_relative(self, basic, helpers):
+        """M+10,5 moves right and down"""
+        basic.process_command('DRAW "M+10,5"')
+        assert basic.turtle_x == 110
+        assert basic.turtle_y == 105
+
+    def test_m_negative_y(self, basic, helpers):
+        """M+0,-10 moves up"""
+        basic.process_command('DRAW "M+0,-10"')
+        assert basic.turtle_x == 100
+        assert basic.turtle_y == 90
+
+    def test_m_absolute(self, basic, helpers):
+        """M50,50 moves to absolute position"""
+        basic.process_command('DRAW "M50,50"')
+        assert basic.turtle_x == 50
+        assert basic.turtle_y == 50

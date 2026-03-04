@@ -109,6 +109,9 @@ class TestPaintCommand:
         # Missing closing parenthesis
         helpers.assert_error_output(basic, 'PAINT(10, 10,2')
         
+        # Trailing comma with no color value
+        helpers.assert_error_output(basic, 'PAINT(10,10),')
+
         # Too many coordinates
         helpers.assert_error_output(basic, 'PAINT(10, 20,30),2')
 

@@ -131,15 +131,13 @@ class BasicParser:
                 # M+X,Y or M-X,Y or MX,Y format
                 i += 1
                 coord_str = ""
-                while i < len(draw_string) and draw_string[i] not in ['U', 'D', 'L', 'R', 'E', 'F', 'G', 'H', 'M', 'B', 'N', 'S', 'C']:
+                while i < len(draw_string) and draw_string[i].upper() not in ['U', 'D', 'L', 'R', 'E', 'F', 'G', 'H', 'M', 'B', 'N', 'S', 'C', 'A', 'X']:
                     coord_str += draw_string[i]
                     i += 1
-                
-                # Parse coordinates
+
+                # Parse coordinates — +/- prefix indicates relative mode
                 relative = coord_str.startswith('+') or coord_str.startswith('-')
-                if coord_str.startswith(('+', '-')):
-                    coord_str = coord_str[1:]
-                
+
                 if ',' in coord_str:
                     x_str, y_str = coord_str.split(',', 1)
                     try:
@@ -183,6 +181,30 @@ class BasicParser:
                 commands.append({'command': 'C', 'color': color})
                 continue
             
+            # Angle rotation
+            elif char == 'A':
+                i += 1
+                num_str = ""
+                while i < len(draw_string) and draw_string[i].isdigit():
+                    num_str += draw_string[i]
+                    i += 1
+
+                angle = int(num_str) if num_str else 0
+                commands.append({'command': 'A', 'angle': angle})
+                continue
+
+            # Execute substring from variable
+            elif char == 'X':
+                i += 1
+                var_name = ""
+                while i < len(draw_string) and draw_string[i] != ';':
+                    var_name += draw_string[i]
+                    i += 1
+                if i < len(draw_string):
+                    i += 1  # skip ';'
+                commands.append({'command': 'X', 'variable': var_name.upper().strip()})
+                continue
+
             else:
                 # Unknown command, skip
                 i += 1

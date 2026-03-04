@@ -19,8 +19,6 @@ Prioritized by how often real CoCo BASIC programs need them.
 
 ## Known Behavioral Limitations
 
-- **DRAW A/X not supported** — angle rotation (A) and substring execution (X) are silently skipped by the draw parser but not implemented.
-- **PAINT trailing-comma edge case** — `PAINT(x,y),` (trailing comma, no color value) defaults to color 1 rather than raising an error. The no-comma case (`PAINT(x,y)`) correctly raises a syntax error.
 - **GOTO out of multi-line IF** leaves a stale `if_stack` entry (cleared on next RUN). This matches real CoCo behavior where GOTO from structured blocks is undefined.
 
 ## Refactoring Opportunities

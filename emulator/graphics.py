@@ -372,8 +372,12 @@ class BasicGraphics:
 
             if remainder.startswith(','):
                 parts = _split_args(remainder[1:])
-                if parts and parts[0]:
-                    paint_color = self._eval_int(parts[0])
+                if not parts or not parts[0]:
+                    return self._syntax_error("PAINT requires color parameter",
+                        ['Correct syntax: PAINT(x,y),color',
+                         'Example: PAINT(100,50),1',
+                         'Specify the fill color after coordinates'])
+                paint_color = self._eval_int(parts[0])
                 if len(parts) > 1 and parts[1]:
                     border_color = self._eval_int(parts[1])
             elif remainder == '':
@@ -447,6 +451,12 @@ class BasicGraphics:
                     'Example: PUT(100,50),A,PSET',
                     'Specify coordinates, array name, and optional action'])
     
+    # Direction deltas for DRAW movement commands (dx, dy) in screen coords
+    _DRAW_DELTAS = {
+        'U': (0, -1), 'D': (0, 1), 'L': (-1, 0), 'R': (1, 0),
+        'E': (1, -1), 'F': (1, 1), 'G': (-1, 1), 'H': (-1, -1),
+    }
+
     @_graphics_command('DRAW', require_graphics=True)
     def execute_draw(self, args):
         """Execute DRAW command for turtle graphics"""
@@ -458,38 +468,52 @@ class BasicGraphics:
                                        'Example: DRAW "U10R10D10L10"'])
 
         commands = BasicParser.parse_draw_commands(draw_string)
+        return self._execute_draw_commands(commands)
+
+    def _execute_draw_commands(self, commands, state=None):
+        """Execute a list of parsed DRAW commands with shared state."""
+        if state is None:
+            state = {'blank': False, 'no_update': False, 'scale': 4, 'angle': 0}
 
         output = []
-        blank = False       # B prefix: next move is pen-up
-        no_update = False   # N prefix: next move returns to start
-        scale = 4           # S factor: distance * scale / 4 (S4 = 1x)
 
         for command in commands:
             cmd = command.get('command', '')
 
             if cmd == 'B':
-                blank = True
+                state['blank'] = True
                 continue
             elif cmd == 'N':
-                no_update = True
+                state['no_update'] = True
                 continue
             elif cmd == 'S':
-                scale = command.get('scale', 4)
+                state['scale'] = command.get('scale', 4)
                 continue
             elif cmd == 'C':
                 self.emulator.current_draw_color = command.get('color', 1)
                 continue
+            elif cmd == 'A':
+                state['angle'] = command.get('angle', 0) % 4
+                continue
+            elif cmd == 'X':
+                var_name = command.get('variable', '')
+                if var_name in self.emulator.variables:
+                    sub_string = self.emulator.variables[var_name]
+                    if isinstance(sub_string, str):
+                        sub_commands = BasicParser.parse_draw_commands(sub_string)
+                        output.extend(self._execute_draw_commands(sub_commands, state))
+                continue
 
-            # Movement command — save position, apply scale, execute
+            # Movement command — save position, apply scale and angle, execute
             saved_x = self.emulator.turtle_x
             saved_y = self.emulator.turtle_y
-            result = self._execute_move_command(command, scale)
+            result = self._execute_move_command(command, state['scale'], state['angle'])
 
-            if blank:
-                blank = False
+            if state['blank']:
+                state['blank'] = False
                 # Turtle moved but don't emit draw output
-            elif no_update:
-                no_update = False
+            elif state['no_update']:
+                state['no_update'] = False
                 output.extend(result)
                 # Restore turtle to pre-move position
                 self.emulator.turtle_x = saved_x
@@ -499,35 +523,29 @@ class BasicGraphics:
 
         return output
 
-    def _execute_move_command(self, command, scale):
-        """Execute a movement DRAW command with scale applied."""
+    @staticmethod
+    def _rotate_delta(dx, dy, angle):
+        """Apply angle rotation (0-3) to a direction delta.
+
+        Each unit rotates 90° CCW in screen coordinates (Y-down):
+          A0: (dx, dy), A1: (dy, -dx), A2: (-dx, -dy), A3: (-dy, dx)
+        """
+        for _ in range(angle % 4):
+            dx, dy = dy, -dx
+        return dx, dy
+
+    def _execute_move_command(self, command, scale, angle=0):
+        """Execute a movement DRAW command with scale and angle applied."""
         cmd_type = command.get('command', '')
 
-        if cmd_type in ['U', 'D', 'L', 'R', 'E', 'F', 'G', 'H']:
+        if cmd_type in self._DRAW_DELTAS:
             distance = command.get('distance', 1) * scale // 4
+            base_dx, base_dy = self._DRAW_DELTAS[cmd_type]
+            dx, dy = self._rotate_delta(base_dx * distance, base_dy * distance, angle)
 
             old_x, old_y = self.emulator.turtle_x, self.emulator.turtle_y
-
-            if cmd_type == 'U':
-                self.emulator.turtle_y -= distance
-            elif cmd_type == 'D':
-                self.emulator.turtle_y += distance
-            elif cmd_type == 'L':
-                self.emulator.turtle_x -= distance
-            elif cmd_type == 'R':
-                self.emulator.turtle_x += distance
-            elif cmd_type == 'E':  # Up-Right diagonal
-                self.emulator.turtle_x += distance
-                self.emulator.turtle_y -= distance
-            elif cmd_type == 'F':  # Down-Right diagonal
-                self.emulator.turtle_x += distance
-                self.emulator.turtle_y += distance
-            elif cmd_type == 'G':  # Down-Left diagonal
-                self.emulator.turtle_x -= distance
-                self.emulator.turtle_y += distance
-            elif cmd_type == 'H':  # Up-Left diagonal
-                self.emulator.turtle_x -= distance
-                self.emulator.turtle_y -= distance
+            self.emulator.turtle_x += dx
+            self.emulator.turtle_y += dy
 
             return [{'type': 'line', 'x1': old_x, 'y1': old_y,
                     'x2': self.emulator.turtle_x, 'y2': self.emulator.turtle_y,
@@ -539,8 +557,9 @@ class BasicGraphics:
             relative = command.get('relative', False)
 
             if relative:
-                self.emulator.turtle_x += x * scale // 4
-                self.emulator.turtle_y += y * scale // 4
+                dx, dy = self._rotate_delta(x * scale // 4, y * scale // 4, angle)
+                self.emulator.turtle_x += dx
+                self.emulator.turtle_y += dy
             else:
                 self.emulator.turtle_x = x
                 self.emulator.turtle_y = y
