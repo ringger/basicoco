@@ -18,7 +18,7 @@ from .ast_nodes import (
     ProgramNode, BlockNode,
     Operator, basic_truthy
 )
-from .error_context import error_response
+from .error_context import error_response, text_message, error_message
 
 
 class ASTEvaluator(ASTVisitor):
@@ -312,7 +312,7 @@ class ASTEvaluator(ASTVisitor):
             except (ValueError, IndexError, KeyError, AttributeError, TypeError, ZeroDivisionError) as e:
                 err = self.emulator.error_context.runtime_error(
                     str(e), self.emulator.current_line)
-                results.append({'type': 'error', 'message': err.format_message()})
+                results.append(error_message(err.format_message()))
 
         return results
 
@@ -323,7 +323,7 @@ class ASTEvaluator(ASTVisitor):
         # Handle empty PRINT (blank line)
         if not node.expressions:
             self.emulator.print_column = 0
-            return [{'type': 'text', 'text': ''}]
+            return [text_message('')]
 
         # Build output from expressions and separators
         output_parts = []
@@ -371,11 +371,11 @@ class ASTEvaluator(ASTVisitor):
                 output_text += ' ' * spaces
                 col = next_zone
             self.emulator.print_column = col
-            return [{'type': 'text', 'text': output_text, 'inline': True}]
+            return [text_message(output_text, inline=True)]
         self.emulator.print_column = 0
         if '\r' in output_text:
-            return [{'type': 'text', 'text': output_text, 'inline': True}]
-        return [{'type': 'text', 'text': output_text}]
+            return [text_message(output_text, inline=True)]
+        return [text_message(output_text)]
 
     def visit_assignment(self, node: AssignmentNode) -> Any:
         """Visit assignment statement"""

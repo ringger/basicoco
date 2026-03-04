@@ -1,13 +1,13 @@
 """
 ProgramExecutor for BasiCoCo BASIC Environment
 
-Handles program execution loop, flow control, and resume logic.
-Extracted from core.py to reduce its size.
+Drives program execution: RUN, CONT, continue after INPUT/PAUSE.
+Handles the main execution loop, flow-control directives, and ON ERROR GOTO.
 """
 
 import re
 
-from .error_context import error_response, text_response
+from .error_context import error_response, text_response, error_message, text_message
 
 
 def _classify_error(message: str) -> int:
@@ -168,7 +168,7 @@ class ProgramExecutor:
                 idx = self._find_line_position(item['line'], all_positions)
                 if idx is not None:
                     return idx, 'jumped'
-                output.append({'type': 'error', 'message': f"UNDEFINED LINE {item['line']}"})
+                output.append(error_message(f"UNDEFINED LINE {item['line']}"))
                 return current_pos_index, 'stop'
 
             elif item_type == 'jump_after_for':
@@ -176,7 +176,7 @@ class ProgramExecutor:
                 idx = self._find_position_index(for_pos, all_positions)
                 if idx is not None:
                     return idx + 1, 'jumped'
-                output.append({'type': 'error', 'message': f"UNDEFINED FOR LINE {item['for_line']}"})
+                output.append(error_message(f"UNDEFINED FOR LINE {item['for_line']}"))
                 return current_pos_index, 'stop'
 
             elif item_type == 'jump_return':
@@ -196,14 +196,14 @@ class ProgramExecutor:
                 idx = self._skip_to_next(item['var'], current_pos_index, all_positions)
                 if idx is not None:
                     return idx + 1, 'jumped'
-                output.append({'type': 'error', 'message': 'FOR WITHOUT NEXT'})
+                output.append(error_message('FOR WITHOUT NEXT'))
                 return current_pos_index, 'stop'
 
             elif item_type == 'skip_while_loop':
                 idx = self._skip_to_keyword('WEND', current_pos_index, all_positions)
                 if idx is not None:
                     return idx + 1, 'jumped'
-                output.append({'type': 'error', 'message': 'WHILE WITHOUT WEND'})
+                output.append(error_message('WHILE WITHOUT WEND'))
                 return current_pos_index, 'stop'
 
             elif item_type == 'jump_after_while':
@@ -217,7 +217,7 @@ class ProgramExecutor:
                 idx = self._skip_to_keyword('LOOP', current_pos_index, all_positions)
                 if idx is not None:
                     return idx + 1, 'jumped'
-                output.append({'type': 'error', 'message': 'DO WITHOUT LOOP'})
+                output.append(error_message('DO WITHOUT LOOP'))
                 return current_pos_index, 'stop'
 
             elif item_type == 'jump_after_do':
@@ -241,7 +241,7 @@ class ProgramExecutor:
                     current_pos_index, all_positions, stop_at_else=True)
                 if found:
                     return new_idx, 'jumped'
-                output.append({'type': 'error', 'message': 'IF WITHOUT ENDIF'})
+                output.append(error_message('IF WITHOUT ENDIF'))
                 return current_pos_index, 'stop'
 
             elif item_type == 'skip_else_block':
@@ -249,7 +249,7 @@ class ProgramExecutor:
                     current_pos_index, all_positions, stop_at_else=False)
                 if found:
                     return new_idx, 'jumped'
-                output.append({'type': 'error', 'message': 'ELSE WITHOUT ENDIF'})
+                output.append(error_message('ELSE WITHOUT ENDIF'))
                 return current_pos_index, 'stop'
 
             elif item_type == 'resume':
@@ -307,11 +307,11 @@ class ProgramExecutor:
             # Safety check
             emu.iteration_count += 1
             if emu.safety_enabled and emu.iteration_count > emu.max_iterations:
-                output.append({'type': 'error', 'message': 'PROGRAM STOPPED - TOO MANY ITERATIONS'})
+                output.append(error_message('PROGRAM STOPPED - TOO MANY ITERATIONS'))
                 emu.running = False
                 break
             if emu.iteration_count > emu.max_absolute_iterations:
-                output.append({'type': 'error', 'message': 'PROGRAM STOPPED - ABSOLUTE ITERATION LIMIT REACHED'})
+                output.append(error_message('PROGRAM STOPPED - ABSOLUTE ITERATION LIMIT REACHED'))
                 emu.running = False
                 break
 
@@ -321,7 +321,7 @@ class ProgramExecutor:
             statement = emu.expanded_program[(line_num, sub_index)]
 
             if emu.trace_mode and sub_index == 0:
-                output.append({'type': 'text', 'text': f'[{line_num}]'})
+                output.append(text_message(f'[{line_num}]'))
 
             # ASTNode entries execute directly; text entries go through dispatch
             if not isinstance(statement, str):

@@ -17,7 +17,7 @@ from .functions import register_all_functions
 from .ast_parser import ASTParser
 from .ast_evaluator import ASTEvaluator
 from .output_manager import StreamingOutputManager, LegacyOutputAdapter
-from .error_context import ErrorContextManager, error_response, text_response
+from .error_context import ErrorContextManager, error_response, text_response, text_message
 from .program_files import FileManager
 from .file_io import FileIOManager
 from .program_executor import ProgramExecutor
@@ -25,6 +25,14 @@ from .control_flow import ControlFlowCommands
 from .data_commands import DataCommands
 
 class CoCoBasic:
+    """Main BASIC interpreter for the TRS-80 Color Computer emulator.
+
+    Orchestrates command dispatch, program storage, expression evaluation,
+    and state management. Delegates to domain modules for graphics, variables,
+    file I/O, control flow, and data commands. See CLAUDE.md for the full
+    dispatch order and architectural overview.
+    """
+
     def __init__(self, output_callback=None, debug_mode=False):
         self.program = {}  # Line number -> code (original for LIST display)
         self.expanded_program = {}  # (line_num, sub_index) -> str or ASTNode (for execution)
@@ -216,7 +224,7 @@ class CoCoBasic:
     def list_program(self):
         output = []
         for line_num in sorted(self.program.keys()):
-            output.append({'type': 'text', 'text': f'{line_num} {self.program[line_num]}'})
+            output.append(text_message(f'{line_num} {self.program[line_num]}'))
         return output
     
     def clear_program(self):
@@ -495,6 +503,13 @@ class CoCoBasic:
             return None
 
     def process_statement(self, code):
+        """Execute a single BASIC statement. Dispatch order:
+
+        1. Multi-line IF (bare 'IF cond THEN') — can't be AST-parsed
+        2. File I/O intercepts (PRINT#, INPUT#, LINE INPUT) — AST doesn't handle '#'
+        3. AST execution — everything not in the CommandRegistry
+        4. CommandRegistry — NEXT, WEND, LOOP, DIM, SOUND, etc.
+        """
         if not code.strip():
             return []
 
@@ -1040,7 +1055,7 @@ class CoCoBasic:
         # Convert to output format
         output = []
         for line in help_lines:
-            output.append({'type': 'text', 'text': line})
+            output.append(text_message(line))
         
         return output
     
@@ -1315,8 +1330,8 @@ class CoCoBasic:
             return text_response('SAFETY ON - ITERATION LIMITS ENABLED')
         elif args == 'OFF':
             self.safety_enabled = False
-            return [{'type': 'text', 'text': 'SAFETY OFF - ITERATION LIMITS DISABLED'},
-                    {'type': 'text', 'text': f'(HARD CAP AT {self.max_absolute_iterations:,} ITERATIONS STILL ACTIVE)'}]
+            return [text_message('SAFETY OFF - ITERATION LIMITS DISABLED'),
+                    text_message(f'(HARD CAP AT {self.max_absolute_iterations:,} ITERATIONS STILL ACTIVE)')]
         else:
             error = self.error_context.syntax_error(
                 "Invalid SAFETY command syntax",

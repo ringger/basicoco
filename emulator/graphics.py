@@ -1,9 +1,8 @@
 """
 Graphics module for TRS-80 Color Computer BASIC Emulator
 
-This module contains all graphics-related commands and operations including
-PMODE, SCREEN, PSET, LINE, CIRCLE, PAINT, GET, PUT, and DRAW commands.
-Extracted from the main CoCoBasic class for better organization.
+Graphics commands: PMODE, SCREEN, PSET, PRESET, LINE, CIRCLE, PAINT,
+GET, PUT, DRAW, COLOR, PCLEAR, and PCLS.
 """
 
 from .text_utils import StatementSplitter

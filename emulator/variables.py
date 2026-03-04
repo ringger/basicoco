@@ -1,9 +1,8 @@
 """
 Variables and Arrays module for TRS-80 Color Computer BASIC Emulator
 
-This module contains all variable and array management functionality including
-DIM command, array bounds checking, variable type handling, and storage.
-Extracted from the main CoCoBasic class for better organization.
+Variable and array management: DIM command, array bounds checking,
+variable type handling, and storage.
 """
 
 import re

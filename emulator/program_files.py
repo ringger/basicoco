@@ -9,7 +9,7 @@ import glob
 import os
 import time
 
-from .error_context import error_response, text_response
+from .error_context import error_response, text_response, text_message
 
 
 class FileManager:
@@ -172,8 +172,8 @@ class FileManager:
         search_dirs = list(dict.fromkeys([os.path.abspath(d) for d in search_dirs + [project_programs] if os.path.exists(d)]))
 
         output = []
-        output.append({'type': 'text', 'text': 'BASIC PROGRAM FILES:'})
-        output.append({'type': 'text', 'text': '=' * 40})
+        output.append(text_message('BASIC PROGRAM FILES:'))
+        output.append(text_message('=' * 40))
 
         total_files = 0
 
@@ -201,7 +201,7 @@ class FileManager:
                 else:
                     dir_name = f"{os.path.basename(directory)}/"
 
-                output.append({'type': 'text', 'text': f"\n{dir_name}:"})
+                output.append(text_message(f"\n{dir_name}:"))
 
                 # Sort files and display
                 files.sort()
@@ -215,22 +215,22 @@ class FileManager:
                         mtime = os.path.getmtime(file_path)
                         time_str = time.strftime("%m/%d/%y %H:%M", time.localtime(mtime))
 
-                        output.append({'type': 'text', 'text': f"  {filename:<20} {size_str} {time_str}"})
+                        output.append(text_message(f"  {filename:<20} {size_str} {time_str}"))
                         total_files += 1
                     except OSError:
                         # If we can't get file info, just show the name
-                        output.append({'type': 'text', 'text': f"  {filename}"})
+                        output.append(text_message(f"  {filename}"))
                         total_files += 1
 
         if total_files == 0:
-            output.append({'type': 'text', 'text': '\nNO .BAS FILES FOUND'})
-            output.append({'type': 'text', 'text': 'Use SAVE "filename" to create programs'})
+            output.append(text_message('\nNO .BAS FILES FOUND'))
+            output.append(text_message('Use SAVE "filename" to create programs'))
         else:
-            output.append({'type': 'text', 'text': f'\nTOTAL: {total_files} FILE(S)'})
-            output.append({'type': 'text', 'text': 'Use LOAD "filename" to load a program'})
+            output.append(text_message(f'\nTOTAL: {total_files} FILE(S)'))
+            output.append(text_message('Use LOAD "filename" to load a program'))
 
         # Add empty line so prompt appears on new line
-        output.append({'type': 'text', 'text': ''})
+        output.append(text_message(''))
 
         return output
 
@@ -260,7 +260,7 @@ class FileManager:
                 return self._file_error(f"FILE NOT FOUND: {os.path.basename(filename)}", filename, "KILL")
 
             return [
-                {'type': 'text', 'text': f'DELETE {os.path.basename(found_file)}? (Y/N)'},
+                text_message(f'DELETE {os.path.basename(found_file)}? (Y/N)'),
                 {'type': 'input_request', 'prompt': '? ', 'variable': '_kill_confirm', 'filename': found_file},
             ]
 
@@ -304,8 +304,8 @@ class FileManager:
             os.chdir(path)
             new_dir = os.getcwd()
 
-            return [{'type': 'text', 'text': f'CHANGED FROM {old_dir}'},
-                    {'type': 'text', 'text': f'TO {new_dir}'}]
+            return [text_message(f'CHANGED FROM {old_dir}'),
+                    text_message(f'TO {new_dir}')]
 
         except FileNotFoundError:
             return self._file_error(f"DIRECTORY NOT FOUND: {path}", path, "CD")

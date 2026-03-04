@@ -386,8 +386,20 @@ def error_response(error: 'BasicError') -> List[Dict[str, Any]]:
 
 
 def text_response(text: str, source: Optional[str] = None) -> List[Dict[str, Any]]:
-    """Build a standard text response list."""
+    """Build a standard text response list (for returning from execute_* methods)."""
+    return [text_message(text, source=source)]
+
+
+def text_message(text: str, source: Optional[str] = None, inline: bool = False) -> Dict[str, Any]:
+    """Build a single text message dict (for appending to output lists)."""
     result = {'type': 'text', 'text': text}
     if source:
         result['source'] = source
-    return [result]
+    if inline:
+        result['inline'] = True
+    return result
+
+
+def error_message(message: str) -> Dict[str, Any]:
+    """Build a single error message dict (for appending to output lists)."""
+    return {'type': 'error', 'message': message}
