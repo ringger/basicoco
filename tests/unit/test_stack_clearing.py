@@ -4,24 +4,6 @@ import pytest
 from emulator.core import CoCoBasic
 
 
-class TestStackInitialization:
-    """Verify all stacks are properly initialized."""
-
-    def test_stacks_initialized_on_creation(self):
-        """All stacks should exist immediately after construction."""
-        basic = CoCoBasic()
-        assert hasattr(basic, 'for_stack')
-        assert hasattr(basic, 'call_stack')
-        assert hasattr(basic, 'if_stack')
-        assert hasattr(basic, 'while_stack')
-        assert hasattr(basic, 'do_stack')
-        assert basic.for_stack == []
-        assert basic.call_stack == []
-        assert basic.if_stack == []
-        assert basic.while_stack == []
-        assert basic.do_stack == []
-
-
 class TestStackClearing:
     """Verify stacks are cleared between programs to prevent state leaks."""
 

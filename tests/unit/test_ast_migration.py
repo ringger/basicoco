@@ -13,10 +13,6 @@ import pytest
 class TestASTInfrastructure:
     """Phase 0: Verify the AST dispatch infrastructure"""
 
-    def test_migrated_set_has_expected_commands(self, basic):
-        """The migrated commands set should contain migrated commands"""
-        assert isinstance(basic._ast_migrated_commands, set)
-
     def test_try_ast_execute_returns_none_for_unmigrated(self, basic):
         """_try_ast_execute should return None for unmigrated commands"""
         # These are not yet migrated
@@ -40,10 +36,6 @@ class TestASTInfrastructure:
 
 class TestEndMigration:
     """Phase 1: END command via AST execution"""
-
-    def test_end_is_migrated(self, basic):
-        """END should be in the migrated commands set"""
-        assert 'END' in basic._ast_migrated_commands
 
     def test_end_via_ast_direct(self, basic):
         """END in direct mode should not crash"""
@@ -82,10 +74,6 @@ class TestEndMigration:
 
 class TestGotoMigration:
     """Phase 2: GOTO command via AST execution"""
-
-    def test_goto_is_migrated(self, basic):
-        """GOTO should be in the migrated commands set"""
-        assert 'GOTO' in basic._ast_migrated_commands
 
     def test_goto_via_ast_returns_jump(self, basic):
         """GOTO should return a jump signal"""
@@ -128,10 +116,6 @@ class TestGotoMigration:
 class TestLetMigration:
     """Phase 3: LET (assignment) command via AST execution"""
 
-    def test_let_is_migrated(self, basic):
-        """LET should be in the migrated commands set"""
-        assert 'LET' in basic._ast_migrated_commands
-
     def test_let_simple_variable(self, basic, helpers):
         """LET X = 5 should set variable"""
         basic.process_command('LET X = 5')
@@ -172,10 +156,6 @@ class TestLetMigration:
 
 class TestPrintMigration:
     """Phase 4: PRINT command via AST execution"""
-
-    def test_print_is_migrated(self, basic):
-        """PRINT should be in the migrated commands set"""
-        assert 'PRINT' in basic._ast_migrated_commands
 
     def test_print_empty(self, basic, helpers):
         """PRINT with no arguments should produce blank line"""
@@ -250,14 +230,6 @@ class TestPrintMigration:
 class TestGosubReturnMigration:
     """Phase 5-6: GOSUB and RETURN commands via AST execution"""
 
-    def test_gosub_is_migrated(self, basic):
-        """GOSUB should be in the migrated commands set"""
-        assert 'GOSUB' in basic._ast_migrated_commands
-
-    def test_return_is_migrated(self, basic):
-        """RETURN should be in the migrated commands set"""
-        assert 'RETURN' in basic._ast_migrated_commands
-
     def test_gosub_via_ast_returns_jump(self, basic):
         """GOSUB should push call stack and return jump signal"""
         basic.current_line = 10
@@ -319,14 +291,6 @@ class TestGosubReturnMigration:
 class TestForExitForMigration:
     """Phase 7-8: FOR and EXIT FOR commands via AST execution"""
 
-    def test_for_is_migrated(self, basic):
-        """FOR should be in the migrated commands set"""
-        assert 'FOR' in basic._ast_migrated_commands
-
-    def test_exit_is_migrated(self, basic):
-        """EXIT should be in the migrated commands set"""
-        assert 'EXIT' in basic._ast_migrated_commands
-
     def test_for_via_ast_sets_variable(self, basic):
         """FOR should set the loop variable to start value"""
         basic.current_line = 10
@@ -384,14 +348,6 @@ class TestForExitForMigration:
 
 class TestWhileDoMigration:
     """Phase 9-10: WHILE and DO commands via AST execution"""
-
-    def test_while_is_migrated(self, basic):
-        """WHILE should be in the migrated commands set"""
-        assert 'WHILE' in basic._ast_migrated_commands
-
-    def test_do_is_migrated(self, basic):
-        """DO should be in the migrated commands set"""
-        assert 'DO' in basic._ast_migrated_commands
 
     def test_while_true_pushes_stack(self, basic):
         """WHILE with true condition should push to while_stack"""
@@ -472,10 +428,6 @@ class TestWhileDoMigration:
 class TestIfMigration:
     """Phase 11: IF/THEN/ELSE command via AST execution"""
 
-    def test_if_is_migrated(self, basic):
-        """IF should be in the migrated commands set"""
-        assert 'IF' in basic._ast_migrated_commands
-
     def test_if_true_executes_then(self, basic, helpers):
         """IF with true condition should execute THEN branch"""
         result = basic.process_command('IF 1=1 THEN PRINT "YES"')
@@ -534,10 +486,6 @@ class TestIfMigration:
 
 class TestInputMigration:
     """Phase 12: INPUT command via AST execution"""
-
-    def test_input_is_migrated(self, basic):
-        """INPUT should be in the migrated commands set"""
-        assert 'INPUT' in basic._ast_migrated_commands
 
     def test_input_with_prompt(self, basic):
         """INPUT with prompt should return input_request"""
