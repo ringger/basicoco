@@ -118,7 +118,7 @@ class TestRenumCommand:
         list_output = ' '.join(helpers.get_text_output(list_result))
         
         assert '10 X = 2' in list_output
-        assert '20 ON X GOTO 40 in 50,60', list_output  # Updated references
+        assert '20 ON X GOTO 40,50,60' in list_output  # Updated references
         assert '30 END' in list_output
         assert '40 PRINT "ONE"' in list_output
         assert '50 PRINT "TWO"' in list_output
@@ -143,7 +143,7 @@ class TestRenumCommand:
         list_result = basic.process_command('LIST')
         list_output = ' '.join(helpers.get_text_output(list_result))
         
-        assert '20 ON X GOSUB 50 in 70', list_output  # Updated references
+        assert '20 ON X GOSUB 50,70' in list_output  # Updated references
 
     def test_renum_custom_parameters(self, basic, helpers):
         """Test RENUM with custom start and increment"""
@@ -301,7 +301,7 @@ class TestRenumCommand:
         list_output = ' '.join(helpers.get_text_output(list_result))
         
         # Check ON...GOTO was updated
-        assert '1010 ON I GOTO 1040 in 1060,1080', list_output
+        assert '1010 ON I GOTO 1040,1060,1080' in list_output
         
         # Check GOTO was updated  
         assert '1050 GOTO 1020' in list_output

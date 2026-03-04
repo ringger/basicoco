@@ -356,7 +356,7 @@ class TestEnhancedControlFlow:
         text_outputs = helpers.get_text_output(results)
         
         assert 'BOTH POSITIVE' in ' '.join(text_outputs)
-        assert 'A POSITIVE not in B NOT', ' '.join(text_outputs)
+        assert 'A POSITIVE, B NOT' not in ' '.join(text_outputs)
         assert 'A NOT POSITIVE' not in ' '.join(text_outputs)
         assert 'COMPLETE' in ' '.join(text_outputs)
 

@@ -101,7 +101,7 @@ class TestOnCommand:
         # Run - should continue execution (0 is out of range)
         result = basic.process_command('RUN')
         output_text = ' '.join(helpers.get_text_output(result))
-        assert 'X = 0 in CONTINUE', output_text
+        assert 'X = 0' in output_text and 'CONTINUE' in output_text
 
     def test_on_goto_negative_value(self, basic, helpers):
         """Test ON GOTO with negative value"""
@@ -115,7 +115,7 @@ class TestOnCommand:
         # Run - should continue execution (negative is out of range)
         result = basic.process_command('RUN')
         output_text = ' '.join(helpers.get_text_output(result))
-        assert 'X NEGATIVE in CONTINUE', output_text
+        assert 'X NEGATIVE' in output_text and 'CONTINUE' in output_text
 
     def test_on_goto_fractional_truncation(self, basic, helpers):
         """Test ON GOTO with fractional values (should truncate)"""
