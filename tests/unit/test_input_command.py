@@ -11,12 +11,6 @@ import pytest
 class TestInputCommand:
     """Test cases for INPUT command functionality"""
 
-    def test_basic_functionality(self, basic, helpers):
-        """Test basic INPUT command functionality"""
-        # Test simple INPUT command
-        result = basic.process_command('INPUT X')
-        assert any(item.get('type') == 'input_request' for item in result)
-
     def test_input_simple_variable(self, basic, helpers):
         """Test INPUT with simple variable"""
         result = basic.process_command('INPUT X')

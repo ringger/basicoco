@@ -10,12 +10,6 @@ import pytest
 class TestPrintCommand:
     """Test cases for PRINT command"""
 
-    def test_basic_functionality(self, basic, helpers):
-        """Test basic PRINT command functionality"""
-        result = basic.process_command('PRINT "HELLO"')
-        text_output = helpers.get_text_output(result)
-        assert text_output == ['HELLO']
-
     def test_print_string_literal(self, basic, helpers):
         """Test PRINT with string literals"""
         result = basic.process_command('PRINT "TEST STRING"')

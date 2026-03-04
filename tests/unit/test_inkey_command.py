@@ -18,15 +18,6 @@ class TestInkeyCommand:
         text_output = helpers.get_text_output(result)
         assert text_output == ['']
 
-    def test_inkey_empty_buffer(self, basic, helpers):
-        """Test INKEY$ with empty key buffer"""
-        # Clear any existing keys
-        basic.keyboard_buffer = []
-        
-        # Should return empty string
-        result = basic.process_command('PRINT INKEY$')
-        assert '' in helpers.get_text_output(result)
-
     def test_inkey_with_keys_in_buffer(self, basic, helpers):
         """Test INKEY$ with keys in buffer"""
         # Add keys to buffer manually

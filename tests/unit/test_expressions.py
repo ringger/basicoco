@@ -27,20 +27,6 @@ class TestExpressionEvaluation:
         basic.variables['S$'] = 'HELLO'
         basic.variables['T$'] = 'WORLD'
 
-    def test_basic_functionality(self, basic, helpers):
-        """Test basic expression evaluation functionality"""
-        # Simple number
-        result = basic.evaluate_expression("42")
-        assert result == 42
-        
-        # Simple arithmetic
-        result = basic.evaluate_expression("2 + 3")
-        assert result == 5
-        
-        # Variable access
-        result = basic.evaluate_expression("A")
-        assert result == 10
-
     def test_basic_arithmetic_expressions(self, basic, helpers):
         """Test basic arithmetic operations"""
         # Addition
@@ -305,18 +291,6 @@ class TestExpressionEvaluation:
         # Number to string
         result = basic.evaluate_expression('STR$(A) + " UNITS"')
         assert result == " 10 UNITS"  # STR$ adds leading space for positive numbers
-
-    def test_expression_caching(self, basic, helpers):
-        """Test that repeated expressions work correctly"""
-        # Same expression multiple times
-        expr = "A + B * 2"
-        result1 = basic.evaluate_expression(expr)
-        result2 = basic.evaluate_expression(expr)
-        result3 = basic.evaluate_expression(expr)
-        
-        assert result1 == result2
-        assert result2 == result3
-        assert result1 == 20  # 10 + 5 * 2
 
     def test_variable_modification_effects(self, basic, helpers):
         """Test that variable changes affect expression results"""

@@ -35,13 +35,6 @@ class TestASTParser:
         basic.variables['B'] = 5
         basic.variables['S$'] = 'HELLO'
 
-    def test_basic_functionality(self, basic, helpers):
-        """Test basic AST parser functionality"""
-        # Test simple number parsing
-        ast = self.parser.parse_expression("42")
-        assert ast.node_type == NodeType.NUMBER
-        assert ast.value == 42
-
     def test_literal_nodes(self, basic, helpers):
         """Test parsing of literal values"""
         # Number literals
