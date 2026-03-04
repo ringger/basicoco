@@ -17,7 +17,7 @@ from .ast_nodes import (
     GotoStatementNode, PrintStatementNode, GosubStatementNode,
     ReturnStatementNode, InputStatementNode,
     OnBranchStatementNode, OnErrorGotoNode,
-    ProgramNode, BlockNode
+    BlockNode
 )
 from .error_context import ErrorContextManager
 
@@ -28,12 +28,33 @@ class RegistryCommandError(ValueError):
 
 
 class ASTParser:
-    """
-    Advanced parser that generates Abstract Syntax Trees for BASIC code.
+    """Recursive descent parser for BASIC statements and expressions."""
 
-    This parser provides better error reporting, supports complex nested expressions,
-    and lays the foundation for advanced language features.
-    """
+    _STATEMENT_DISPATCH = {
+        'IF': '_parse_if_statement',
+        'FOR': '_parse_for_statement',
+        'WHILE': '_parse_while_statement',
+        'DO': '_parse_do_loop_statement',
+        'EXIT': '_parse_exit_statement',
+        'PRINT': '_parse_print_statement',
+        'END': '_parse_end_statement',
+        'GOTO': '_parse_goto_statement',
+        'GOSUB': '_parse_gosub_statement',
+        'RETURN': '_parse_return_statement',
+        'INPUT': '_parse_input_statement',
+        'ON': '_parse_on_statement',
+    }
+
+    _KEYWORDS = frozenset({
+        'AND', 'OR', 'NOT', 'MOD',
+        'IF', 'THEN', 'ELSE', 'ENDIF',
+        'FOR', 'TO', 'STEP', 'NEXT', 'EXIT',
+        'WHILE', 'WEND', 'DO', 'LOOP', 'UNTIL',
+        'GOTO', 'GOSUB', 'RETURN', 'ON',
+        'PRINT', 'INPUT', 'LET',
+        'DIM', 'DATA', 'READ', 'RESTORE',
+        'END', 'STOP', 'CONT', 'NEW', 'RUN', 'LIST'
+    })
 
     def __init__(self, known_functions=None, registry_commands=None):
         self.tokens = []
@@ -43,25 +64,6 @@ class ASTParser:
         self.current_column = 1
         self.known_functions = known_functions or set()
         self.registry_commands = registry_commands or set()
-
-    def parse_program(self, program_lines: Dict[int, str]) -> ProgramNode:
-        """Parse a complete BASIC program into a PROGRAM node"""
-        statements = []
-
-        # Sort lines by line number
-        for line_num in sorted(program_lines.keys()):
-            code = program_lines[line_num]
-            if code.strip():  # Skip empty lines
-                try:
-                    # Parse each line as a statement
-                    statement = self.parse_statement(code)
-                    if statement:
-                        statements.append(statement)
-                except (ValueError, IndexError, KeyError, AttributeError):
-                    # If parsing fails, create a literal node for the raw line
-                    statements.append(LiteralNode(code))
-
-        return ProgramNode(statements)
 
     def parse_expression(self, expr_str: str, line: int = 1) -> ASTNode:
         """
@@ -138,35 +140,35 @@ class ASTParser:
                 KeyError, AttributeError):
             return None
 
-    def _parse_statement_sequence(self) -> ASTNode:
+    def _parse_statement_sequence(self, stop_at_else=False) -> ASTNode:
         """
         Parse a sequence of statements separated by colons.
         Returns a single statement or a BlockNode for multiple statements.
+        If stop_at_else is True, stops before consuming ELSE (for IF bodies).
         """
         statements = []
 
         while self.current < len(self.tokens):
-            # Parse a single statement
             stmt = self._parse_statement()
             statements.append(stmt)
 
             # Check for colon separator
-            if (self.current < len(self.tokens) and
-                self._match('PUNCTUATION') and
-                self._current_token().get('value') == ':'):
-                self._advance()  # consume ':'
-            else:
-                # No more colons, we're done
+            if not (self._match('PUNCTUATION') and
+                    self._current_token().get('value') == ':'):
+                break
+            self._advance()  # consume ':'
+
+            # In IF bodies, stop before ELSE so _parse_if_statement can find it
+            if stop_at_else and self._match_value('ELSE'):
                 break
 
         # Return single statement or block
         if len(statements) == 1:
             return statements[0]
-        else:
-            return BlockNode(
-                statements=statements,
-                location=statements[0].location if statements else None
-            )
+        return BlockNode(
+            statements=statements,
+            location=statements[0].location if statements else None
+        )
 
     def _tokenize(self, text: str) -> List[Dict[str, Any]]:
         """
@@ -268,7 +270,7 @@ class ASTParser:
                     column += 1
 
                 # Check if it's a keyword or identifier
-                token_type = 'KEYWORD' if value.upper() in self._get_keywords() else 'IDENTIFIER'
+                token_type = 'KEYWORD' if value.upper() in self._KEYWORDS else 'IDENTIFIER'
                 tokens.append({
                     'type': token_type,
                     'value': value.upper(),
@@ -314,19 +316,6 @@ class ASTParser:
             column += 1
 
         return tokens
-
-    def _get_keywords(self) -> set:
-        """Return set of BASIC keywords"""
-        return {
-            'AND', 'OR', 'NOT', 'MOD',
-            'IF', 'THEN', 'ELSE', 'ENDIF',
-            'FOR', 'TO', 'STEP', 'NEXT', 'EXIT',
-            'WHILE', 'WEND', 'DO', 'LOOP', 'UNTIL',
-            'GOTO', 'GOSUB', 'RETURN', 'ON',
-            'PRINT', 'INPUT', 'LET',
-            'DIM', 'DATA', 'READ', 'RESTORE',
-            'END', 'STOP', 'CONT', 'NEW', 'RUN', 'LIST'
-        }
 
     def _current_token(self) -> Optional[Dict[str, Any]]:
         """Get the current token"""
@@ -655,53 +644,11 @@ class ASTParser:
         if (self._match('KEYWORD') and token['value'] == 'LET') or self._is_assignment():
             return self._parse_assignment()
 
-        # IF statement
-        if self._match('KEYWORD') and token['value'] == 'IF':
-            return self._parse_if_statement()
-
-        # FOR statement
-        if self._match('KEYWORD') and token['value'] == 'FOR':
-            return self._parse_for_statement()
-
-        # WHILE statement
-        if self._match('KEYWORD') and token['value'] == 'WHILE':
-            return self._parse_while_statement()
-
-        # DO statement
-        if self._match('KEYWORD') and token['value'] == 'DO':
-            return self._parse_do_loop_statement()
-
-        # EXIT statement
-        if self._match('KEYWORD') and token['value'] == 'EXIT':
-            return self._parse_exit_statement()
-
-        # PRINT statement
-        if self._match('KEYWORD') and token['value'] == 'PRINT':
-            return self._parse_print_statement()
-
-        # END statement
-        if self._match('KEYWORD') and token['value'] == 'END':
-            return self._parse_end_statement()
-
-        # GOTO statement
-        if self._match('KEYWORD') and token['value'] == 'GOTO':
-            return self._parse_goto_statement()
-
-        # GOSUB statement
-        if self._match('KEYWORD') and token['value'] == 'GOSUB':
-            return self._parse_gosub_statement()
-
-        # RETURN statement
-        if self._match('KEYWORD') and token['value'] == 'RETURN':
-            return self._parse_return_statement()
-
-        # INPUT statement
-        if self._match('KEYWORD') and token['value'] == 'INPUT':
-            return self._parse_input_statement()
-
-        # ON statement (ON GOTO/GOSUB, ON ERROR GOTO)
-        if self._match('KEYWORD') and token['value'] == 'ON':
-            return self._parse_on_statement()
+        # Keyword-dispatched statements
+        if self._match('KEYWORD'):
+            handler = self._STATEMENT_DISPATCH.get(token['value'])
+            if handler:
+                return getattr(self, handler)()
 
         # Bare number = implicit GOTO (e.g., IF A=5 THEN 50)
         if self._match('NUMBER'):
@@ -709,12 +656,11 @@ class ASTParser:
             return GotoStatementNode(target, location=target.location)
 
         # Known registry command — parser can't handle it
-        token_value = str(token['value']).upper()
-        if token_value in self.registry_commands:
-            raise RegistryCommandError(f"Registry command: {token_value}")
+        if token['value'] in self.registry_commands:
+            raise RegistryCommandError(f"Registry command: {token['value']}")
 
-        # Reject anything else — bare expressions aren't valid statements
-        raise ValueError(f"Unrecognized command: {token_value}")
+        # Reject anything else
+        raise ValueError(f"Unrecognized command: {token['value']}")
 
     def _is_assignment(self) -> bool:
         """Check if the current tokens form an assignment"""
@@ -723,7 +669,7 @@ class ASTParser:
             return False
 
         # Reject registry command names as assignment targets
-        if self._current_token()['value'].upper() in self.registry_commands:
+        if self._current_token()['value'] in self.registry_commands:
             return False
 
         # Look ahead for = sign
@@ -792,38 +738,18 @@ class ASTParser:
             location=target_location
         )
 
-    def _parse_colon_separated_statements(self) -> ASTNode:
-        """Parse a sequence of colon-separated statements"""
-        statements = []
-
-        # Parse first statement
-        statements.append(self._parse_statement())
-
-        # Parse additional statements after colons
-        while self._match('PUNCTUATION') and self._current_token()['value'] == ':':
-            self._advance()  # consume ':'
-            if self._current_token() and not self._match_value('ELSE'):  # Don't consume ELSE
-                statements.append(self._parse_statement())
-
-        # If only one statement, return it directly
-        if len(statements) == 1:
-            return statements[0]
-
-        # Multiple statements - return as a block
-        return BlockNode(statements=statements)
-
     def _parse_if_statement(self) -> IfStatementNode:
         """Parse IF statement"""
         if_token = self._advance()  # consume 'IF'
         condition = self._parse_or_expression()
 
         self._consume('KEYWORD', "Expected 'THEN' after IF condition")
-        then_branch = self._parse_colon_separated_statements()
+        then_branch = self._parse_statement_sequence(stop_at_else=True)
 
         else_branch = None
         if self._match_value('ELSE'):
             self._advance()  # consume 'ELSE'
-            else_branch = self._parse_colon_separated_statements()
+            else_branch = self._parse_statement_sequence(stop_at_else=True)
 
         return IfStatementNode(
             condition=condition,
@@ -887,8 +813,8 @@ class ASTParser:
                     if (self._match('PUNCTUATION') and
                         self._current_token().get('value') == ':'):
                         self._advance()
-                except (ValueError, IndexError, KeyError, AttributeError):
-                    # If we can't parse a statement, break out of body
+                except (RegistryCommandError, ValueError, IndexError,
+                        KeyError, AttributeError):
                     break
 
         body = BlockNode(statements=body_statements, location=self._make_location(for_token))
