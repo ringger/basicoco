@@ -94,7 +94,7 @@ class CoCoBasic:
         # Initialize AST parser/evaluator and function registry
         self.function_registry = FunctionRegistry()
         register_all_functions(self.function_registry)
-        self.ast_parser = ASTParser()
+        self.ast_parser = ASTParser(known_functions=set(self.function_registry.list_functions()))
         self.ast_evaluator = ASTEvaluator(self)
 
         # AST-based execution: commands in this set use AST parse+visit instead of registry
@@ -145,7 +145,7 @@ class CoCoBasic:
         """Return list of reserved function names that cannot be used as variable/array names"""
         return ['LEFT$', 'RIGHT$', 'MID$', 'LEN', 'ABS', 'INT', 'RND', 'SQR',
                 'SIN', 'COS', 'TAN', 'ATN', 'EXP', 'LOG', 'CHR$', 'ASC', 'STR$', 'VAL',
-                'INKEY$', 'HEX$', 'OCT$']
+                'INKEY$', 'HEX$', 'OCT$', 'MEM', 'FRE']
 
     def check_reserved_name(self, name):
         """Return error response if name is a reserved function, else None."""

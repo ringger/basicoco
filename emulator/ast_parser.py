@@ -28,12 +28,13 @@ class ASTParser:
     and lays the foundation for advanced language features.
     """
 
-    def __init__(self):
+    def __init__(self, known_functions=None):
         self.tokens = []
         self.current = 0
         self.error_context = ErrorContextManager()
         self.current_line = 1
         self.current_column = 1
+        self.known_functions = known_functions or set()
 
     def parse_program(self, program_lines: Dict[int, str]) -> ProgramNode:
         """Parse a complete BASIC program into a PROGRAM node"""
@@ -564,20 +565,6 @@ class ASTParser:
             name_token = self._advance()
             name = name_token['value']
 
-            # Special case for INKEY$ which can be called without parentheses
-            if name.upper() == 'INKEY$':
-                # Check if it has parentheses
-                if self._match('PUNCTUATION') and self._current_token()['value'] == '(':
-                    self._advance()  # consume '('
-                    # INKEY$ should have no arguments
-                    self._consume('PUNCTUATION', "INKEY$ takes no arguments")
-                # Either way, return as a function call with no arguments
-                return FunctionCallNode(
-                    function_name=name,
-                    arguments=[],
-                    location=self._make_location(name_token)
-                )
-
             # Function call (also handles array access — distinguished at evaluation
             # time in visit_function_call)
             if self._match('PUNCTUATION') and self._current_token()['value'] == '(':
@@ -598,7 +585,15 @@ class ASTParser:
                     location=self._make_location(name_token)
                 )
 
-            # Simple variable (no parentheses after identifier)
+            # Known function without parentheses (e.g., INKEY$, MEM)
+            elif name.upper() in self.known_functions:
+                return FunctionCallNode(
+                    function_name=name,
+                    arguments=[],
+                    location=self._make_location(name_token)
+                )
+
+            # Simple variable
             else:
                 return VariableNode(
                     name=name,

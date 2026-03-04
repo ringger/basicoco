@@ -5,9 +5,9 @@
 Prioritized by how often real CoCo BASIC programs need them.
 
 **Medium — useful but less common:**
-- [ ] PCLEAR — allocate graphics pages
-- [ ] MEM — free memory (could return a fixed large value)
-- [ ] FRE — free string space (could return a fixed large value)
+- [x] PCLEAR — allocate graphics pages (validates 1–8, no-op)
+- [x] MEM — free memory (returns 1000000)
+- [x] FRE — free string space (returns 1000000)
 
 **Low — rarely needed or hard to emulate meaningfully:**
 - [ ] PEEK/POKE — memory access (would need a simulated memory map)

@@ -56,6 +56,7 @@ class BasicGraphics:
         registry.register('PUT', self.execute_put)
         registry.register('DRAW', self.execute_draw)
         registry.register('PCLS', self.execute_pcls)
+        registry.register('PCLEAR', self.execute_pclear)
     
     def _eval_int(self, expr):
         """Evaluate an expression string and return an integer."""
@@ -79,6 +80,30 @@ class BasicGraphics:
         if self.emulator.graphics_mode == 0:
             return self._illegal_function_call()
         return None
+
+    def execute_pclear(self, args):
+        """Execute PCLEAR command - allocate graphics pages (no-op in emulator)"""
+        args = args.strip()
+        if not args:
+            return self._syntax_error(
+                "PCLEAR requires a number of pages",
+                suggestions=["Correct syntax: PCLEAR n (where n is 1-8)",
+                             "Example: PCLEAR 4"])
+        try:
+            pages = self._eval_int(args)
+        except (ValueError, TypeError):
+            return self._syntax_error(
+                "PCLEAR requires a numeric argument",
+                suggestions=["Correct syntax: PCLEAR n (where n is 1-8)",
+                             "Example: PCLEAR 4"])
+        if pages < 1 or pages > 8:
+            error = self.emulator.error_context.runtime_error(
+                f"PCLEAR pages must be 1-8, got {pages}",
+                self.emulator.current_line,
+                suggestions=["PCLEAR n allocates n graphics pages (1-8)",
+                             "Example: PCLEAR 4"])
+            return error_response(error)
+        return self.emulator._system_ok()
 
     def execute_pcls(self, args):
         """Execute PCLS command to clear graphics screen"""

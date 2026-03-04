@@ -374,6 +374,19 @@ def fn_ppoint(evaluator, args: List[Any]) -> int:
         raise ValueError(error.format_detailed())
     return evaluator.graphics.get_pixel(x, y)
 
+
+def fn_mem(evaluator, args: List[Any]) -> int:
+    """MEM - return free memory (simulated, always returns 1000000)"""
+    _check_args(evaluator, 'MEM', args, 0, 'MEM')
+    return 1000000
+
+
+def fn_fre(evaluator, args: List[Any]) -> int:
+    """FRE(x) - return free string space (simulated, always returns 1000000)"""
+    _check_args(evaluator, 'FRE', args, 1, 'FRE(0)')
+    return 1000000
+
+
 # ============================================================================
 # Function Registration
 # ============================================================================
@@ -421,6 +434,10 @@ def register_all_functions(registry):
 
     # Graphics functions
     registry.register('PPOINT', fn_ppoint)
+
+    # System functions
+    registry.register('MEM', fn_mem)
+    registry.register('FRE', fn_fre)
 
 
 # ============================================================================
