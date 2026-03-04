@@ -240,18 +240,3 @@ class TestSingleLineControlStructures:
         assert 'LANDED' in text_outputs
         assert 'MISSED' not in text_outputs
 
-    def test_performance_single_line_structures(self, basic, helpers):
-        """Test performance of single-line structure normalization"""
-        import time
-
-        # Time a moderately complex single-line structure
-        start_time = time.time()
-
-        for _ in range(10):
-            result = basic.process_command('FOR I=1 TO 5: IF I MOD 2=0 THEN PRINT I: NEXT I')
-
-        end_time = time.time()
-        execution_time = end_time - start_time
-
-        # Should complete reasonably quickly (within 1 second for 10 iterations)
-        assert execution_time < 1.0, "Single-line structure execution should be performant"

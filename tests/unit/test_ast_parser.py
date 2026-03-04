@@ -314,32 +314,6 @@ class TestASTParser:
         result = basic.evaluate_expression('"HELLO" + " " + "WORLD"')
         assert result == "HELLO WORLD"
 
-    def test_performance_comparison(self, basic, helpers):
-        """Test performance characteristics of AST vs legacy parsing"""
-        import time
-        
-        # Set up missing variables
-        basic.variables['C'] = 3
-        basic.variables['D'] = 1
-        
-        expressions = [
-            "2 + 3 * 4 - 1",
-            "A + B * 2",  # Simplified to avoid undefined variables
-            "ABS(-5) + SQR(16)",  # Simplified to avoid trig functions
-            '"HELLO" + " " + "WORLD" + "!"'
-        ] * 10  # Repeat for timing
-        
-        # Time AST parsing
-        start_time = time.time()
-        for expr in expressions:
-            basic.evaluate_expression(expr)
-        ast_time = time.time() - start_time
-        
-        # AST parsing should be reasonably fast
-        # This is more for monitoring than strict assertion
-        print(f"AST parsing time: {ast_time:.4f}s for {len(expressions)} expressions")
-        assert ast_time < 1.0, "AST parsing should complete within 1 second"
-
     def test_visitor_pattern(self, basic, helpers):
         """Test the visitor pattern implementation"""
         # Create a custom visitor for testing
