@@ -17,7 +17,7 @@ All program execution goes through `_execute_statements_loop()` — the shared e
 
 ## Expression Evaluation
 
-`evaluate_expression(expr)` on `CoCoBasic` parses and evaluates a BASIC expression string via the AST (`ASTParser.parse_expression()` + `ASTEvaluator.visit()`). `evaluate_condition(cond)` does the same, returning a boolean. `FunctionRegistry` (in `expressions.py`) maps BASIC function names to handlers in `functions.py`. Function handlers receive the `CoCoBasic` instance as their first argument.
+`evaluate_expression(expr)` on `CoCoBasic` parses and evaluates a BASIC expression string via the AST (`ASTParser.parse_expression()` + `ASTEvaluator.visit()`). `evaluate_condition(cond)` does the same, returning a boolean. `FunctionRegistry` (in `function_registry.py`) maps BASIC function names to handlers in `functions.py`. Function handlers receive the `CoCoBasic` instance as their first argument.
 
 ## Stack Ownership
 
@@ -25,11 +25,11 @@ AST visitors push; registry closing commands pop:
 
 | Stack | Pushed by | Popped by |
 |-------|-----------|-----------|
-| `for_stack` | `visit_for_statement` | `execute_next` |
+| `for_stack` | `visit_for_statement` | `execute_next` (control_flow.py) |
 | `call_stack` | `visit_gosub_statement` | `visit_return_statement` |
-| `while_stack` | `visit_while_statement` | `execute_wend` |
-| `do_stack` | `visit_do_statement` | `execute_loop` |
-| `if_stack` | `visit_if_statement` / multi-line IF handler | `execute_else`, `execute_endif` |
+| `while_stack` | `visit_while_statement` | `execute_wend` (control_flow.py) |
+| `do_stack` | `visit_do_statement` | `execute_loop` (control_flow.py) |
+| `if_stack` | `visit_if_statement` / multi-line IF handler | `execute_else`, `execute_endif` (control_flow.py) |
 
 ## IF/THEN/ELSE Handling
 
@@ -55,7 +55,7 @@ INPUT pauses execution by returning `{'type': 'input_request', ...}`. Variable t
 
 ## Statement Splitting
 
-`BasicParser` in `parser.py` owns all statement-splitting and argument-splitting logic:
+`StatementSplitter` in `text_utils.py` owns all statement-splitting and argument-splitting logic:
 
 - `split_on_delimiter()` — split on colons (or custom delimiter), respecting quoted strings.
 - `split_args()` — split on commas, respecting parentheses and quotes. The single shared comma-splitter for the entire codebase (replaces all former per-module `_split_args` variants).
@@ -64,7 +64,7 @@ INPUT pauses execution by returning `{'type': 'input_request', ...}`. Variable t
 - `has_control_keyword()` — detects IF/FOR/WHILE/DO at the start of a line.
 - `CONTROL_KEYWORDS` — canonical tuple of control-flow keyword prefixes.
 
-Never duplicate this logic — always call through to `BasicParser`.
+Never duplicate this logic — always call through to `StatementSplitter`.
 
 ### Immediate mode flow
 
@@ -76,7 +76,7 @@ Never duplicate this logic — always call through to `BasicParser`.
 
 ### Program storage flow
 
-`expand_line_to_sublines()` in `core.py` splits stored lines once at entry time. REM lines and single-line IF/THEN are kept whole; everything else is split via `BasicParser.split_on_delimiter()`.
+`expand_line_to_sublines()` in `core.py` splits stored lines once at entry time. REM lines and single-line IF/THEN are kept whole; everything else is split via `StatementSplitter.split_on_delimiter()`.
 
 ## Naming
 
@@ -87,7 +87,7 @@ Never duplicate this logic — always call through to `BasicParser`.
 ## Rules
 
 - `functions.py` owns all BASIC functions — never duplicate elsewhere
-- Graphics commands go in `graphics.py`, DIM/arrays in `variables.py`
+- Graphics commands go in `graphics.py`, DIM/arrays in `variables.py`, control-flow closing commands in `control_flow.py`, DATA/READ/RESTORE in `data_commands.py`
 - Graphics helpers: `_eval_int(expr)` for expression→int, `_syntax_error(msg, suggestions)` for error responses
 - LINE coordinate pair syntax: `CommandRegistry.is_coordinate_pair_syntax()` and `parse_line_coordinates()` handle `(x1,y1)-(x2,y2)` with optional spaces around the dash
 - System OK messages use `_system_ok()` (tagged with `'source': 'system'`)

@@ -385,6 +385,9 @@ def error_response(error: 'BasicError') -> List[Dict[str, Any]]:
     return [{'type': 'error', 'message': error.format_detailed()}]
 
 
-def text_response(text: str) -> List[Dict[str, Any]]:
+def text_response(text: str, source: Optional[str] = None) -> List[Dict[str, Any]]:
     """Build a standard text response list."""
-    return [{'type': 'text', 'text': text}]
+    result = {'type': 'text', 'text': text}
+    if source:
+        result['source'] = source
+    return [result]

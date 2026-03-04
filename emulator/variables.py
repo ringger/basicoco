@@ -7,7 +7,7 @@ Extracted from the main CoCoBasic class for better organization.
 """
 
 import re
-from .parser import BasicParser
+from .text_utils import StatementSplitter
 from .error_context import error_response
 
 
@@ -40,7 +40,7 @@ class VariableManager:
                 return error_response(error)
             
             # Parse comma-separated array declarations, respecting parentheses
-            array_defs = BasicParser.split_on_delimiter_paren_aware(args, delimiter=',')
+            array_defs = StatementSplitter.split_on_delimiter_paren_aware(args, delimiter=',')
             
             for array_def in array_defs:
                 array_def = array_def.strip()
@@ -82,7 +82,7 @@ class VariableManager:
                 # Parse dimensions (comma-separated numbers)
                 try:
                     dimensions = []
-                    for dim_str in BasicParser.split_args(dimensions_str):
+                    for dim_str in StatementSplitter.split_args(dimensions_str):
                         dim_value = self.emulator.eval_int(dim_str)
                         if dim_value <= 0:
                             error = self.emulator.error_context.syntax_error(

@@ -1,8 +1,8 @@
 """
-FileManager for BasiCoCo BASIC Environment
+Program File Operations for BasiCoCo BASIC Environment
 
-Handles all file I/O operations: LOAD, SAVE, DIR, KILL, CD, FILES, DRIVE.
-Extracted from core.py to reduce its size.
+Handles program file management: LOAD, SAVE, DIR, KILL, CD, FILES, DRIVE.
+For sequential data I/O (OPEN, CLOSE, PRINT#, INPUT#), see file_io.py.
 """
 
 import glob

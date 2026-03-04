@@ -8,8 +8,8 @@ CoCo BASIC supports file numbers 1-15 with modes I (input), O (output), A (appen
 import os
 
 from .error_context import error_response, text_response
-from .file_manager import FileManager
-from .parser import BasicParser
+from .program_files import FileManager
+from .text_utils import StatementSplitter
 
 
 class FileIOManager:
@@ -102,7 +102,7 @@ class FileIOManager:
 
     def execute_open(self, args):
         """OPEN mode, #n, filename"""
-        parts = BasicParser.split_args(args)
+        parts = StatementSplitter.split_args(args)
         if len(parts) < 3:
             error = self.emulator.error_context.syntax_error(
                 "OPEN requires mode, file number, and filename",
@@ -367,7 +367,7 @@ class FileIOManager:
         handle = self.open_files[file_num]['handle']
 
         # Parse variable names
-        var_names = BasicParser.split_args(var_part)
+        var_names = StatementSplitter.split_args(var_part)
         if not var_names:
             error = self.emulator.error_context.syntax_error(
                 "INPUT# requires at least one variable",
@@ -409,7 +409,7 @@ class FileIOManager:
             array_name = var_str[:paren_pos]
             index_str = var_str[paren_pos + 1:-1]
             indices = []
-            for idx in BasicParser.split_args(index_str):
+            for idx in StatementSplitter.split_args(index_str):
                 indices.append(self.emulator.eval_int(idx))
             return {'name': array_name, 'array': True, 'indices': indices}
         return {'name': var_str, 'array': False}

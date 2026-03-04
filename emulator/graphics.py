@@ -6,11 +6,11 @@ PMODE, SCREEN, PSET, LINE, CIRCLE, PAINT, GET, PUT, and DRAW commands.
 Extracted from the main CoCoBasic class for better organization.
 """
 
-from .parser import BasicParser
+from .text_utils import StatementSplitter
 from .commands import CommandRegistry
 from .error_context import error_response
 
-_split_args = BasicParser.split_args  # Shared comma-split helper
+_split_args = StatementSplitter.split_args  # Shared comma-split helper
 
 
 def _graphics_command(command_name, require_graphics=False):
@@ -467,7 +467,7 @@ class BasicGraphics:
                                       ['DRAW takes a string of drawing commands',
                                        'Example: DRAW "U10R10D10L10"'])
 
-        commands = BasicParser.parse_draw_commands(draw_string)
+        commands = StatementSplitter.parse_draw_commands(draw_string)
         return self._execute_draw_commands(commands)
 
     def _execute_draw_commands(self, commands, state=None):
@@ -500,7 +500,7 @@ class BasicGraphics:
                 if var_name in self.emulator.variables:
                     sub_string = self.emulator.variables[var_name]
                     if isinstance(sub_string, str):
-                        sub_commands = BasicParser.parse_draw_commands(sub_string)
+                        sub_commands = StatementSplitter.parse_draw_commands(sub_string)
                         output.extend(self._execute_draw_commands(sub_commands, state))
                 continue
 

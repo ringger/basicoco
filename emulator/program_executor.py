@@ -383,7 +383,7 @@ class ProgramExecutor:
             if line_code.startswith('DATA '):
                 data_args = emu.program[line_num][4:].strip()
                 emu.current_line = line_num
-                emu.execute_data(data_args)
+                emu.data_commands.execute_data(data_args)
         emu.running = preprocessing_running  # Restore running flag
 
         all_positions = sorted(emu.expanded_program.keys())

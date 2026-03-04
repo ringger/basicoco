@@ -1,15 +1,15 @@
 """
-Parser module for TRS-80 Color Computer BASIC Emulator
+Text Utilities for TRS-80 Color Computer BASIC Emulator
 
-This module contains parsing and tokenization logic for BASIC commands and expressions.
-Extracted from the main CoCoBasic class for better organization.
+Static utility methods for splitting BASIC statements on delimiters,
+splitting arguments, and detecting control-flow keywords.
 """
 
 import re
 
 
-class BasicParser:
-    """Parser for BASIC language constructs"""
+class StatementSplitter:
+    """Static utilities for splitting and classifying BASIC text."""
 
     # Control-flow keywords that trigger AST conversion when colons are present.
     CONTROL_KEYWORDS = ('IF ', 'FOR ', 'WHILE ', 'DO:', 'DO ')
@@ -23,7 +23,7 @@ class BasicParser:
     def has_control_keyword(code: str) -> bool:
         """Check if code starts with a control-flow keyword (IF/FOR/WHILE/DO)."""
         upper = code.strip().upper()
-        return any(upper.startswith(kw) for kw in BasicParser.CONTROL_KEYWORDS)
+        return any(upper.startswith(kw) for kw in StatementSplitter.CONTROL_KEYWORDS)
 
     @staticmethod
     def split_on_delimiter(text: str, delimiter: str = ':') -> list:
@@ -48,7 +48,7 @@ class BasicParser:
     @staticmethod
     def split_args(text: str) -> list:
         """Split comma-separated arguments, respecting parentheses and quotes."""
-        return BasicParser.split_on_delimiter_paren_aware(text, delimiter=',')
+        return StatementSplitter.split_on_delimiter_paren_aware(text, delimiter=',')
 
     @staticmethod
     def split_on_delimiter_paren_aware(text: str, delimiter: str = ':') -> list:
@@ -101,7 +101,7 @@ class BasicParser:
         Simple colon-splitting fallback. Control structures (IF, FOR, WHILE, DO)
         are handled by core.py via AST conversion before reaching this method.
         """
-        statements = BasicParser.split_on_delimiter(code)
+        statements = StatementSplitter.split_on_delimiter(code)
         for i, statement in enumerate(statements):
             expanded_program[(line_num, i)] = statement
 

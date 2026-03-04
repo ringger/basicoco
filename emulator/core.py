@@ -1,27 +1,28 @@
 """
 BasiCoCo - Educational Color Computer BASIC Environment
 
-This module contains the main CoCoBasic class that implements the BASIC interpreter.
-The class has been extracted from the monolithic app.py file to improve maintainability.
+Main interpreter module. CoCoBasic orchestrates the BASIC environment:
+command dispatch, program storage, expression evaluation, and state management.
 """
 
 import random
 import re
 import time
-from .parser import BasicParser
+from .text_utils import StatementSplitter
 from .graphics import BasicGraphics
 from .variables import VariableManager
 from .commands import CommandRegistry
-from .expressions import FunctionRegistry
+from .function_registry import FunctionRegistry
 from .functions import register_all_functions
-from .ast_nodes import basic_truthy
 from .ast_parser import ASTParser
 from .ast_evaluator import ASTEvaluator
 from .output_manager import StreamingOutputManager, LegacyOutputAdapter
 from .error_context import ErrorContextManager, error_response, text_response
-from .file_manager import FileManager
+from .program_files import FileManager
 from .file_io import FileIOManager
 from .program_executor import ProgramExecutor
+from .control_flow import ControlFlowCommands
+from .data_commands import DataCommands
 
 class CoCoBasic:
     def __init__(self, output_callback=None, debug_mode=False):
@@ -97,10 +98,12 @@ class CoCoBasic:
         self.ast_parser = ASTParser(known_functions=set(self.function_registry.list_functions()))
         self.ast_evaluator = ASTEvaluator(self)
 
-        # Initialize file manager and program executor
+        # Initialize file manager, program executor, and command modules
         self.file_manager = FileManager(self)
         self.file_io = FileIOManager(self)
         self.executor = ProgramExecutor(self)
+        self.control_flow = ControlFlowCommands(self)
+        self.data_commands = DataCommands(self)
 
         # Initialize command registry and teach parser about registry commands
         self.command_registry = CommandRegistry()
@@ -137,17 +140,11 @@ class CoCoBasic:
     @staticmethod
     def _system_ok():
         """Return a system OK acknowledgment (not user-generated output)."""
-        return [{'type': 'text', 'text': 'OK', 'source': 'system'}]
-
-    def get_reserved_function_names(self):
-        """Return list of reserved function names that cannot be used as variable/array names"""
-        return ['LEFT$', 'RIGHT$', 'MID$', 'LEN', 'ABS', 'INT', 'RND', 'SQR',
-                'SIN', 'COS', 'TAN', 'ATN', 'EXP', 'LOG', 'CHR$', 'ASC', 'STR$', 'VAL',
-                'INKEY$', 'HEX$', 'OCT$', 'MEM', 'FRE']
+        return text_response('OK', source='system')
 
     def check_reserved_name(self, name):
         """Return error response if name is a reserved function, else None."""
-        if name in self.get_reserved_function_names():
+        if self.function_registry.is_function(name):
             error = self.error_context.syntax_error(
                 f"Cannot use reserved function name: {name}",
                 self.current_line,
@@ -176,8 +173,8 @@ class CoCoBasic:
         return None
 
     def parse_line(self, line):
-        """Parse a line using the BasicParser - kept for backward compatibility"""
-        return BasicParser.parse_line(line)
+        """Parse a line into (line_number, code) — delegates to StatementSplitter."""
+        return StatementSplitter.parse_line(line)
         
     def process_command(self, command):
         if not command:
@@ -199,8 +196,8 @@ class CoCoBasic:
             return self._system_ok()
 
         # Multi-statement lines go straight to process_line (which splits them)
-        if not BasicParser.is_rem_line(command):
-            statements = BasicParser.split_on_delimiter(command)
+        if not StatementSplitter.is_rem_line(command):
+            statements = StatementSplitter.split_on_delimiter(command)
             if len(statements) > 1:
                 return self.process_line(command)
 
@@ -281,14 +278,14 @@ class CoCoBasic:
         return self.file_manager.change_directory(path)
     
     def expand_line_to_sublines(self, line_num, code):
-        """Expand line using BasicParser or AST converter for single-line control structures"""
+        """Expand line using StatementSplitter or AST converter for single-line control structures"""
         # REM lines should never be split or AST-converted
-        if BasicParser.is_rem_line(code):
+        if StatementSplitter.is_rem_line(code):
             self.expanded_program[(line_num, 0)] = code.strip()
             return
 
         # Use AST conversion for control structures with colons OR IF statements (even without colons)
-        has_control = BasicParser.has_control_keyword(code)
+        has_control = StatementSplitter.has_control_keyword(code)
         has_colons = ':' in code
         is_if_statement = code.upper().strip().startswith('IF ')
 
@@ -306,11 +303,11 @@ class CoCoBasic:
                             self._store_subline(line_num, i, stmt)
                     return
             except (ValueError, IndexError, KeyError, AttributeError):
-                # Fall back to BasicParser if AST conversion fails
+                # Fall back to StatementSplitter if AST conversion fails
                 pass
 
-        # Use BasicParser for normal statements
-        return BasicParser.expand_line_to_sublines(line_num, code, self.expanded_program)
+        # Use StatementSplitter for normal statements
+        return StatementSplitter.expand_line_to_sublines(line_num, code, self.expanded_program)
 
     # Structural markers that skip methods inspect as text — never pre-parse these
     _STRUCTURAL_MARKERS = frozenset({'ELSE', 'ENDIF'})
@@ -348,11 +345,11 @@ class CoCoBasic:
         and executed via run_program, just like stored program lines.
         """
         # REM lines are never split
-        if BasicParser.is_rem_line(code):
+        if StatementSplitter.is_rem_line(code):
             return self.process_statement(code)
 
         # Try AST conversion for single-line control structures
-        has_control = BasicParser.has_control_keyword(code)
+        has_control = StatementSplitter.has_control_keyword(code)
         has_colons = ':' in code
         is_if_statement = code.upper().strip().startswith('IF ')
 
@@ -367,7 +364,7 @@ class CoCoBasic:
                     self.emit_debug(f"AST conversion failed for '{code}': {str(e)}")
 
         # Split on colons; single statements go straight to process_statement
-        statements = BasicParser.split_on_delimiter(code)
+        statements = StatementSplitter.split_on_delimiter(code)
         if len(statements) <= 1:
             return self.process_statement(code)
 
@@ -573,41 +570,6 @@ class CoCoBasic:
         """Evaluate an expression and return an integer."""
         return int(self.evaluate_expression(expr, line))
 
-    def execute_next(self, args):
-        if not self.for_stack:
-            error = self.error_context.runtime_error(
-                "NEXT WITHOUT FOR",
-                self.current_line,
-                suggestions=[
-                    "NEXT must be preceded by a FOR statement",
-                    "Example: FOR I = 1 TO 10: ... : NEXT I",
-                    "Check that FOR and NEXT statements are properly paired"
-                ]
-            )
-            return error_response(error)
-        
-        for_info = self.for_stack[-1]
-        var_name = for_info['var']
-        
-        # Increment the loop variable
-        self.variables[var_name] += for_info['step']
-        
-        # Ensure numeric types for comparison
-        current_val = self.variables[var_name]
-        end_val = for_info['end']
-        step_val = for_info['step']
-        
-        # Check if loop should continue
-        if ((step_val > 0 and current_val <= end_val) or
-            (step_val < 0 and current_val >= end_val)):
-            # Continue loop - jump to the line AFTER the FOR line
-            # This prevents FOR from reinitializing the loop variable
-            return [{'type': 'jump_after_for', 'for_line': for_info['line'], 'for_sub_line': for_info['sub_line']}]
-        else:
-            # End loop
-            self.for_stack.pop()
-            return []
-    
     def _evaluate_array_access(self, array_name, indices_str):
         """Evaluate array element access."""
         if array_name not in self.arrays:
@@ -655,7 +617,7 @@ class CoCoBasic:
         # SOUND frequency,duration
         self.error_context.set_context(self.current_line, f"SOUND {args}")
         
-        parts = BasicParser.split_args(args)
+        parts = StatementSplitter.split_args(args)
         if len(parts) != 2:
             error = self.error_context.syntax_error(
                 "SOUND requires two parameters",
@@ -891,16 +853,6 @@ class CoCoBasic:
         self.trace_mode = False
         return text_response('READY')
     
-    def execute_stop(self, args):
-        # STOP command - stop program execution with message (allows CONT)
-        self.running = False
-        # Store position for CONT command
-        self.stopped_position = (self.current_line, self.current_sub_line)
-        return text_response('BREAK IN ' + str(self.current_line))
-    
-    def execute_cont(self, args):
-        return self.executor.execute_cont(args)
-
     def _execute_cls(self):
         """CLS — clear screen and reset print column."""
         self.print_column = 0
@@ -916,230 +868,13 @@ class CoCoBasic:
         self.trace_mode = False
         return []
 
-    def execute_resume(self, args):
-        """RESUME [NEXT | line] — resume after ON ERROR GOTO handler."""
-        if not self.in_error_handler:
-            error = self.error_context.runtime_error(
-                "RESUME WITHOUT ERROR",
-                suggestions=["RESUME can only be used inside an ON ERROR GOTO handler",
-                             "Use ON ERROR GOTO line to set up an error handler first"])
-            return error_response(error)
-        self.in_error_handler = False
-        args = args.strip().upper()
-        if args == '' or args == '0':
-            return [{'type': 'resume', 'position': self.error_resume_position}]
-        elif args == 'NEXT':
-            return [{'type': 'resume_next', 'position': self.error_resume_position}]
-        else:
-            try:
-                line = self.eval_int(args, self.current_line)
-            except (ValueError, TypeError):
-                error = self.error_context.syntax_error(
-                    f"Invalid RESUME target: {args}",
-                    self.current_line,
-                    suggestions=["Use RESUME, RESUME NEXT, or RESUME line"])
-                return error_response(error)
-            return [{'type': 'jump', 'line': line}]
-
-    def execute_data(self, args):
-        # DATA command - store data values in program
-        # DATA 10,20,"HELLO",30.5
-        if not args:
-            return []
-        
-        # During program execution, DATA statements should be skipped
-        # (they were already preprocessed in run_program)
-        if self.running:
-            return []
-        
-        # Parse comma-separated values, respecting quotes
-        data_items = []
-        items = BasicParser.split_on_delimiter(args, delimiter=',')
-        
-        for item in items:
-            item = item.strip()
-            if item.startswith('"') and item.endswith('"'):
-                # String literal
-                data_items.append(item[1:-1])
-            else:
-                # Try to parse as number: int first, then float, else string
-                try:
-                    data_items.append(int(item))
-                except ValueError:
-                    try:
-                        data_items.append(float(item))
-                    except ValueError:
-                        data_items.append(item)
-        
-        # Store data items with current line number for organization
-        self.data_statements.extend([(self.current_line, item) for item in data_items])
-        
-        return []  # DATA commands don't produce output
-    
-    def execute_read(self, args):
-        # READ command - read data into variables
-        # READ A,B$,C
-        if not args:
-            error = self.error_context.syntax_error(
-                "READ requires variable names",
-                self.current_line,
-                suggestions=[
-                    "Specify variables to read data into",
-                    "Example: READ A, B$, C",
-                    "Variables must match DATA statement types"
-                ]
-            )
-            return error_response(error)
-        
-        # Parse variable names (parenthesis-aware for multi-dim arrays)
-        var_names = BasicParser.split_args(args)
-        
-        for var_name in var_names:
-            if self.data_pointer >= len(self.data_statements):
-                error = self.error_context.runtime_error(
-                    "OUT OF DATA",
-                    self.current_line,
-                    suggestions=[
-                        "Add more DATA statements to your program",
-                        "Use RESTORE to reset data pointer to beginning",
-                        "Check that READ statements match available DATA"
-                    ]
-                )
-                return error_response(error)
-            
-            # Get the next data item
-            line_num, data_value = self.data_statements[self.data_pointer]
-            self.data_pointer += 1
-            
-            # Check if this is an array element assignment
-            if '(' in var_name and ')' in var_name:
-                # Handle array element assignment
-                result = self.assign_array_element(var_name, data_value)
-                if result:  # If there was an error
-                    return result
-            else:
-                # Store in variable
-                self.variables[var_name] = data_value
-        
-        return []  # READ commands don't produce output unless there's an error
-    
-    def assign_array_element(self, var_name, value):
-        """Assign a value to an array element, return error result if there's an issue"""
-        # Extract array name and index contents, handling nested parentheses
-        paren_pos = var_name.find('(')
-        if paren_pos == -1 or not var_name.rstrip().endswith(')'):
-            error = self.error_context.syntax_error(
-                "Invalid array syntax in DATA statement",
-                self.current_line,
-                suggestions=[
-                    'Array syntax: A(1,2) or B$(5)',
-                    'Check array name and index format',
-                    'Ensure parentheses are properly matched'
-                ]
-            )
-            return error_response(error)
-
-        array_name = var_name[:paren_pos]
-        indices_str = var_name[paren_pos + 1:-1]  # contents between outer parens
-
-        # Parse indices using parenthesis-aware split
-        try:
-            indices = [self.eval_int(idx) for idx in BasicParser.split_args(indices_str)]
-            
-            # Use VariableManager to set array element
-            err_msg = self.variable_manager.set_array_element(array_name.upper(), indices, value)
-            if err_msg:
-                error = self.error_context.runtime_error(
-                    err_msg, self.current_line,
-                    suggestions=["Check array dimensions with DIM",
-                                 "Array indices must be within bounds"])
-                return error_response(error)
-            return None  # No error
-            
-        except ValueError:
-            error = self.error_context.syntax_error(
-                "Invalid line number format",
-                self.current_line,
-                suggestions=[
-                    'Line numbers must be integers',
-                    'Example: 10, 20, 100',
-                    'Check that the line number is valid'
-                ]
-            )
-            return error_response(error)
-        except (IndexError, TypeError, KeyError):
-            error = self.error_context.runtime_error(
-                "Array index out of bounds",
-                suggestions=[
-                    'Check that array indices are within valid range',
-                    'Arrays are 0-indexed: DIM A(10) creates indices 0-10',
-                    'Use valid positive integer indices'
-                ]
-            )
-            return error_response(error)
-
-    def execute_restore(self, args):
-        # RESTORE command - reset data pointer to beginning
-        self.data_pointer = 0
-        return []
-    
-    # ON GOTO/GOSUB and ON ERROR GOTO migrated to AST (ast_evaluator.py)
-    # INKEY$ functionality moved to functions.py function registry
-    # Keyboard buffer management now handled by function registry
-    
-    
-    
-    
     def _register_all_commands(self):
-        """Register all BASIC commands by delegating to each module"""
-        # Let each module register its own commands
+        """Register all BASIC commands by delegating to each module."""
         self.graphics.register_commands(self.command_registry)
         self.variable_manager.register_commands(self.command_registry)
         self.file_io.register_commands(self.command_registry)
-        # Core commands - control flow
-        # Note: IF, GOTO, GOSUB, RETURN, FOR, WHILE, EXIT, DO, END are handled by AST execution
-
-        self.command_registry.register('NEXT', self.execute_next,
-                                     category='control',
-                                     description="End FOR loop and increment counter",
-                                     syntax="NEXT [variable]",
-                                     examples=["NEXT", "NEXT I", "NEXT X"])
-
-        self.command_registry.register('WEND', self.execute_wend,
-                                     category='control',
-                                     description="End WHILE loop",
-                                     syntax="WEND",
-                                     examples=["WEND"])
-
-        self.command_registry.register('LOOP', self.execute_loop,
-                                     category='control',
-                                     description="End DO loop block",
-                                     syntax="LOOP [WHILE condition | UNTIL condition]",
-                                     examples=["LOOP", "LOOP WHILE X > 0", "LOOP UNTIL Y = 10"])
-
-        self.command_registry.register('ELSE', self.execute_else,
-                                     category='control',
-                                     description="Alternative branch in IF statement",
-                                     syntax="ELSE",
-                                     examples=["ELSE"])
-        
-        self.command_registry.register('ENDIF', self.execute_endif,
-                                     category='control',
-                                     description="End multi-line IF block",
-                                     syntax="ENDIF",
-                                     examples=["ENDIF"])
-        
-        self.command_registry.register('STOP', self.execute_stop,
-                                     category='control',
-                                     description="Stop program execution",
-                                     syntax="STOP",
-                                     examples=["STOP"])
-        
-        self.command_registry.register('CONT', self.execute_cont,
-                                     category='system',
-                                     description="Continue program after STOP",
-                                     syntax="CONT",
-                                     examples=["CONT"])
+        self.control_flow.register_commands(self.command_registry)
+        self.data_commands.register_commands(self.command_registry)
 
         self.command_registry.register('TRON', lambda args: self._execute_tron(),
                                      category='system',
@@ -1153,31 +888,6 @@ class CoCoBasic:
                                      syntax="TROFF",
                                      examples=["TROFF"])
 
-        self.command_registry.register('RESUME', self.execute_resume,
-                                     category='flow',
-                                     description="Resume execution after ON ERROR GOTO handler",
-                                     syntax="RESUME [NEXT | line]",
-                                     examples=["RESUME", "RESUME NEXT", "RESUME 100"])
-
-        # Data commands
-        self.command_registry.register('DATA', self.execute_data,
-                                     category='data',
-                                     description="Define data values for READ statements",
-                                     syntax="DATA value1, value2, ...",
-                                     examples=["DATA 10, 20, 30", "DATA \"HELLO\", \"WORLD\""])
-        
-        self.command_registry.register('READ', self.execute_read,
-                                     category='data', 
-                                     description="Read data values into variables",
-                                     syntax="READ variable1, variable2, ...",
-                                     examples=["READ A, B, C", "read NAME$, AGE"])
-        
-        self.command_registry.register('RESTORE', self.execute_restore,
-                                     category='data',
-                                     description="Reset DATA pointer to beginning",
-                                     syntax="RESTORE",
-                                     examples=["RESTORE"])
-        
         # System commands
         self.command_registry.register('CLS', lambda args: self._execute_cls(),
                                      category='system',
@@ -1335,118 +1045,6 @@ class CoCoBasic:
         return output
     
 
-    # Enhanced Control Flow Methods
-    def execute_wend(self, args):
-        """WEND statement - end WHILE loop"""
-        err = self._require_stack(self.while_stack, 'WEND', 'WHILE', 'WHILE condition ... WEND')
-        if err:
-            return err
-        
-        # Get the current WHILE loop
-        while_info = self.while_stack[-1]
-
-        # Re-evaluate the condition using stored AST node
-        result = self.ast_evaluator.visit(while_info['condition_ast'])
-        condition_true = basic_truthy(result)
-        if condition_true:
-            # Continue loop - jump back to after the WHILE statement
-            return [{'type': 'jump_after_while', 
-                    'while_line': while_info['line'],
-                    'while_sub_line': while_info['sub_line']}]
-        else:
-            # Exit loop
-            self.while_stack.pop()
-            return []
-    
-    def execute_loop(self, args):
-        """LOOP statement - end DO/LOOP block"""
-        err = self._require_stack(self.do_stack, 'LOOP', 'DO', 'DO ... LOOP or DO ... LOOP WHILE condition')
-        if err:
-            return err
-        
-        # Get current DO loop
-        do_info = self.do_stack[-1]
-
-        # Parse LOOP [WHILE condition | UNTIL condition]
-        args = args.strip()
-        condition = do_info.get('condition')
-        condition_ast = do_info.get('condition_ast')
-        condition_type = do_info.get('condition_type')
-
-        # Check for condition at LOOP (overrides DO condition)
-        for keyword in ('WHILE', 'UNTIL'):
-            prefix = keyword + ' '
-            if args.upper().startswith(prefix):
-                condition_str = args[len(prefix):].strip()
-                condition_type = keyword
-                if 'loop_condition_ast' not in do_info or do_info.get('loop_condition_str') != condition_str:
-                    try:
-                        do_info['loop_condition_ast'] = self.ast_parser.parse_expression(condition_str, self.current_line)
-                        do_info['loop_condition_str'] = condition_str
-                    except (ValueError, IndexError, KeyError, AttributeError):
-                        do_info['loop_condition_ast'] = None
-                condition_ast = do_info.get('loop_condition_ast')
-                condition = condition_str if condition_ast is None else None
-                break
-
-        # Evaluate loop continuation
-        should_continue = False
-        if condition_ast is not None:
-            # AST-based condition evaluation (condition from DO statement)
-            result = self.ast_evaluator.visit(condition_ast)
-            condition_true = basic_truthy(result)
-            if condition_type == 'WHILE':
-                should_continue = condition_true
-            elif condition_type == 'UNTIL':
-                should_continue = not condition_true
-        elif condition:
-            # String-based condition (from LOOP WHILE/UNTIL syntax)
-            if condition_type == 'WHILE':
-                should_continue = self.evaluate_condition(condition)
-            elif condition_type == 'UNTIL':
-                should_continue = not self.evaluate_condition(condition)
-        else:
-            # Infinite loop without condition
-            should_continue = True
-        
-        if should_continue:
-            # Continue loop - jump back to after DO
-            return [{'type': 'jump_after_do',
-                    'do_line': do_info['line'],
-                    'do_sub_line': do_info['sub_line']}]
-        else:
-            # Exit loop
-            self.do_stack.pop()
-            return []
-
-    def execute_else(self, args):
-        """ELSE statement - alternative branch in multi-line IF"""
-        err = self._require_stack(self.if_stack, 'ELSE', 'IF', 'IF condition ... ELSE ... ENDIF')
-        if err:
-            return err
-        
-        # Get current IF info
-        if_info = self.if_stack[-1]
-        
-        # If we were in the THEN part and condition was true, skip to ENDIF
-        if if_info['condition_met'] and not if_info['in_else']:
-            if_info['in_else'] = True
-            return [{'type': 'skip_else_block'}]
-        
-        # If we're already in ELSE or condition was false, continue with ELSE
-        if_info['in_else'] = True
-        return []
-    
-    def execute_endif(self, args):
-        """ENDIF statement - end multi-line IF block"""
-        err = self._require_stack(self.if_stack, 'ENDIF', 'IF', 'IF condition ... ENDIF')
-        if err:
-            return err
-        
-        # Pop the current IF from the stack
-        self.if_stack.pop()
-        return []
-    
     def execute_delete(self, args):
         """DELETE statement - delete program lines or line ranges"""
         args = args.strip()

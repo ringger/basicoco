@@ -7,7 +7,7 @@ multi-line equivalents using the AST parser infrastructure.
 
 import re
 from typing import List, Optional
-from .parser import BasicParser
+from .text_utils import StatementSplitter
 from .ast_nodes import (
     ASTNode, IfStatementNode, ForStatementNode, WhileStatementNode,
     DoLoopStatementNode, ExitForStatementNode, EndStatementNode, GotoStatementNode, PrintStatementNode,
@@ -500,7 +500,7 @@ def _parse_ast_for_statement(statement: str, parser, converter) -> Optional[List
         step_node = parser.parse_expression(step_expr) if step_expr != "1" else None
 
         # Parse body statements (excluding any NEXT statement)
-        body_parts = BasicParser.split_on_delimiter_paren_aware(body_part)
+        body_parts = StatementSplitter.split_on_delimiter_paren_aware(body_part)
         body_statements = []
 
         for part in body_parts:
@@ -540,7 +540,7 @@ def _parse_ast_while_statement(statement: str, parser, converter) -> Optional[Li
         condition_node = parser.parse_expression(condition_part)
 
         # Parse body statements (excluding any WEND statement)
-        body_parts = BasicParser.split_on_delimiter_paren_aware(body_part)
+        body_parts = StatementSplitter.split_on_delimiter_paren_aware(body_part)
         body_statements = []
 
         for part in body_parts:
@@ -593,7 +593,7 @@ def _parse_ast_do_statement(statement: str, parser, converter) -> Optional[List[
             condition_position = 'TOP'
 
         # Parse body statements and look for LOOP statement
-        body_parts = BasicParser.split_on_delimiter_paren_aware(body_part)
+        body_parts = StatementSplitter.split_on_delimiter_paren_aware(body_part)
         body_statements = []
 
         for part in body_parts:
@@ -690,7 +690,7 @@ def _parse_if_body(body: str, parser) -> list:
                 return [result]
 
     # Whole-body parse failed, incomplete, or contains file I/O — split on colons
-    parts = BasicParser.split_on_delimiter_paren_aware(body)
+    parts = StatementSplitter.split_on_delimiter_paren_aware(body)
     statements = []
     for part in parts:
         part_stripped = part.strip()

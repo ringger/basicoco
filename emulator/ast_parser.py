@@ -154,7 +154,7 @@ class ASTParser:
 
             # Check for colon separator
             if not (self._match('PUNCTUATION') and
-                    self._current_token().get('value') == ':'):
+                    self._current_token()['value'] == ':'):
                 break
             self._advance()  # consume ':'
 
@@ -600,7 +600,7 @@ class ASTParser:
                 )
 
             # Known function without parentheses (e.g., INKEY$, MEM)
-            elif name.upper() in self.known_functions:
+            elif name in self.known_functions:
                 return FunctionCallNode(
                     function_name=name,
                     arguments=[],
@@ -783,7 +783,7 @@ class ASTParser:
         body_statements = []
 
         # Check if there's a colon indicating body statements
-        if self._match('PUNCTUATION') and self._current_token().get('value') == ':':
+        if self._match('PUNCTUATION') and self._current_token()['value'] == ':':
             self._advance()  # consume ':'
 
             # Parse statements until we hit NEXT or end of tokens
@@ -791,17 +791,17 @@ class ASTParser:
                 current_token = self._current_token()
 
                 # Stop if we hit NEXT (end of FOR body)
-                if (current_token and current_token.get('type') == 'KEYWORD'
-                    and current_token.get('value') == 'NEXT'):
+                if (current_token['type'] == 'KEYWORD'
+                    and current_token['value'] == 'NEXT'):
                     break
 
                 # Stop if we hit another colon followed by NEXT
-                if (current_token and current_token.get('type') == 'PUNCTUATION'
-                    and current_token.get('value') == ':'
+                if (current_token['type'] == 'PUNCTUATION'
+                    and current_token['value'] == ':'
                     and self.current + 1 < len(self.tokens)):
                     next_token = self.tokens[self.current + 1]
-                    if (next_token.get('type') == 'KEYWORD'
-                        and next_token.get('value') == 'NEXT'):
+                    if (next_token['type'] == 'KEYWORD'
+                        and next_token['value'] == 'NEXT'):
                         break
 
                 # Parse the statement
@@ -811,7 +811,7 @@ class ASTParser:
 
                     # Consume optional colon separator
                     if (self._match('PUNCTUATION') and
-                        self._current_token().get('value') == ':'):
+                        self._current_token()['value'] == ':'):
                         self._advance()
                 except (RegistryCommandError, ValueError, IndexError,
                         KeyError, AttributeError):
@@ -916,12 +916,12 @@ class ASTParser:
         separators = []
 
         # Detect bare PRINT with no expression. A keyword (ELSE, NEXT, etc.)
-        # or non-expression punctuation (:) means end of PRINT. But (, ;, ,,
-        # +, - can start or continue an expression so we must not stop there.
+        # or non-expression punctuation (:) means end of PRINT. Parentheses,
+        # semicolons, and commas can start or continue an expression.
         token = self._current_token()
         if not token or token['type'] == 'KEYWORD' or (
             token['type'] == 'PUNCTUATION'
-            and token['value'] not in ('(', ';', ',', '-', '+')
+            and token['value'] not in ('(', ';', ',')
         ):
             return PrintStatementNode(
                 expressions=expressions,
