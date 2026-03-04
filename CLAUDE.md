@@ -6,7 +6,7 @@
 
 1. **Multi-line IF** — bare `IF cond THEN` (no action). Must be first because the AST parser can't parse it.
 2. **File I/O intercepts** — PRINT#, INPUT#, LINE INPUT# (and console LINE INPUT). Intercepted before AST because the AST parser doesn't understand `#` syntax.
-3. **`_try_ast_execute()`** — AST-migrated commands: END, GOTO, LET, PRINT, GOSUB, RETURN, FOR, EXIT FOR, WHILE, DO, IF, INPUT, ON (GOTO/GOSUB and ERROR GOTO). Also implicit assignment (`X = 5`).
+3. **`_try_ast_execute()`** — anything not in the `CommandRegistry`. The parser knows registry command keywords via `registry_commands` set and raises `RegistryCommandError` for them. Handles: END, GOTO, LET, PRINT, GOSUB, RETURN, FOR, EXIT FOR, WHILE, DO, IF, INPUT, ON (GOTO/GOSUB and ERROR GOTO), and implicit assignment (`X = 5`).
 4. **`CommandRegistry`** — everything else: NEXT, WEND, LOOP, ELSE, ENDIF, DIM, STOP, CONT, DATA, READ, RESTORE, SOUND, PAUSE, etc.
 
 New control flow → AST visitor in `ast_evaluator.py`. New utility command → registry via `execute_*`. New BASIC function → `functions.py` only.

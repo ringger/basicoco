@@ -97,17 +97,15 @@ class CoCoBasic:
         self.ast_parser = ASTParser(known_functions=set(self.function_registry.list_functions()))
         self.ast_evaluator = ASTEvaluator(self)
 
-        # AST-based execution: commands in this set use AST parse+visit instead of registry
-        self._ast_migrated_commands = {'END', 'GOTO', 'LET', 'PRINT', 'GOSUB', 'RETURN', 'FOR', 'EXIT', 'WHILE', 'DO', 'IF', 'INPUT', 'ON'}
-
         # Initialize file manager and program executor
         self.file_manager = FileManager(self)
         self.file_io = FileIOManager(self)
         self.executor = ProgramExecutor(self)
 
-        # Initialize command registry
+        # Initialize command registry and teach parser about registry commands
         self.command_registry = CommandRegistry()
         self._register_all_commands()
+        self.ast_parser.registry_commands = set(self.command_registry.commands.keys())
     
     def emit_output(self, output):
         """
@@ -327,16 +325,23 @@ class CoCoBasic:
                 any(upper.startswith(p) for p in self._STRUCTURAL_PREFIXES)):
             self.expanded_program[(line_num, sub_index)] = stmt
             return
-        # Only pre-parse AST-migrated commands and implicit assignments
-        first_word = upper.split(None, 1)[0] if upper else ''
-        is_migrated = first_word in self._ast_migrated_commands
-        is_assignment = '=' in stmt and first_word not in (
-            self.command_registry.commands | self.command_registry.aliases)
-        if not is_migrated and not is_assignment:
+        # Only try to parse statements that start with a letter (commands/assignments).
+        # Bare numbers like '50' (implicit GOTO) must stay as text for process_statement.
+        first_char = upper[0] if upper else ''
+        if not first_char.isalpha():
             self.expanded_program[(line_num, sub_index)] = stmt
             return
+        # Try to pre-parse as AST; parser raises RegistryCommandError for
+        # commands it can't handle, so no need to check a migrated-commands set
         try:
-            self.expanded_program[(line_num, sub_index)] = self.ast_parser.parse_statement(stmt)
+            from .ast_nodes import VariableNode, LiteralNode
+            node = self.ast_parser.parse_statement(stmt)
+            # Bare expressions (variable refs, literals) aren't valid statements —
+            # keep as text so process_statement can route them properly
+            if isinstance(node, (VariableNode, LiteralNode)):
+                self.expanded_program[(line_num, sub_index)] = stmt
+            else:
+                self.expanded_program[(line_num, sub_index)] = node
         except Exception:
             self.expanded_program[(line_num, sub_index)] = stmt
 
@@ -443,34 +448,21 @@ class CoCoBasic:
             self.restore_execution_state(saved_state)
 
     def _try_ast_execute(self, code):
-        """Try to execute a statement via AST. Returns None if not migrated."""
-        if not self._ast_migrated_commands:
-            return None
+        """Try to execute a statement via AST. Returns None if not handled."""
+        from .ast_parser import RegistryCommandError
 
         code_stripped = code.strip()
         code_upper = code_stripped.upper()
         parts = code_upper.split(None, 1)
         first_word = parts[0] if parts else ''
 
-        if first_word not in self._ast_migrated_commands:
-            # Check for implicit assignment (no LET keyword)
-            if 'LET' in self._ast_migrated_commands and '=' in code_stripped:
-                # Avoid misidentifying comparisons (IF X=5, etc.)
-                lhs = code_stripped.split('=', 1)[0]
-                if not any(op in lhs for op in ['<', '>', '!']):
-                    # Don't treat keyword statements as assignments
-                    # (e.g., FOR I = 1 TO 10 contains '=' but isn't assignment)
-                    if first_word in self.command_registry.commands or first_word in self.command_registry.aliases:
-                        return None
-                    # First token must start with a letter to be a variable name
-                    lhs_stripped = lhs.strip()
-                    if not lhs_stripped or not lhs_stripped[0].isalpha():
-                        return None
-                    first_word = 'LET'
-                else:
-                    return None
-            else:
-                return None
+        # Registry commands skip AST parsing (cheap early-out)
+        if first_word in self.ast_parser.registry_commands:
+            return None
+
+        # Must start with a letter to be a valid statement
+        if not code_stripped or not code_stripped[0].isalpha():
+            return None
 
         # Validate IF statements require THEN keyword
         if first_word == 'IF' and 'THEN' not in code_upper:
@@ -492,10 +484,11 @@ class CoCoBasic:
             if not isinstance(result, list):
                 return None  # Not a valid statement result, fall back
             return result
+        except RegistryCommandError:
+            return None  # Fall through to registry
         except (ValueError, IndexError, KeyError, AttributeError, TypeError, ZeroDivisionError) as e:
             error_msg = str(e)
-            # For migrated commands, return parse/execution errors instead of falling through
-            if first_word in self._ast_migrated_commands and error_msg:
+            if error_msg:
                 error = self.error_context.syntax_error(
                     error_msg,
                     self.current_line,

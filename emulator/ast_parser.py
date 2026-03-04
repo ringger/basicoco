@@ -22,6 +22,11 @@ from .ast_nodes import (
 from .error_context import ErrorContextManager
 
 
+class RegistryCommandError(ValueError):
+    """Raised when the parser encounters a registry command it can't handle."""
+    pass
+
+
 class ASTParser:
     """
     Advanced parser that generates Abstract Syntax Trees for BASIC code.
@@ -30,13 +35,14 @@ class ASTParser:
     and lays the foundation for advanced language features.
     """
 
-    def __init__(self, known_functions=None):
+    def __init__(self, known_functions=None, registry_commands=None):
         self.tokens = []
         self.current = 0
         self.error_context = ErrorContextManager()
         self.current_line = 1
         self.current_column = 1
         self.known_functions = known_functions or set()
+        self.registry_commands = registry_commands or set()
 
     def parse_program(self, program_lines: Dict[int, str]) -> ProgramNode:
         """Parse a complete BASIC program into a PROGRAM node"""
@@ -680,7 +686,10 @@ class ASTParser:
         if self._match('KEYWORD') and token['value'] == 'ON':
             return self._parse_on_statement()
 
-        # More statements can be added here...
+        # Known registry command — parser can't handle it
+        token_value = str(token['value']).upper()
+        if token_value in self.registry_commands:
+            raise RegistryCommandError(f"Registry command: {token_value}")
 
         # Fallback: treat as expression
         return self._parse_or_expression()
@@ -689,6 +698,10 @@ class ASTParser:
         """Check if the current tokens form an assignment"""
         # Look for pattern: IDENTIFIER [indices] = expression
         if not self._match('IDENTIFIER'):
+            return False
+
+        # Reject registry command names as assignment targets
+        if self._current_token()['value'].upper() in self.registry_commands:
             return False
 
         # Look ahead for = sign
