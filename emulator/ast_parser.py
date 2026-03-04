@@ -9,7 +9,7 @@ is in ast_evaluator.py.
 from typing import Any, List, Optional, Dict
 
 from .ast_nodes import (
-    ASTNode, SourceLocation, NodeType, Operator,
+    ASTNode, SourceLocation, Operator,
     LiteralNode, VariableNode, BinaryOpNode, UnaryOpNode,
     FunctionCallNode, ArrayAccessNode, AssignmentNode,
     IfStatementNode, ForStatementNode, WhileStatementNode,
@@ -476,7 +476,7 @@ class ASTParser:
         left = self._parse_power_expression()
 
         while (self._match('OPERATOR') and self._current_token()['value'] in ['*', '/']) or \
-              (self._match('KEYWORD') and self._current_token()['value'].upper() == 'MOD'):
+              self._match_value('MOD'):
             op_token = self._advance()
             right = self._parse_power_expression()
 
@@ -792,7 +792,7 @@ class ASTParser:
 
                 # Stop if we hit NEXT (end of FOR body)
                 if (current_token and current_token.get('type') == 'KEYWORD'
-                    and current_token.get('value', '').upper() == 'NEXT'):
+                    and current_token.get('value') == 'NEXT'):
                     break
 
                 # Stop if we hit another colon followed by NEXT
@@ -801,7 +801,7 @@ class ASTParser:
                     and self.current + 1 < len(self.tokens)):
                     next_token = self.tokens[self.current + 1]
                     if (next_token.get('type') == 'KEYWORD'
-                        and next_token.get('value', '').upper() == 'NEXT'):
+                        and next_token.get('value') == 'NEXT'):
                         break
 
                 # Parse the statement
@@ -833,8 +833,7 @@ class ASTParser:
         while_token = self._advance()  # consume 'WHILE'
         condition = self._parse_or_expression()
 
-        # For now, body is empty - will be filled by statement grouping
-        # In a full implementation, we'd parse until WEND
+        # Body is empty here — the converter fills it from following lines
         body = BlockNode(statements=[], location=self._make_location(while_token))
 
         return WhileStatementNode(
@@ -862,8 +861,7 @@ class ASTParser:
             condition_type = 'UNTIL'
             condition_position = 'TOP'
 
-        # For now, body is empty - will be filled by statement grouping
-        # In a full implementation, we'd parse until LOOP
+        # Body is empty here — the converter fills it from following lines
         body = BlockNode(statements=[], location=self._make_location(do_token))
 
         return DoLoopStatementNode(
@@ -917,12 +915,13 @@ class ASTParser:
         expressions = []
         separators = []
 
-        # Handle empty PRINT (but '(' starts an expression, not end-of-statement)
-        if not self._current_token() or (
-            self._current_token()['type'] == 'KEYWORD'
-        ) or (
-            self._current_token()['type'] == 'PUNCTUATION'
-            and self._current_token()['value'] not in ['(', ';', ',', '-', '+']
+        # Detect bare PRINT with no expression. A keyword (ELSE, NEXT, etc.)
+        # or non-expression punctuation (:) means end of PRINT. But (, ;, ,,
+        # +, - can start or continue an expression so we must not stop there.
+        token = self._current_token()
+        if not token or token['type'] == 'KEYWORD' or (
+            token['type'] == 'PUNCTUATION'
+            and token['value'] not in ('(', ';', ',', '-', '+')
         ):
             return PrintStatementNode(
                 expressions=expressions,
@@ -937,11 +936,10 @@ class ASTParser:
             sep_token = self._advance()
             separators.append(sep_token['value'])
 
-            # Check if there's another expression
-            if (self._current_token() and
-                self._current_token()['type'] not in ['KEYWORD'] and
-                not (self._current_token()['type'] == 'PUNCTUATION' and
-                     self._current_token()['value'] in [';', ','])):
+            # Check if there's another expression (not a keyword or another separator)
+            token = self._current_token()
+            if (token and token['type'] != 'KEYWORD' and
+                not (token['type'] == 'PUNCTUATION' and token['value'] in (';', ','))):
                 expressions.append(self._parse_or_expression())
 
         return PrintStatementNode(
@@ -1063,8 +1061,7 @@ class ASTParser:
         on_token = self._advance()  # consume 'ON'
 
         # ON ERROR GOTO line
-        if (self._current_token() and
-                self._current_token()['value'].upper() == 'ERROR'):
+        if self._match_value('ERROR'):
             self._advance()  # consume 'ERROR'
             if not (self._match('KEYWORD') and
                     self._current_token()['value'] == 'GOTO'):
