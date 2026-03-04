@@ -213,8 +213,8 @@ class TestOnCommand:
 
     def test_on_commands_invalid_line_numbers(self, basic, helpers):
         """Test ON commands with invalid line number syntax"""
-        basic.process_command('10 X = 1')
-        
+        basic.variables['X'] = 1
+
         # Test with truly non-numeric line numbers (string literals)
         result = basic.process_command('ON X GOTO "ABC","DEF"')
         error_messages = helpers.get_error_messages(result)

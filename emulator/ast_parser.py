@@ -15,7 +15,9 @@ from .ast_nodes import (
     IfStatementNode, ForStatementNode, WhileStatementNode,
     DoLoopStatementNode, ExitForStatementNode, EndStatementNode,
     GotoStatementNode, PrintStatementNode, GosubStatementNode,
-    ReturnStatementNode, InputStatementNode, ProgramNode, BlockNode
+    ReturnStatementNode, InputStatementNode,
+    OnBranchStatementNode, OnErrorGotoNode,
+    ProgramNode, BlockNode
 )
 from .error_context import ErrorContextManager
 
@@ -674,6 +676,10 @@ class ASTParser:
         if self._match('KEYWORD') and token['value'] == 'INPUT':
             return self._parse_input_statement()
 
+        # ON statement (ON GOTO/GOSUB, ON ERROR GOTO)
+        if self._match('KEYWORD') and token['value'] == 'ON':
+            return self._parse_on_statement()
+
         # More statements can be added here...
 
         # Fallback: treat as expression
@@ -1090,3 +1096,47 @@ class ASTParser:
             )
 
         return VariableNode(name=var_token['value'], location=var_location)
+
+    def _parse_on_statement(self) -> ASTNode:
+        """Parse ON ERROR GOTO or ON expr GOTO/GOSUB"""
+        on_token = self._advance()  # consume 'ON'
+
+        # ON ERROR GOTO line
+        if (self._current_token() and
+                self._current_token()['value'].upper() == 'ERROR'):
+            self._advance()  # consume 'ERROR'
+            if not (self._match('KEYWORD') and
+                    self._current_token()['value'] == 'GOTO'):
+                error = self.error_context.syntax_error(
+                    "Expected ON ERROR GOTO line",
+                    self.current_line,
+                    suggestions=["Use ON ERROR GOTO 100",
+                                 "Use ON ERROR GOTO 0 to disable handler"])
+                raise ValueError(error.format_message())
+            self._advance()  # consume 'GOTO'
+            target_line = self._parse_or_expression()
+            return OnErrorGotoNode(target_line,
+                                   location=self._make_location(on_token))
+
+        # ON expr GOTO/GOSUB line1,line2,...
+        expression = self._parse_or_expression()
+
+        if not self._match('KEYWORD') or self._current_token()['value'] not in ('GOTO', 'GOSUB'):
+            error = self.error_context.syntax_error(
+                "ON requires GOTO or GOSUB",
+                self.current_line,
+                suggestions=["Use ON expression GOTO line1,line2,...",
+                             "Use ON expression GOSUB line1,line2,..."])
+            raise ValueError(error.format_message())
+
+        branch_type = self._advance()['value']  # consume 'GOTO' or 'GOSUB'
+
+        # Parse comma-separated list of target line expressions
+        targets = [self._parse_or_expression()]
+        while (self._match('PUNCTUATION') and
+               self._current_token()['value'] == ','):
+            self._advance()  # consume ','
+            targets.append(self._parse_or_expression())
+
+        return OnBranchStatementNode(expression, branch_type, targets,
+                                     location=self._make_location(on_token))

@@ -14,6 +14,7 @@ from .ast_nodes import (
     GosubStatementNode, ReturnStatementNode, InputStatementNode,
     AssignmentNode, BlockNode, VariableNode, LiteralNode,
     BinaryOpNode, UnaryOpNode, FunctionCallNode, ArrayAccessNode,
+    OnBranchStatementNode, OnErrorGotoNode,
     Operator, NodeType, ASTVisitor
 )
 
@@ -235,6 +236,17 @@ class ASTStatementConverter(ASTVisitor):
         # it should be treated as a GOTO target expression
         expr_str = self._expression_to_string(node)
         self.statements.append(f"GOTO {expr_str}")
+
+    def visit_on_branch_statement(self, node: OnBranchStatementNode) -> None:
+        """Convert ON expr GOTO/GOSUB back to string form"""
+        expr_str = self._expression_to_string(node.expression)
+        targets_str = ','.join(self._expression_to_string(t) for t in node.targets)
+        self.statements.append(f"ON {expr_str} {node.branch_type} {targets_str}")
+
+    def visit_on_error_goto(self, node: OnErrorGotoNode) -> None:
+        """Convert ON ERROR GOTO back to string form"""
+        target_str = self._expression_to_string(node.target_line)
+        self.statements.append(f"ON ERROR GOTO {target_str}")
 
     def generic_visit(self, node: ASTNode) -> None:
         """Handle any other statement types by converting to string"""

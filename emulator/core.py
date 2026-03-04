@@ -98,7 +98,7 @@ class CoCoBasic:
         self.ast_evaluator = ASTEvaluator(self)
 
         # AST-based execution: commands in this set use AST parse+visit instead of registry
-        self._ast_migrated_commands = {'END', 'GOTO', 'LET', 'PRINT', 'GOSUB', 'RETURN', 'FOR', 'EXIT', 'WHILE', 'DO', 'IF', 'INPUT'}
+        self._ast_migrated_commands = {'END', 'GOTO', 'LET', 'PRINT', 'GOSUB', 'RETURN', 'FOR', 'EXIT', 'WHILE', 'DO', 'IF', 'INPUT', 'ON'}
 
         # Initialize file manager and program executor
         self.file_manager = FileManager(self)
@@ -1094,114 +1094,7 @@ class CoCoBasic:
         self.data_pointer = 0
         return []
     
-    def execute_on(self, args):
-        """ON expression GOTO/GOSUB line1,line2,line3... or ON ERROR GOTO line"""
-        args = args.strip()
-
-        # Check for ON ERROR GOTO before normal ON...GOTO/GOSUB
-        args_upper = args.upper().lstrip()
-        if args_upper.startswith('ERROR'):
-            match = re.match(r'ERROR\s+GOTO\s+(\d+)\s*$', args_upper)
-            if not match:
-                error = self.error_context.syntax_error(
-                    "Expected ON ERROR GOTO line",
-                    self.current_line,
-                    suggestions=["Use ON ERROR GOTO 100",
-                                 "Use ON ERROR GOTO 0 to disable handler"])
-                return error_response(error)
-            target = int(match.group(1))
-            if target == 0:
-                self.on_error_goto_line = None
-                if self.in_error_handler:
-                    self.in_error_handler = False
-                    error = self.error_context.runtime_error(
-                        f"ERROR IN {self.error_line}")
-                    return error_response(error)
-                return []
-            self.on_error_goto_line = target
-            return []
-
-        # Parse: ON expression GOTO/GOSUB lines
-        # First find GOTO or GOSUB keyword
-        goto_pos = args.upper().find(' GOTO ')
-        gosub_pos = args.upper().find(' GOSUB ')
-        
-        if goto_pos == -1 and gosub_pos == -1:
-            error = self.error_context.syntax_error(
-                "ON requires GOTO or GOSUB",
-                self.current_line,
-                suggestions=["Use ON expression GOTO line1,line2,...",
-                           "Use ON expression GOSUB line1,line2,..."]
-            )
-            return error_response(error)
-        
-        # Determine which command and split
-        if goto_pos != -1 and (gosub_pos == -1 or goto_pos < gosub_pos):
-            command = 'GOTO'
-            expr_part = args[:goto_pos].strip()
-            line_part = args[goto_pos + 6:].strip()  # Skip ' GOTO '
-        else:
-            command = 'GOSUB'
-            expr_part = args[:gosub_pos].strip()
-            line_part = args[gosub_pos + 7:].strip()  # Skip ' GOSUB '
-        
-        # Remove leading 'ON' if present
-        if expr_part.upper().startswith('ON '):
-            expr_part = expr_part[3:].strip()
-        elif expr_part.upper() == 'ON':
-            error = self.error_context.syntax_error(
-                "ON requires an expression",
-                self.current_line,
-                suggestions=["Provide a numeric expression after ON"]
-            )
-            return error_response(error)
-        
-        # Evaluate the expression
-        try:
-            value = self.evaluate_expression(expr_part, self.current_line)
-            # Convert to integer and ensure it's 1-based
-            index = int(value)
-        except (ValueError, TypeError) as e:
-            error = self.error_context.runtime_error(
-                f"ON expression error: {str(e)}",
-                suggestions=["Ensure the expression evaluates to a number",
-                           "Check variable values"]
-            )
-            return error_response(error)
-        
-        # Parse line numbers using expression evaluation
-        try:
-            line_parts = [part.strip() for part in line_part.split(',')]
-            line_numbers = []
-            for part in line_parts:
-                if part:
-                    line_numbers.append(self.eval_int(part, self.current_line))
-        except (ValueError, TypeError) as e:
-            error = self.error_context.syntax_error(
-                f"INVALID line numbers in ON statement: {str(e)}",
-                self.current_line,
-                suggestions=["Use comma-separated line numbers or expressions",
-                           "Example: ON X GOTO 100,200,300",
-                           "Example: ON X GOTO START,LOOP,END"]
-            )
-            return error_response(error)
-        
-        # Check if index is within range (1-based indexing)
-        if index < 1 or index > len(line_numbers):
-            # If out of range, continue to next statement (standard BASIC behavior)
-            return []
-        
-        # Get the target line number (1-based indexing)
-        target_line = line_numbers[index - 1]
-        
-        # Return jump directive directly
-        if command == 'GOTO':
-            return [{'type': 'jump', 'line': target_line}]
-        elif command == 'GOSUB':
-            self.call_stack.append((self.current_line, self.current_sub_line))
-            return [{'type': 'jump', 'line': target_line}]
-        return []
-    
+    # ON GOTO/GOSUB and ON ERROR GOTO migrated to AST (ast_evaluator.py)
     # INKEY$ functionality moved to functions.py function registry
     # Keyboard buffer management now handled by function registry
     
@@ -1216,11 +1109,6 @@ class CoCoBasic:
         self.file_io.register_commands(self.command_registry)
         # Core commands - control flow
         # Note: IF, GOTO, GOSUB, RETURN, FOR, WHILE, EXIT, DO, END are handled by AST execution
-        self.command_registry.register('ON', self.execute_on,
-                                     category='control',
-                                     description="Multi-way branch based on expression value",
-                                     syntax="ON expression GOTO/GOSUB line1,line2,...",
-                                     examples=["ON X GOTO 100,200,300", "ON A+1 GOSUB 1000,2000,3000"])
 
         self.command_registry.register('NEXT', self.execute_next,
                                      category='control',

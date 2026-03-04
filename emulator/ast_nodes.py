@@ -45,6 +45,8 @@ class NodeType(Enum):
     END_STATEMENT = "end_statement"
 
     DO_LOOP_STATEMENT = "do_loop_statement"
+    ON_BRANCH_STATEMENT = "on_branch_statement"
+    ON_ERROR_GOTO = "on_error_goto"
 
     # Control Flow
     BLOCK = "block"
@@ -246,6 +248,22 @@ class InputStatementNode(ASTNode):
         super().__init__(NodeType.INPUT_STATEMENT, location)
         self.prompt = prompt
         self.variables = variables
+
+
+class OnBranchStatementNode(ASTNode):
+    """Node for ON expr GOTO/GOSUB line1,line2,..."""
+    def __init__(self, expression: ASTNode, branch_type: str, targets: List[ASTNode], location: Optional[SourceLocation] = None):
+        super().__init__(NodeType.ON_BRANCH_STATEMENT, location)
+        self.expression = expression      # Selector expression
+        self.branch_type = branch_type    # 'GOTO' or 'GOSUB'
+        self.targets = targets            # Line number expressions
+
+
+class OnErrorGotoNode(ASTNode):
+    """Node for ON ERROR GOTO line"""
+    def __init__(self, target_line: ASTNode, location: Optional[SourceLocation] = None):
+        super().__init__(NodeType.ON_ERROR_GOTO, location)
+        self.target_line = target_line    # 0 to disable
 
 
 class ProgramNode(ASTNode):

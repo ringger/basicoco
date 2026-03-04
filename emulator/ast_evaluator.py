@@ -14,7 +14,8 @@ from .ast_nodes import (
     ForStatementNode, WhileStatementNode, DoLoopStatementNode,
     ExitForStatementNode, EndStatementNode, GotoStatementNode,
     PrintStatementNode, GosubStatementNode, ReturnStatementNode,
-    InputStatementNode, ProgramNode, BlockNode,
+    InputStatementNode, OnBranchStatementNode, OnErrorGotoNode,
+    ProgramNode, BlockNode,
     Operator, basic_truthy
 )
 from .error_context import error_response
@@ -547,6 +548,62 @@ class ASTEvaluator(ASTVisitor):
 
         self.emulator.call_stack.append((self.emulator.current_line, self.emulator.current_sub_line))
         return [{'type': 'jump', 'line': line_num}]
+
+    def visit_on_branch_statement(self, node: OnBranchStatementNode) -> Any:
+        """Visit ON expr GOTO/GOSUB statement"""
+        try:
+            value = self.visit(node.expression)
+            index = int(value)
+        except (ValueError, TypeError) as e:
+            error = self.emulator.error_context.runtime_error(
+                f"ON expression error: {str(e)}",
+                suggestions=["Ensure the expression evaluates to a number",
+                             "Check variable values"])
+            return error_response(error)
+
+        # Out of range: continue to next statement (standard BASIC behavior)
+        if index < 1 or index > len(node.targets):
+            return []
+
+        # Evaluate the selected target line number
+        try:
+            target_line = int(self.visit(node.targets[index - 1]))
+        except (ValueError, TypeError) as e:
+            error = self.emulator.error_context.syntax_error(
+                f"Invalid line number in ON statement: {str(e)}",
+                self.emulator.current_line,
+                suggestions=["Use comma-separated line numbers or expressions",
+                             "Example: ON X GOTO 100,200,300"])
+            return error_response(error)
+
+        if node.branch_type == 'GOSUB':
+            self.emulator.call_stack.append((self.emulator.current_line, self.emulator.current_sub_line))
+
+        return [{'type': 'jump', 'line': target_line}]
+
+    def visit_on_error_goto(self, node: OnErrorGotoNode) -> Any:
+        """Visit ON ERROR GOTO statement"""
+        try:
+            target = int(self.visit(node.target_line))
+        except (ValueError, TypeError):
+            error = self.emulator.error_context.syntax_error(
+                "Expected ON ERROR GOTO line",
+                self.emulator.current_line,
+                suggestions=["Use ON ERROR GOTO 100",
+                             "Use ON ERROR GOTO 0 to disable handler"])
+            return error_response(error)
+
+        if target == 0:
+            self.emulator.on_error_goto_line = None
+            if self.emulator.in_error_handler:
+                self.emulator.in_error_handler = False
+                error = self.emulator.error_context.runtime_error(
+                    f"ERROR IN {self.emulator.error_line}")
+                return error_response(error)
+            return []
+
+        self.emulator.on_error_goto_line = target
+        return []
 
     def visit_return_statement(self, node: ReturnStatementNode) -> Any:
         """Visit RETURN statement"""
