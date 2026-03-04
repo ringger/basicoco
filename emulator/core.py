@@ -325,13 +325,10 @@ class CoCoBasic:
                 any(upper.startswith(p) for p in self._STRUCTURAL_PREFIXES)):
             self.expanded_program[(line_num, sub_index)] = stmt
             return
-        # Try to pre-parse as AST; parser raises RegistryCommandError for
-        # commands it can't handle and ValueError for anything it doesn't
-        # recognize (bare expressions, numbers, unknown identifiers)
-        try:
-            self.expanded_program[(line_num, sub_index)] = self.ast_parser.parse_statement(stmt)
-        except Exception:
-            self.expanded_program[(line_num, sub_index)] = stmt
+        # Try to pre-parse as AST; returns None for registry commands,
+        # unknown identifiers, and anything else the parser can't handle
+        node = self.ast_parser.try_parse_statement(stmt)
+        self.expanded_program[(line_num, sub_index)] = node if node is not None else stmt
 
     # ------------------------------------------------------------------
     # Shared execution engine
@@ -437,8 +434,6 @@ class CoCoBasic:
 
     def _try_ast_execute(self, code):
         """Try to execute a statement via AST. Returns None if not handled."""
-        from .ast_parser import RegistryCommandError
-
         code_stripped = code.strip()
         if not code_stripped:
             return None
@@ -460,15 +455,33 @@ class CoCoBasic:
             )
             return error_response(error)
 
+        from .ast_parser import RegistryCommandError
         try:
             ast_node = self.ast_parser.parse_statement(code_stripped)
+        except RegistryCommandError:
+            return None  # Not an AST-handled statement
+        except (ValueError, IndexError, KeyError, AttributeError) as e:
+            # Genuine parse error in an AST-handled statement
+            error_msg = str(e)
+            if error_msg:
+                error = self.error_context.syntax_error(
+                    error_msg,
+                    self.current_line,
+                    suggestions=[
+                        f'Check {first_word} syntax',
+                        'Use HELP to see command syntax',
+                        'Check BASIC reference for proper syntax'
+                    ]
+                )
+                return error_response(error)
+            return None
+
+        try:
             result = self.ast_evaluator.visit(ast_node)
             # Ensure result is a list (statement results must be List[Dict])
             if not isinstance(result, list):
-                return None  # Not a valid statement result, fall back
+                return None
             return result
-        except RegistryCommandError:
-            return None  # Fall through to registry
         except (ValueError, IndexError, KeyError, AttributeError, TypeError, ZeroDivisionError) as e:
             error_msg = str(e)
             if error_msg:
@@ -482,7 +495,7 @@ class CoCoBasic:
                     ]
                 )
                 return error_response(error)
-            return None  # Fall back to registry
+            return None
 
     def process_statement(self, code):
         if not code.strip():

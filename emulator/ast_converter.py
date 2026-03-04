@@ -679,8 +679,8 @@ def _parse_if_body(body: str, parser) -> list:
     # Skip whole-body parse if body contains file I/O commands — the AST
     # parser's PRINT handler would silently drop the '#' from PRINT#
     if not _has_file_io_command(body):
-        try:
-            result = parser.parse_statement(body)
+        result = parser.try_parse_statement(body)
+        if result is not None:
             if parser.current >= len(parser.tokens):
                 # Parser consumed everything — use this result
                 return [result]
@@ -688,8 +688,6 @@ def _parse_if_body(body: str, parser) -> list:
             # unconsumed, WHILE leaves WEND, etc.) — the converter handles it
             if isinstance(result, _CONTROL_STRUCTURES):
                 return [result]
-        except (ValueError, IndexError, KeyError, AttributeError):
-            pass
 
     # Whole-body parse failed, incomplete, or contains file I/O — split on colons
     parts = BasicParser.split_on_delimiter_paren_aware(body)
@@ -734,15 +732,13 @@ def _parse_body_statement(statement: str, parser) -> ASTNode:
             stmt_upper.startswith('LINE INPUT')):
         return LiteralNode(statement)
 
-    try:
-        result = parser.parse_statement(statement)
+    result = parser.try_parse_statement(statement)
+    if result is not None:
         # Verify the parser consumed all tokens — a partial parse means
         # the parser didn't understand the full statement (e.g., it parsed
         # "SOUND" as a variable name and dropped "F1+RF,8")
-        if parser.current < len(parser.tokens):
-            return LiteralNode(statement)
-        return result
-    except (ValueError, IndexError, KeyError, AttributeError):
-        return LiteralNode(statement)
+        if parser.current >= len(parser.tokens):
+            return result
+    return LiteralNode(statement)
 
 

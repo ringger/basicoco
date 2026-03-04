@@ -96,6 +96,10 @@ class ASTParser:
         """
         Parse a BASIC statement into an AST.
 
+        Raises ValueError for syntax errors and RegistryCommandError for
+        registry commands. Use try_parse_statement() for callers that just
+        want None on failure.
+
         Args:
             stmt_str: The statement string to parse
             line: Source line number for error reporting
@@ -120,6 +124,19 @@ class ASTParser:
             raise ValueError(error.format_message())
 
         return self._parse_statement_sequence()
+
+    def try_parse_statement(self, stmt_str: str, line: int = 1):
+        """
+        Try to parse a BASIC statement. Returns None if the parser can't
+        handle it (registry commands, unknown identifiers, syntax errors).
+
+        Use this instead of wrapping parse_statement() in try/except.
+        """
+        try:
+            return self.parse_statement(stmt_str, line)
+        except (RegistryCommandError, ValueError, IndexError,
+                KeyError, AttributeError):
+            return None
 
     def _parse_statement_sequence(self) -> ASTNode:
         """
