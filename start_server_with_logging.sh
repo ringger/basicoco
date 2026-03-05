@@ -19,7 +19,7 @@ YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
-echo -e "${BLUE}=== TRS-80 BASIC Emulator Server Startup ===${NC}"
+echo -e "${BLUE}=== BasiCoCo Server Startup ===${NC}"
 echo "Script directory: $SCRIPT_DIR"
 echo "Log directory: $LOG_DIR"
 echo "Log file: $LOG_FILE"

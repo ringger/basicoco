@@ -18,6 +18,7 @@ This directory contains BASIC programs for BasiCoCo.
 
 ### File I/O
 - **address_book.bas** - Contact manager with save/load (OPEN, CLOSE, PRINT#, INPUT#, LINE INPUT, EOF, ON ERROR GOTO)
+- **graph_chart.bas** - Graphical bar chart from file data (OPEN, INPUT#, PRINT#, PMODE, LINE, PAINT, PSET, ON ERROR GOTO)
 
 ### Graphics Demos
 - **bounce_pause.bas** - Bouncing animation with PAUSE command

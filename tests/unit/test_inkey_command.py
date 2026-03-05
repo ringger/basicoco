@@ -133,11 +133,16 @@ class TestInkeyCommand:
         loop_messages = [output for output in text_outputs1 if 'LOOP' in output]
         assert len(loop_messages) > 0, "Should have loop iteration messages"
         
-        # Test with key pressed early
+        # Test with key pressed early — inject after RUN clears state
         basic.process_command('NEW')  # Clear program state
         helpers.load_program(basic, program)
-        basic.keyboard_buffer = ['Q']
+        original_clear = basic.clear_interpreter_state
+        def clear_then_inject(**kwargs):
+            original_clear(**kwargs)
+            basic.keyboard_buffer.append('Q')
+        basic.clear_interpreter_state = clear_then_inject
         results2 = basic.process_command('RUN')
+        basic.clear_interpreter_state = original_clear
         text_outputs2 = helpers.get_text_output(results2)
         
         # Should have the key press message

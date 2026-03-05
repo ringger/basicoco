@@ -11,6 +11,7 @@ outcome since they block in real-time delays.
 import pexpect
 import pytest
 import os
+import tempfile
 
 BASICOCO = os.path.join(os.path.dirname(__file__), '..', '..', 'basicoco.py')
 BASEDIR = os.path.join(os.path.dirname(__file__), '..', '..')
@@ -18,13 +19,13 @@ PROMPT = '> '
 TIMEOUT = 10
 
 
-def spawn_basic():
+def spawn_basic(cwd=None):
     """Start a fresh basicoco.py REPL session."""
     child = pexpect.spawn(
         f'python {BASICOCO}',
         encoding='utf-8',
         timeout=TIMEOUT,
-        cwd=BASEDIR,
+        cwd=cwd or BASEDIR,
     )
     child.expect('INSPIRED BY TANDY/RADIO SHACK')
     child.expect(PROMPT)
@@ -197,4 +198,22 @@ class TestInteractivePrograms:
         child.sendline('5')  # Quit
         child.expect(PROMPT, timeout=TIMEOUT)
         check_no_error(child.before)
+        child.close()
+
+    def test_graph_chart(self):
+        child = spawn_basic(cwd=tempfile.mkdtemp())
+        load_and_run(child, 'graph_chart')
+        child.expect('CHOOSE')
+        child.sendline('5')  # Create sample file
+        child.expect('CREATED')
+        child.expect('CHOOSE')
+        child.sendline('1')  # Load from file
+        child.expect('LOADED')
+        child.expect('CHOOSE')
+        child.sendline('4')  # Draw chart
+        child.expect('SCALE')
+        check_no_error(child.before)
+        child.expect('CHOOSE')
+        child.sendline('6')  # Quit
+        child.expect(PROMPT, timeout=TIMEOUT)
         child.close()

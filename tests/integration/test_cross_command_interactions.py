@@ -27,11 +27,18 @@ class TestCrossCommandInteraction:
         assert 'X' in text1
         assert len(basic.keyboard_buffer) == 0
         
-        # Test program mode (separate test since execute_program calls NEW which clears keyboard_buffer)
+        # Test program mode: RUN clears keyboard_buffer (like NEW), so inject
+        # the key after clear_interpreter_state runs but before INKEY$ executes.
         program = ['10 PRINT INKEY$']
         helpers.load_program(basic, program)
-        basic.keyboard_buffer = ['Y']  # Set key buffer after loading program
+        # Patch clear_interpreter_state to re-inject the key after clearing
+        original_clear = basic.clear_interpreter_state
+        def clear_then_inject(**kwargs):
+            original_clear(**kwargs)
+            basic.keyboard_buffer.append('Y')
+        basic.clear_interpreter_state = clear_then_inject
         results2 = basic.process_command('RUN')
+        basic.clear_interpreter_state = original_clear
         text2 = helpers.get_text_output(results2)
         assert 'Y' in ' '.join(text2)
         assert len(basic.keyboard_buffer) == 0

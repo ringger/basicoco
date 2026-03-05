@@ -7,6 +7,11 @@ import logging
 import os
 import uuid
 
+logging.basicConfig(
+    level=logging.DEBUG,
+    format='%(asctime)s %(levelname)s %(message)s',
+    datefmt='%H:%M:%S',
+)
 logger = logging.getLogger(__name__)
 
 app = Flask(__name__)

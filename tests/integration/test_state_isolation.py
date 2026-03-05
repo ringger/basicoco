@@ -34,12 +34,11 @@ class TestStateIsolation:
         # Clear with NEW
         result = basic.process_command('NEW')
 
-        # Verify everything is cleared (except key buffer which is preserved for INKEY$)
+        # Verify everything is cleared (including key buffer to prevent state contamination)
         assert 'A' not in basic.variables
         assert 'B' not in basic.arrays
         assert len(basic.program) == 0
-        # Key buffer should be preserved as per TRS-80 BASIC behavior
-        assert len(basic.keyboard_buffer) == 3
+        assert len(basic.keyboard_buffer) == 0
         
         # Should return READY message
         assert any(item.get('text') == 'READY' for item in result)

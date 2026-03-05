@@ -874,7 +874,7 @@ class CoCoBasic:
         self.current_line = 0
         self.current_sub_line = 0
         self.iteration_count = 0
-        # Don't clear keyboard buffer - preserve keys for INKEY$
+        self.keyboard_buffer.clear()
         self.graphics_mode = 0  # Reset to text mode
         self.screen_mode = 1  # Reset screen/color mode
         self.current_draw_color = 1  # Reset drawing color
