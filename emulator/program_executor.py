@@ -375,16 +375,11 @@ class ProgramExecutor:
 
         emu.running = True
 
-        # Pre-process DATA statements (already cleared by clear_interpreter_state above)
-        preprocessing_running = emu.running
-        emu.running = False  # Temporarily disable running flag for preprocessing
-        for line_num in sorted(emu.program.keys()):
-            line_code = emu.program[line_num].strip().upper()
-            if line_code.startswith('DATA '):
-                data_args = emu.program[line_num][4:].strip()
-                emu.current_line = line_num
-                emu.data_commands.execute_data(data_args)
-        emu.running = preprocessing_running  # Restore running flag
+        # Build data_statements from pre-collected data_values (parsed at store-time)
+        for line_num in sorted(emu.data_values.keys()):
+            emu.data_statements.extend(
+                [(line_num, v) for v in emu.data_values[line_num]]
+            )
 
         all_positions = sorted(emu.expanded_program.keys())
         output = self._execute_statements_loop(all_positions, 0)

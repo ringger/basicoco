@@ -196,7 +196,7 @@ Single-line compound statements like `IF A=1 THEN B=2: C=3` are expanded into mu
 
 ## Testing
 
-1083 tests passing.
+1086 tests passing.
 
 ```bash
 # Run all tests

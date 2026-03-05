@@ -37,6 +37,7 @@ class CoCoBasic:
         self.program = {}  # Line number -> code (original for LIST display)
         self.expanded_program = {}  # (line_num, sub_index) -> str or ASTNode (for execution)
         self.variables = {}
+        self.data_values = {}  # line_num -> list of parsed values (collected at store-time)
         self.data_statements = []
         self.data_pointer = 0
         self.running = False
@@ -144,6 +145,23 @@ class CoCoBasic:
         keys = [k for k in self.expanded_program if k[0] == line_num]
         for k in keys:
             del self.expanded_program[k]
+        self.data_values.pop(line_num, None)
+
+    def _collect_data_for_line(self, line_num):
+        """Scan expanded sublines for DATA statements and pre-parse their values."""
+        from .data_commands import DataCommands
+        values = []
+        for key, stmt in self.expanded_program.items():
+            if key[0] != line_num or not isinstance(stmt, str):
+                continue
+            upper = stmt.strip().upper()
+            if upper.startswith('DATA '):
+                args = stmt.strip()[5:]
+                values.extend(DataCommands.parse_data_values(args))
+        if values:
+            self.data_values[line_num] = values
+        else:
+            self.data_values.pop(line_num, None)
 
     @staticmethod
     def _system_ok():
@@ -309,13 +327,16 @@ class CoCoBasic:
                         stmt = statement.strip()
                         if stmt:
                             self._store_subline(line_num, i, stmt)
+                    self._collect_data_for_line(line_num)
                     return
             except (ValueError, IndexError, KeyError, AttributeError):
                 # Fall back to StatementSplitter if AST conversion fails
                 pass
 
         # Use StatementSplitter for normal statements
-        return StatementSplitter.expand_line_to_sublines(line_num, code, self.expanded_program)
+        StatementSplitter.expand_line_to_sublines(line_num, code, self.expanded_program)
+
+        self._collect_data_for_line(line_num)
 
     # Structural markers that skip methods inspect as text — never pre-parse these
     _STRUCTURAL_MARKERS = frozenset({'ELSE', 'ENDIF'})
@@ -821,7 +842,8 @@ class CoCoBasic:
         if clear_program:
             self.program.clear()
             self.expanded_program.clear()
-        
+            self.data_values.clear()
+
         self.variables.clear()
         self.arrays.clear()  # Clear all dimensioned arrays
         self.clear_all_stacks()

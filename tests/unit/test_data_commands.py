@@ -334,3 +334,42 @@ class TestDataCommand:
         # Should print A value but not reach line 50
         assert any('A = 100 ' in output for output in text_outputs), "Should print A value before error"
         assert not any('SHOULD NOT REACH HERE' in output for output in text_outputs)
+
+    def test_data_as_non_first_statement(self, basic, helpers):
+        """Test DATA as a non-first statement on a multi-statement line."""
+        program = [
+            '10 PRINT "HI": DATA 100, 200',
+            '20 READ A, B',
+            '30 PRINT A; B'
+        ]
+        results = helpers.execute_program(basic, program)
+        errors = helpers.get_error_messages(results)
+        assert len(errors) == 0, f"Should find DATA in non-first position: {errors}"
+        helpers.assert_variable_equals(basic, 'A', 100)
+        helpers.assert_variable_equals(basic, 'B', 200)
+
+    def test_multiple_data_on_one_line(self, basic, helpers):
+        """Test multiple DATA statements on the same line separated by colons."""
+        program = [
+            '10 DATA 100: DATA 200',
+            '20 READ A, B',
+            '30 PRINT A; B'
+        ]
+        results = helpers.execute_program(basic, program)
+        errors = helpers.get_error_messages(results)
+        assert len(errors) == 0, f"Should collect both DATA statements: {errors}"
+        helpers.assert_variable_equals(basic, 'A', 100)
+        helpers.assert_variable_equals(basic, 'B', 200)
+
+    def test_data_mixed_with_other_code(self, basic, helpers):
+        """Test DATA mixed with other statements on the same line."""
+        program = [
+            '10 LET X=5: DATA 100, 200: PRINT X',
+            '20 READ A, B',
+            '30 PRINT A; B'
+        ]
+        results = helpers.execute_program(basic, program)
+        errors = helpers.get_error_messages(results)
+        assert len(errors) == 0, f"Should handle DATA in mixed line: {errors}"
+        helpers.assert_variable_equals(basic, 'A', 100)
+        helpers.assert_variable_equals(basic, 'B', 200)

@@ -76,7 +76,7 @@ Never duplicate this logic — always call through to `StatementSplitter`.
 
 ### Program storage flow
 
-`expand_line_to_sublines()` in `core.py` splits stored lines once at entry time. REM lines and single-line IF/THEN are kept whole; everything else is split via `StatementSplitter.split_on_delimiter()`.
+`expand_line_to_sublines()` in `core.py` splits stored lines once at entry time. REM lines and single-line IF/THEN are kept whole; everything else is split via `StatementSplitter.split_on_delimiter()`. After expanding, `_collect_data_for_line()` scans sublines for DATA statements and pre-parses their values into `data_values` (line_num → list). On RUN, `data_statements` is built from `data_values` in sorted order — no re-parsing needed. Parsing logic lives in `DataCommands.parse_data_values()` (static method).
 
 ## Naming
 

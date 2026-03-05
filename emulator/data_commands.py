@@ -34,21 +34,11 @@ class DataCommands:
                          syntax="RESTORE",
                          examples=["RESTORE"])
 
-    def execute_data(self, args):
-        """DATA command - store data values in program."""
-        em = self.emulator
-        if not args:
-            return []
-
-        # During program execution, DATA statements are skipped
-        # (they were already preprocessed in run_program)
-        if em.running:
-            return []
-
-        # Parse comma-separated values, respecting quotes
-        data_items = []
+    @staticmethod
+    def parse_data_values(args):
+        """Parse DATA argument string into a list of typed values."""
         items = StatementSplitter.split_on_delimiter(args, delimiter=',')
-
+        data_items = []
         for item in items:
             item = item.strip()
             if item.startswith('"') and item.endswith('"'):
@@ -61,7 +51,21 @@ class DataCommands:
                         data_items.append(float(item))
                     except ValueError:
                         data_items.append(item)
+        return data_items
 
+    def execute_data(self, args):
+        """DATA command - store data values in program."""
+        em = self.emulator
+        if not args:
+            return []
+
+        # During program execution, DATA statements are skipped
+        # (they were already collected at store-time)
+        if em.running:
+            return []
+
+        # Immediate mode: parse and append directly
+        data_items = self.parse_data_values(args)
         em.data_statements.extend([(em.current_line, item) for item in data_items])
         return []
 
