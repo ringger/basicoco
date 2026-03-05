@@ -314,6 +314,29 @@ class TestRemEdgeCases:
         sublines = [(k, v) for k, v in basic.expanded_program.items() if k[0] == 10]
         assert len(sublines) == 1
 
+    def test_rem_with_ellipsis(self, basic, helpers):
+        """REM containing '...' should not crash the tokenizer."""
+        program = [
+            '10 REM STRING$, ON...GOTO',
+            '20 PRINT "OK"',
+        ]
+        results = helpers.execute_program(basic, program)
+        errors = helpers.get_error_messages(results)
+        assert len(errors) == 0
+        text_outputs = helpers.get_text_output(results)
+        assert 'OK' in text_outputs
+
+    def test_rem_with_special_chars(self, basic, helpers):
+        """REM with dots, hashes, and other special chars should not error."""
+        program = [
+            '10 REM PRINT#, INPUT#, LINE INPUT',
+            '20 REM 3.14...stuff...more',
+            '30 PRINT "DONE"',
+        ]
+        results = helpers.execute_program(basic, program)
+        errors = helpers.get_error_messages(results)
+        assert len(errors) == 0
+
 
 class TestQuotedStringEdgeCases:
     """Test colon handling inside quoted strings"""

@@ -269,11 +269,24 @@ class ASTParser:
                     i += 1
                     column += 1
 
+                upper_value = value.upper()
+
+                # REM: stop tokenizing — rest of line is a comment
+                if upper_value == 'REM':
+                    tokens.append({
+                        'type': 'KEYWORD',
+                        'value': 'REM',
+                        'line': line,
+                        'column': start_col,
+                        'length': column - start_col
+                    })
+                    return tokens
+
                 # Check if it's a keyword or identifier
-                token_type = 'KEYWORD' if value.upper() in self._KEYWORDS else 'IDENTIFIER'
+                token_type = 'KEYWORD' if upper_value in self._KEYWORDS else 'IDENTIFIER'
                 tokens.append({
                     'type': token_type,
-                    'value': value.upper(),
+                    'value': upper_value,
                     'line': line,
                     'column': start_col,
                     'length': column - start_col

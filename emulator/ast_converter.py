@@ -699,15 +699,19 @@ def _parse_if_body(body: str, parser) -> list:
             # In IF/THEN bodies, a LiteralNode that isn't a registry command is
             # an implicit GOTO target (e.g., IF A=5 THEN A*B means GOTO A*B).
             # Try parsing as expression and wrap in GotoStatementNode.
+            # Skip if the first word is a registry command — those are
+            # LiteralNodes precisely because the parser rejected them.
             if isinstance(node, LiteralNode) and node.value == part_stripped:
-                try:
-                    expr = parser.parse_expression(part_stripped)
-                    # Only use if the parser consumed all tokens (otherwise
-                    # it partially parsed e.g. "SOUND" and dropped args)
-                    if parser.current >= len(parser.tokens):
-                        node = GotoStatementNode(expr, location=expr.location)
-                except (ValueError, IndexError, KeyError, AttributeError):
-                    pass
+                first_word = part_stripped.split()[0].upper() if part_stripped.split() else ''
+                if first_word not in parser.registry_commands:
+                    try:
+                        expr = parser.parse_expression(part_stripped)
+                        # Only use if the parser consumed all tokens (otherwise
+                        # it partially parsed e.g. "SOUND" and dropped args)
+                        if parser.current >= len(parser.tokens):
+                            node = GotoStatementNode(expr, location=expr.location)
+                    except (ValueError, IndexError, KeyError, AttributeError):
+                        pass
             statements.append(node)
     return statements
 

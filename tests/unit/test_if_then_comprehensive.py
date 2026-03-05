@@ -522,3 +522,39 @@ class TestIfThenRegistryCommands:
         results = helpers.execute_program(basic, program)
         has_sound = any(item.get('type') == 'sound' for item in results)
         assert has_sound, "ELSE body should produce sound output"
+
+    def test_pset_in_then_body(self, basic, helpers):
+        """PSET in IF/THEN body must not be converted to GOTO."""
+        program = [
+            '10 PMODE 4,1: SCREEN 1,1: PCLS',
+            '20 X = 50: Y = 50',
+            '30 IF Y >= 0 AND Y <= 191 THEN PSET (X, Y)',
+            '40 PRINT "DONE"',
+        ]
+        results = helpers.execute_program(basic, program)
+        errors = helpers.get_error_messages(results)
+        assert len(errors) == 0, f"PSET should not become GOTO: {errors}"
+        text = helpers.get_text_output(results)
+        assert 'DONE' in text
+
+    def test_preset_in_then_body(self, basic, helpers):
+        """PRESET in IF/THEN body must not be converted to GOTO."""
+        program = [
+            '10 PMODE 4,1: SCREEN 1,1: PCLS',
+            '20 IF 1=1 THEN PRESET (64, 96)',
+            '30 PRINT "DONE"',
+        ]
+        results = helpers.execute_program(basic, program)
+        errors = helpers.get_error_messages(results)
+        assert len(errors) == 0, f"PRESET should not become GOTO: {errors}"
+
+    def test_paint_in_then_body(self, basic, helpers):
+        """PAINT in IF/THEN body must not be converted to GOTO."""
+        program = [
+            '10 PMODE 4,1: SCREEN 1,1: PCLS',
+            '20 IF 1=1 THEN PAINT (128, 96), 1',
+            '30 PRINT "DONE"',
+        ]
+        results = helpers.execute_program(basic, program)
+        errors = helpers.get_error_messages(results)
+        assert len(errors) == 0, f"PAINT should not become GOTO: {errors}"
