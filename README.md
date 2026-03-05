@@ -95,7 +95,7 @@ The dialect is based on Extended Color BASIC as shipped with the CoCo 1 and CoCo
 - **Math**: ABS, INT, SGN, SQR, SIN, COS, TAN, ATN, EXP, LOG, RND, RANDOMIZE, TIMER
 - **Strings**: LEN, LEFT$, RIGHT$, MID$, CHR$, ASC, STR$, VAL, STRING$, INSTR, SPACE$, HEX$, OCT$
 - **Arrays**: DIM with multi-dimensional support (DIM A(10) creates indices 0-10, as on the real CoCo)
-- **Graphics**: PMODE, SCREEN, PCLS, PSET, PRESET, PPOINT, LINE, CIRCLE, PAINT, GET/PUT, DRAW (with B/N/S modifiers)
+- **Graphics**: PMODE, PCLEAR, SCREEN, PCLS, PSET, PRESET, PPOINT, LINE, CIRCLE, PAINT, GET/PUT, DRAW (with B/N/S modifiers)
 - **File I/O**: OPEN, CLOSE, PRINT#, INPUT#, LINE INPUT, EOF
 - **Sound**: SOUND command (note: accepts frequency in Hz rather than the CoCo's 1-255 pitch table)
 
@@ -110,7 +110,7 @@ These were not in Extended Color BASIC but make the environment more learner-fri
 - **Single-line compound statements** like `IF A=1 THEN FOR I=1 TO 3: PRINT I: NEXT I`
 
 ### Not Yet Implemented
-See [ISSUES.md](ISSUES.md) for the full list. Highlights: PEEK/POKE, PCLEAR, random-access file I/O (FIELD/GET/PUT).
+See [ISSUES.md](ISSUES.md) for the full list. Highlights: PEEK/POKE, random-access file I/O (FIELD/GET/PUT).
 
 ## Interfaces
 
@@ -157,20 +157,23 @@ basicoco/
 ├── emulator/
 │   ├── core.py             # Main CoCoBasic interpreter and command dispatch
 │   ├── program_executor.py # Program execution loop and flow control
-│   ├── file_manager.py     # File I/O: LOAD, SAVE, DIR, KILL, CD
-│   ├── parser.py           # Command parsing and tokenization
+│   ├── program_files.py    # File ops: LOAD, SAVE, DIR, KILL, CD
+│   ├── text_utils.py       # StatementSplitter: splitting, delimiter handling
 │   ├── ast_nodes.py        # AST node types, enums, and visitor base class
 │   ├── ast_parser.py       # AST parser (tokenizer and recursive descent)
 │   ├── ast_evaluator.py    # AST evaluator (visitor pattern execution)
 │   ├── ast_converter.py    # Single-line to multi-line control structure conversion
-│   ├── expressions.py      # Function registry
+│   ├── function_registry.py # Function registry
 │   ├── functions.py        # BASIC function implementations (all registered here)
 │   ├── commands.py         # Command registry
+│   ├── control_flow.py     # NEXT, WEND, LOOP, ELSE, ENDIF, STOP, CONT, RESUME
+│   ├── data_commands.py    # DATA, READ, RESTORE
 │   ├── graphics.py         # Graphics commands and VDG-inspired emulation
 │   ├── file_io.py          # Sequential file I/O (OPEN, CLOSE, PRINT#, INPUT#, EOF)
 │   ├── variables.py        # Variable/array management (DIM, array access)
 │   ├── error_context.py    # Educational error reporting
-│   └── output_manager.py   # Output streaming
+│   ├── output_manager.py   # Output streaming
+│   └── config.py           # Configuration constants
 ├── programs/               # BASIC program files (.bas)
 ├── templates/              # HTML templates (dual monitor interface)
 ├── static/                 # CSS, JavaScript, audio support
@@ -193,7 +196,7 @@ Single-line compound statements like `IF A=1 THEN B=2: C=3` are expanded into mu
 
 ## Testing
 
-1086 tests passing.
+1083 tests passing.
 
 ```bash
 # Run all tests
@@ -205,6 +208,10 @@ python -m pytest --cov=emulator --cov-report=term-missing
 # Run unit tests only
 python -m pytest tests/unit/ -v
 ```
+
+## Server Logging
+
+`start_server_with_logging.sh` runs the Flask server with timestamped logs saved to `logs/`. `monitor_server_logs.sh` tails the latest log in real-time. Both scripts are self-explanatory — run them with no arguments.
 
 ## Contributing
 
