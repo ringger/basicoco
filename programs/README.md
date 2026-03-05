@@ -25,6 +25,7 @@ This directory contains BASIC programs for BasiCoCo.
 - **blue_circle.bas** - Graphics circle demo
 - **qix_beam.bas** - QIX-style beam animation
 - **spiral.bas** - Spiral graphics pattern
+- **rubiks_cube.bas** - 3D Rubik's cube in isometric projection (LINE, PSET, PMODE)
 
 ## Loading Programs
 

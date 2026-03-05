@@ -63,7 +63,7 @@ class DisplayManager {
                 this.graphicsDisplay.drawCircle(output.x, output.y, output.radius, output.color);
                 break;
             case 'paint':
-                this.graphicsDisplay.paint(output.x, output.y, output.paintColor, output.borderColor);
+                this.graphicsDisplay.paint(output.x, output.y, output.fill_color, output.boundary_color);
                 break;
             case 'get':
                 this.graphicsDisplay.getGraphics(output.x1, output.y1, output.x2, output.y2, output.array);

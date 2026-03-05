@@ -5,6 +5,7 @@ from emulator.config import DEFAULT_PORT, DEFAULT_HOST
 import glob
 import logging
 import os
+import pprint
 import uuid
 
 logging.basicConfig(
@@ -129,7 +130,7 @@ def handle_command(data):
         try:
             logger.debug("About to execute command: %s", command)
             output = basic.process_command(command)
-            logger.debug("Command execution returned: %s", output)
+            logger.debug("Command execution returned:\n%s", pprint.pformat(output))
             emit('output', output)
             
             # Only send completion signal if command actually finished (no pause or input request)
