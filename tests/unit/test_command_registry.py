@@ -210,6 +210,31 @@ class TestCommandRegistry:
         assert start_coords[0] == 'X1'
         assert end_coords[1] == 'Y2'
 
+    def test_coordinate_parsing_with_array_refs(self, basic, helpers):
+        """Test coordinate parsing with 2D array references like GX(R,C)"""
+        coords = CommandRegistry.parse_coordinates('GX(R,C),GY(R,C)')
+        assert len(coords) == 2
+        assert coords[0] == 'GX(R,C)'
+        assert coords[1] == 'GY(R,C)'
+
+    def test_coordinate_parsing_with_nested_expressions(self, basic, helpers):
+        """Test coordinate parsing with expressions containing commas in parens"""
+        coords = CommandRegistry.parse_coordinates('(A(1,2),B(3,4))')
+        assert len(coords) == 2
+        assert coords[0] == 'A(1,2)'
+        assert coords[1] == 'B(3,4)'
+
+    def test_line_coordinates_with_2d_arrays(self, basic, helpers):
+        """Test LINE coordinate parsing with 2D array refs"""
+        start, end = CommandRegistry.parse_line_coordinates(
+            '(GX(R,C),GY(R,C))-(GX(R,C+1),GY(R,C+1))')
+        assert len(start) == 2
+        assert start[0] == 'GX(R,C)'
+        assert start[1] == 'GY(R,C)'
+        assert len(end) == 2
+        assert end[0] == 'GX(R,C+1)'
+        assert end[1] == 'GY(R,C+1)'
+
     def test_help_system_general(self, basic, helpers):
         """Test general help system functionality"""
         # Register some test commands

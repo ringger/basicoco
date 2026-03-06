@@ -1782,8 +1782,10 @@ class DualMonitorEmulator {
         // Handle PAUSE command - wait for specified duration then continue
         const duration = pauseCommand.duration || 1.0; // Default 1 second if not specified
         
-        // Show pause status
-        document.getElementById('program-status').textContent = `Pausing (${duration}s)...`;
+        // Show pause status (skip for auto-yield zero-duration pauses)
+        if (duration > 0) {
+            document.getElementById('program-status').textContent = `Pausing (${duration}s)...`;
+        }
         
         // Clear any existing pause timer
         if (this.pauseTimer) {

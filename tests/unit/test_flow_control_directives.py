@@ -8,6 +8,7 @@ Unit tests for flow control directive handling in ProgramExecutor:
 """
 
 import pytest
+from emulator.commands import CompiledCommand, CompiledMultiLineIf
 from emulator.program_executor import ProgramExecutor
 
 
@@ -175,6 +176,100 @@ class TestSkipIfOrElseBlock:
         positions = [(10, 0), (20, 0)]
         idx, found = executor._skip_if_or_else_block(0, positions, stop_at_else=True)
         assert found is False
+
+
+class TestSkipWithCompiledCommands:
+    """Test that skip methods work with CompiledCommand entries."""
+
+    def _dummy_handler(self, args):
+        return []
+
+    def test_skip_to_keyword_finds_compiled_wend(self, basic):
+        executor = basic.executor
+        basic.expanded_program = {
+            (10, 0): 'WHILE X < 5',
+            (20, 0): 'X = X + 1',
+            (30, 0): CompiledCommand(self._dummy_handler, '', keyword='WEND'),
+        }
+        positions = [(10, 0), (20, 0), (30, 0)]
+        assert executor._skip_to_keyword('WEND', 0, positions) == 2
+
+    def test_skip_to_keyword_finds_compiled_loop(self, basic):
+        executor = basic.executor
+        basic.expanded_program = {
+            (10, 0): 'DO',
+            (20, 0): 'X = X + 1',
+            (30, 0): CompiledCommand(self._dummy_handler, 'WHILE X < 5', keyword='LOOP'),
+        }
+        positions = [(10, 0), (20, 0), (30, 0)]
+        assert executor._skip_to_keyword('LOOP', 0, positions) == 2
+
+    def test_skip_to_next_finds_compiled_next_with_var(self, basic):
+        executor = basic.executor
+        basic.expanded_program = {
+            (10, 0): 'FOR I = 1 TO 3',
+            (20, 0): 'PRINT I',
+            (30, 0): CompiledCommand(self._dummy_handler, 'I', keyword='NEXT'),
+        }
+        positions = [(10, 0), (20, 0), (30, 0)]
+        assert executor._skip_to_next('I', 0, positions) == 2
+
+    def test_skip_to_next_finds_compiled_bare_next(self, basic):
+        executor = basic.executor
+        basic.expanded_program = {
+            (10, 0): 'FOR I = 1 TO 3',
+            (20, 0): 'PRINT I',
+            (30, 0): CompiledCommand(self._dummy_handler, '', keyword='NEXT'),
+        }
+        positions = [(10, 0), (20, 0), (30, 0)]
+        assert executor._skip_to_next('I', 0, positions) == 2
+
+    def test_skip_to_next_skips_wrong_compiled_var(self, basic):
+        executor = basic.executor
+        basic.expanded_program = {
+            (10, 0): 'FOR I = 1 TO 3',
+            (20, 0): CompiledCommand(self._dummy_handler, 'J', keyword='NEXT'),
+            (30, 0): CompiledCommand(self._dummy_handler, 'I', keyword='NEXT'),
+        }
+        positions = [(10, 0), (20, 0), (30, 0)]
+        assert executor._skip_to_next('I', 0, positions) == 2
+
+    def test_skip_if_block_finds_compiled_else_and_endif(self, basic):
+        executor = basic.executor
+        basic.expanded_program = {
+            (10, 0): 'IF X=1 THEN',
+            (20, 0): 'PRINT "TRUE"',
+            (30, 0): CompiledCommand(self._dummy_handler, '', keyword='ELSE'),
+            (40, 0): 'PRINT "FALSE"',
+            (50, 0): CompiledCommand(self._dummy_handler, '', keyword='ENDIF'),
+        }
+        positions = [(10, 0), (20, 0), (30, 0), (40, 0), (50, 0)]
+        idx, found = executor._skip_if_or_else_block(0, positions, stop_at_else=True)
+        assert found is True
+        assert idx == 2  # ELSE
+
+        idx, found = executor._skip_if_or_else_block(2, positions, stop_at_else=False)
+        assert found is True
+        assert idx == 4  # ENDIF
+
+    def test_skip_if_block_nested_with_compiled_if(self, basic):
+        """Nested CompiledMultiLineIf with compiled ELSE/ENDIF should nest correctly."""
+        from emulator.ast_nodes import LiteralNode
+        dummy_ast = LiteralNode(value=1)
+        executor = basic.executor
+        basic.expanded_program = {
+            (10, 0): CompiledMultiLineIf(dummy_ast),                             # outer IF
+            (20, 0): CompiledMultiLineIf(dummy_ast),                             # nested IF
+            (30, 0): 'PRINT "INNER"',
+            (40, 0): CompiledCommand(self._dummy_handler, '', keyword='ENDIF'),  # closes nested
+            (50, 0): CompiledCommand(self._dummy_handler, '', keyword='ELSE'),   # outer ELSE
+            (60, 0): 'PRINT "OUTER FALSE"',
+            (70, 0): CompiledCommand(self._dummy_handler, '', keyword='ENDIF'),  # closes outer
+        }
+        positions = [(10, 0), (20, 0), (30, 0), (40, 0), (50, 0), (60, 0), (70, 0)]
+        idx, found = executor._skip_if_or_else_block(0, positions, stop_at_else=True)
+        assert found is True
+        assert idx == 4  # outer ELSE
 
 
 class TestHandleFlowControlDirectives:

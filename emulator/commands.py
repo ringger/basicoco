@@ -8,6 +8,30 @@ replacing the brittle hard-coded pattern matching with a registry-based system.
 import re
 from typing import List, Dict, Callable, Any, Optional
 
+from .text_utils import StatementSplitter
+
+
+class CompiledMultiLineIf:
+    """A multi-line IF pre-resolved at store time.
+    Stores the pre-parsed condition AST so execution skips
+    string extraction and expression parsing."""
+    __slots__ = ('condition_ast',)
+
+    def __init__(self, condition_ast):
+        self.condition_ast = condition_ast
+
+
+class CompiledCommand:
+    """A registry command pre-resolved at store time.
+    Stores the handler function and pre-extracted args string
+    so execution skips tokenization and registry lookup."""
+    __slots__ = ('handler', 'args', 'keyword')
+
+    def __init__(self, handler, args, keyword=''):
+        self.handler = handler
+        self.args = args
+        self.keyword = keyword
+
 
 class CommandRegistry:
     """
@@ -198,8 +222,8 @@ class CommandRegistry:
         if coord_str.startswith('(') and coord_str.endswith(')'):
             coord_str = coord_str[1:-1]
         
-        # Split by commas and return coordinate parts for evaluation
-        return [part.strip() for part in coord_str.split(',')]
+        # Split by commas, respecting parentheses (for array refs like GX(R,C))
+        return [part.strip() for part in StatementSplitter.split_args(coord_str)]
     
     # Pattern matching (x1,y1)-(x2,y2) with optional spaces around the dash
     _COORD_PAIR_RE = re.compile(r'\)\s*-\s*\(')

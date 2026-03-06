@@ -5,13 +5,16 @@ Main interpreter module. CoCoBasic orchestrates the BASIC environment:
 command dispatch, program storage, expression evaluation, and state management.
 """
 
+import logging
 import random
 import re
 import time
+
+logger = logging.getLogger(__name__)
 from .text_utils import StatementSplitter
 from .graphics import BasicGraphics
 from .variables import VariableManager
-from .commands import CommandRegistry
+from .commands import CommandRegistry, CompiledCommand, CompiledMultiLineIf
 from .function_registry import FunctionRegistry
 from .functions import register_all_functions
 from .ast_parser import ASTParser
@@ -70,6 +73,7 @@ class CoCoBasic:
         self.safety_enabled = True  # Enable/disable iteration safety
         self.waiting_for_input = False  # Flag to indicate we're waiting for user input
         self.waiting_for_pause_continuation = False  # Flag for pause continuation
+        self._expr_cache = {}  # Cache: expression string -> parsed AST node
         self.pause_duration = 0  # Duration of current pause
         self.program_counter = None  # For resuming execution after input
         self.stopped_position = None  # For CONT command - stores (line, sub_line) where STOP occurred
@@ -146,22 +150,6 @@ class CoCoBasic:
         for k in keys:
             del self.expanded_program[k]
         self.data_values.pop(line_num, None)
-
-    def _collect_data_for_line(self, line_num):
-        """Scan expanded sublines for DATA statements and pre-parse their values."""
-        from .data_commands import DataCommands
-        values = []
-        for key, stmt in self.expanded_program.items():
-            if key[0] != line_num or not isinstance(stmt, str):
-                continue
-            upper = stmt.strip().upper()
-            if upper.startswith('DATA '):
-                args = stmt.strip()[5:]
-                values.extend(DataCommands.parse_data_values(args))
-        if values:
-            self.data_values[line_num] = values
-        else:
-            self.data_values.pop(line_num, None)
 
     @staticmethod
     def _system_ok():
@@ -327,34 +315,87 @@ class CoCoBasic:
                         stmt = statement.strip()
                         if stmt:
                             self._store_subline(line_num, i, stmt)
-                    self._collect_data_for_line(line_num)
                     return
             except (ValueError, IndexError, KeyError, AttributeError):
                 # Fall back to StatementSplitter if AST conversion fails
                 pass
 
-        # Use StatementSplitter for normal statements
-        StatementSplitter.expand_line_to_sublines(line_num, code, self.expanded_program)
-
-        self._collect_data_for_line(line_num)
+        # Use StatementSplitter for normal statements, routing through
+        # _store_subline so registry commands get pre-compiled
+        sublines = StatementSplitter.split_on_delimiter(code)
+        for i, subline in enumerate(sublines):
+            self._store_subline(line_num, i, subline)
 
     # Structural markers that skip methods inspect as text — never pre-parse these
-    _STRUCTURAL_MARKERS = frozenset({'ELSE', 'ENDIF'})
-    _STRUCTURAL_PREFIXES = ('IF ', 'NEXT ', 'NEXT', 'WEND', 'LOOP')
-
     def _store_subline(self, line_num, sub_index, stmt):
-        """Store a subline, pre-parsing to AST node if eligible."""
+        """Store a subline, pre-parsing to AST node or CompiledCommand."""
         upper = stmt.upper().strip()
-        # Structural markers must stay as text for skip methods
-        if upper in self._STRUCTURAL_MARKERS or (
-                upper.startswith('IF ') and upper.endswith('THEN')) or (
-                any(upper.startswith(p) for p in self._STRUCTURAL_PREFIXES)):
+        # Collect DATA values before compiling (DATA handler is a no-op at runtime)
+        if upper.startswith('DATA '):
+            from .data_commands import DataCommands
+            args = stmt.strip()[5:]
+            values = DataCommands.parse_data_values(args)
+            if values:
+                self.data_values.setdefault(line_num, []).extend(values)
+        # Multi-line IF: pre-parse the condition expression
+        if upper.startswith('IF ') and upper.endswith('THEN'):
+            condition_str = stmt.strip()[3:]  # Remove 'IF '
+            condition_str = condition_str[:condition_str.upper().rfind('THEN')].strip()
+            if condition_str:
+                try:
+                    condition_ast = self.ast_parser.parse_expression(condition_str)
+                    self.expanded_program[(line_num, sub_index)] = CompiledMultiLineIf(condition_ast)
+                    return
+                except (ValueError, IndexError, KeyError, AttributeError):
+                    pass  # Fall through to store as string
+            self.expanded_program[(line_num, sub_index)] = stmt
+            return
+        # File I/O must stay as text — AST parser silently drops '#'
+        if self._is_file_io(upper):
             self.expanded_program[(line_num, sub_index)] = stmt
             return
         # Try to pre-parse as AST; returns None for registry commands,
         # unknown identifiers, and anything else the parser can't handle
         node = self.ast_parser.try_parse_statement(stmt)
-        self.expanded_program[(line_num, sub_index)] = node if node is not None else stmt
+        if node is not None:
+            self.expanded_program[(line_num, sub_index)] = node
+            return
+        # Try to pre-compile as a registry command
+        compiled = self._try_compile_command(stmt, upper)
+        self.expanded_program[(line_num, sub_index)] = compiled if compiled else stmt
+
+    @staticmethod
+    def _is_file_io(upper):
+        """Check if a statement is a file I/O command that must bypass AST."""
+        if upper.startswith('LINE INPUT'):
+            return True
+        if upper.startswith('PRINT') and '#' in upper[:12]:
+            return True
+        if upper.startswith('INPUT') and '#' in upper[:12]:
+            return True
+        return False
+
+    def _try_compile_command(self, stmt, upper=None):
+        """Pre-resolve a statement to a CompiledCommand, or return None."""
+        if upper is None:
+            upper = stmt.upper().strip()
+        # File I/O intercepts must go through process_statement
+        if upper.startswith('LINE INPUT'):
+            return None
+        # PRINT#/INPUT# with or without space before #
+        if upper.startswith('PRINT') and '#' in upper[:12]:
+            return None
+        if upper.startswith('INPUT') and '#' in upper[:12]:
+            return None
+        tokens = CommandRegistry.tokenize_command(stmt.strip())
+        if not tokens:
+            return None
+        cmd_name = tokens[0].upper()
+        handler = self.command_registry.get_handler(cmd_name)
+        if handler:
+            args = stmt.strip()[len(tokens[0]):].strip()
+            return CompiledCommand(handler, args, keyword=cmd_name)
+        return None
 
     # ------------------------------------------------------------------
     # Shared execution engine
@@ -589,13 +630,18 @@ class CoCoBasic:
         return error_response(error)
 
     def evaluate_expression(self, expr, line=None):
-        """Evaluate a BASIC expression string using the AST parser."""
+        """Evaluate a BASIC expression string using the AST parser.
+        Caches parsed AST nodes so repeated expressions (e.g. in loops)
+        skip the tokenizer and parser on subsequent calls."""
         expr = expr.strip()
         if not expr:
             error = self.error_context.syntax_error("Empty expression", line or self.current_line)
             raise ValueError(error.format_message())
         try:
-            ast_node = self.ast_parser.parse_expression(expr, line or self.current_line)
+            ast_node = self._expr_cache.get(expr)
+            if ast_node is None:
+                ast_node = self.ast_parser.parse_expression(expr, line or self.current_line)
+                self._expr_cache[expr] = ast_node
             return self.ast_evaluator.visit(ast_node)
         except ValueError:
             raise
@@ -644,7 +690,11 @@ class CoCoBasic:
     def evaluate_condition(self, condition):
         """Evaluate a condition string using the AST parser."""
         try:
-            ast_node = self.ast_parser.parse_expression(condition, self.current_line)
+            condition = condition.strip()
+            ast_node = self._expr_cache.get(condition)
+            if ast_node is None:
+                ast_node = self.ast_parser.parse_expression(condition, self.current_line)
+                self._expr_cache[condition] = ast_node
             return bool(self.ast_evaluator.visit(ast_node))
         except (ValueError, IndexError, KeyError, AttributeError, TypeError, ZeroDivisionError):
             return False
@@ -1349,9 +1399,12 @@ class CoCoBasic:
         
         if args == 'ON':
             self.safety_enabled = True
+            logger.info('SAFETY ON - iteration limits enabled')
             return text_response('SAFETY ON - ITERATION LIMITS ENABLED')
         elif args == 'OFF':
             self.safety_enabled = False
+            logger.info('SAFETY OFF - iteration limits disabled (hard cap: %s)',
+                        f'{self.max_absolute_iterations:,}')
             return [text_message('SAFETY OFF - ITERATION LIMITS DISABLED'),
                     text_message(f'(HARD CAP AT {self.max_absolute_iterations:,} ITERATIONS STILL ACTIVE)')]
         else:

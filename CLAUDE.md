@@ -17,7 +17,7 @@ All program execution goes through `_execute_statements_loop()` — the shared e
 
 ## Expression Evaluation
 
-`evaluate_expression(expr)` on `CoCoBasic` parses and evaluates a BASIC expression string via the AST (`ASTParser.parse_expression()` + `ASTEvaluator.visit()`). `evaluate_condition(cond)` does the same, returning a boolean. `FunctionRegistry` (in `function_registry.py`) maps BASIC function names to handlers in `functions.py`. Function handlers receive the `CoCoBasic` instance as their first argument.
+`evaluate_expression(expr)` on `CoCoBasic` parses and evaluates a BASIC expression string via the AST (`ASTParser.parse_expression()` + `ASTEvaluator.visit()`). `evaluate_condition(cond)` does the same, returning a boolean. Both cache parsed AST nodes in `_expr_cache` (keyed by expression string) so repeated evaluations in loops skip the tokenizer and parser. `FunctionRegistry` (in `function_registry.py`) maps BASIC function names to handlers in `functions.py`. Function handlers receive the `CoCoBasic` instance as their first argument.
 
 ## Stack Ownership
 
@@ -76,7 +76,17 @@ Never duplicate this logic — always call through to `StatementSplitter`.
 
 ### Program storage flow
 
-`expand_line_to_sublines()` in `core.py` splits stored lines once at entry time. REM lines and single-line IF/THEN are kept whole; everything else is split via `StatementSplitter.split_on_delimiter()`. After expanding, `_collect_data_for_line()` scans sublines for DATA statements and pre-parses their values into `data_values` (line_num → list). On RUN, `data_statements` is built from `data_values` in sorted order — no re-parsing needed. Parsing logic lives in `DataCommands.parse_data_values()` (static method).
+`expand_line_to_sublines()` in `core.py` splits stored lines once at entry time. REM lines and single-line IF/THEN are kept whole; everything else is split via `StatementSplitter.split_on_delimiter()`. Each subline is then pre-compiled by `_store_subline()`:
+
+1. **DATA** → values pre-collected into `data_values` inline, then compiled as `CompiledCommand` (handler is a no-op at runtime)
+2. **Multi-line IF** (`IF cond THEN`) → condition pre-parsed to AST, stored as `CompiledMultiLineIf(condition_ast)` — executor evaluates condition and pushes to `if_stack`
+3. **File I/O** (PRINT#, INPUT#, LINE INPUT) → stays as string (AST drops `#`)
+4. **AST-parseable** (PRINT, FOR, GOTO, assignments, etc.) → stored as AST node
+5. **Registry command** (NEXT, WEND, LOOP, ELSE, ENDIF, DIM, SOUND, etc.) → stored as `CompiledCommand(handler, args, keyword)` — skips tokenization and registry lookup at runtime
+
+At runtime, `_execute_statements_loop()` dispatches four ways: `CompiledMultiLineIf` → condition eval + if_stack, `CompiledCommand` → direct handler call, AST node → `ast_evaluator.visit()`, string → `process_statement()` (only file I/O reaches this path). Skip methods (`_skip_to_next`, `_skip_to_keyword`, `_skip_if_or_else_block`) check `CompiledCommand.keyword`, `CompiledMultiLineIf`, and strings.
+
+On RUN, `data_statements` is built from `data_values` in sorted order — no re-parsing needed. Parsing logic lives in `DataCommands.parse_data_values()` (static method).
 
 ## Naming
 
@@ -99,3 +109,4 @@ Never duplicate this logic — always call through to `StatementSplitter`.
 - Use `clear_all_stacks()`, `save_execution_state()`, `restore_execution_state()` for stack/state management
 - `source venv/bin/activate` before running anything
 - Tests: `python -m pytest --ignore=tests/integration/test_websocket_completion_signals.py`
+- Server logs: `./monitor_server_logs.sh` tails `logs/server_latest.log` (created by `./start_server_with_logging.sh`)

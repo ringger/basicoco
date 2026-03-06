@@ -351,3 +351,147 @@ class TestExpressionEvaluation:
         # Evaluate expression that depends on interpreter state
         result = basic.evaluate_expression("TEST_VAR * 2")
         assert result == 84
+
+    def test_expression_cache_performance(self, basic, helpers):
+        """Expression cache should measurably speed up repeated evaluations."""
+        import time
+
+        basic.variables['X'] = 5
+        basic.variables['Y'] = 10
+        expr = "X * X + Y * Y + X * Y - 3"
+        iterations = 5000
+
+        # Warm up cache with one call
+        basic.evaluate_expression(expr)
+
+        # Time with cache (already populated)
+        start = time.perf_counter()
+        for _ in range(iterations):
+            basic.evaluate_expression(expr)
+        cached_time = time.perf_counter() - start
+
+        # Time without cache (clear it each iteration)
+        start = time.perf_counter()
+        for _ in range(iterations):
+            basic._expr_cache.clear()
+            basic.evaluate_expression(expr)
+        uncached_time = time.perf_counter() - start
+
+        # Cache should be at least 1.5x faster
+        speedup = uncached_time / cached_time
+        assert speedup > 1.5, f"Expected >1.5x speedup, got {speedup:.2f}x"
+        # Print for visibility when run with -s
+        print(f"\n  Expression cache: {speedup:.1f}x speedup "
+              f"({uncached_time*1000:.0f}ms vs {cached_time*1000:.0f}ms "
+              f"for {iterations} evals)")
+
+    def test_expression_cache_reuses_parsed_ast(self, basic, helpers):
+        """Repeated evaluate_expression calls should cache the parsed AST."""
+        basic.variables['X'] = 10
+        result1 = basic.evaluate_expression("X * 2 + 1")
+        assert result1 == 21
+        assert "X * 2 + 1" in basic._expr_cache
+
+        # Change variable — cached AST should still evaluate correctly
+        basic.variables['X'] = 20
+        result2 = basic.evaluate_expression("X * 2 + 1")
+        assert result2 == 41
+
+    def test_evaluate_condition_uses_cache(self, basic, helpers):
+        """evaluate_condition should cache parsed AST like evaluate_expression."""
+        basic.variables['X'] = 10
+        result1 = basic.evaluate_condition("X > 5")
+        assert result1 is True
+        assert "X > 5" in basic._expr_cache
+
+        # Change variable — cached AST should still evaluate correctly
+        basic.variables['X'] = 3
+        result2 = basic.evaluate_condition("X > 5")
+        assert result2 is False
+
+    def test_compiled_registry_commands_performance(self, basic, helpers):
+        """Pre-compiled registry commands should be faster than string dispatch."""
+        import time
+        from emulator.commands import CompiledCommand
+
+        # Build a straight-line program heavy on registry commands.
+        # DIM, SOUND, RESTORE, PAUSE 0, STOP are all registry commands.
+        lines = []
+        ln = 10
+        for i in range(50):
+            lines.append(f'{ln} DIM Z{i}(5)')
+            ln += 10
+        lines.append(f'{ln} DATA 1,2,3')
+        ln += 10
+        for i in range(20):
+            lines.append(f'{ln} RESTORE')
+            ln += 10
+        helpers.load_program(basic, lines)
+        iterations = 100
+
+        # Run with compiled commands (default)
+        start = time.perf_counter()
+        for _ in range(iterations):
+            basic.process_command('RUN')
+        compiled_time = time.perf_counter() - start
+
+        # Decompile: replace CompiledCommand entries with original strings
+        helpers.load_program(basic, lines)
+        for key, val in list(basic.expanded_program.items()):
+            if isinstance(val, CompiledCommand):
+                for cmd_name, info in basic.command_registry.commands.items():
+                    if info['handler'] == val.handler:
+                        basic.expanded_program[key] = f"{cmd_name} {val.args}".strip()
+                        break
+
+        start = time.perf_counter()
+        for _ in range(iterations):
+            basic.process_command('RUN')
+        string_time = time.perf_counter() - start
+
+        speedup = string_time / compiled_time
+        assert speedup > 1.05, f"Expected compiled to be faster, got {speedup:.2f}x"
+        print(f"\n  Compiled commands: {speedup:.2f}x speedup "
+              f"({string_time*1000:.0f}ms vs {compiled_time*1000:.0f}ms "
+              f"for {iterations} runs)")
+
+    def test_compiled_commands_execute_correctly(self, basic, helpers):
+        """Programs with compiled NEXT/ELSE/ENDIF/WEND/LOOP should run correctly."""
+        from emulator.commands import CompiledCommand
+
+        # FOR/NEXT loop
+        helpers.load_program(basic, [
+            '10 S = 0',
+            '20 FOR I = 1 TO 5',
+            '30 S = S + I',
+            '40 NEXT I',
+            '50 PRINT S',
+        ])
+        # Verify NEXT is compiled
+        next_entries = [v for v in basic.expanded_program.values()
+                        if isinstance(v, CompiledCommand) and v.keyword == 'NEXT']
+        assert len(next_entries) == 1
+
+        result = basic.process_command('RUN')
+        text = helpers.get_text_output(result)
+        assert any('15' in t for t in text)
+
+        # IF/ELSE/ENDIF
+        helpers.load_program(basic, [
+            '10 X = 10',
+            '20 IF X > 5 THEN',
+            '30 PRINT "BIG"',
+            '40 ELSE',
+            '50 PRINT "SMALL"',
+            '60 ENDIF',
+        ])
+        # Verify ELSE and ENDIF are compiled
+        compiled_kws = [v.keyword for v in basic.expanded_program.values()
+                        if isinstance(v, CompiledCommand)]
+        assert 'ELSE' in compiled_kws
+        assert 'ENDIF' in compiled_kws
+
+        result = basic.process_command('RUN')
+        text = helpers.get_text_output(result)
+        assert any('BIG' in t for t in text)
+        assert not any('SMALL' in t for t in text)

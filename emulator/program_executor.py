@@ -5,9 +5,14 @@ Drives program execution: RUN, CONT, continue after INPUT/PAUSE.
 Handles the main execution loop, flow-control directives, and ON ERROR GOTO.
 """
 
+import logging
 import re
 
+from .ast_nodes import basic_truthy
+from .commands import CompiledCommand, CompiledMultiLineIf
 from .error_context import error_response, text_response, error_message, text_message
+
+logger = logging.getLogger(__name__)
 
 
 def _classify_error(message: str) -> int:
@@ -73,6 +78,15 @@ class ProgramExecutor:
                 return i
         return None
 
+    @staticmethod
+    def _get_keyword(entry):
+        """Return the command keyword for a program entry (string or CompiledCommand)."""
+        if isinstance(entry, CompiledCommand):
+            return entry.keyword
+        if isinstance(entry, str):
+            return entry.strip().split(None, 1)[0].upper() if entry.strip() else ''
+        return ''
+
     def _skip_to_keyword(self, keyword, current_pos_index, all_positions):
         """Search forward for a statement starting with *keyword*.
 
@@ -81,8 +95,8 @@ class ProgramExecutor:
         emu = self.emulator
         keyword_upper = keyword.upper()
         for pos_idx in range(current_pos_index + 1, len(all_positions)):
-            stmt = emu.expanded_program.get(all_positions[pos_idx], '')
-            if isinstance(stmt, str) and stmt.strip().upper().startswith(keyword_upper):
+            entry = emu.expanded_program.get(all_positions[pos_idx], '')
+            if self._get_keyword(entry) == keyword_upper:
                 return pos_idx
         return None
 
@@ -93,14 +107,17 @@ class ProgramExecutor:
         """
         emu = self.emulator
         for pos_idx in range(current_pos_index + 1, len(all_positions)):
-            stmt = emu.expanded_program.get(all_positions[pos_idx], '')
-            if not isinstance(stmt, str):
-                continue
-            stmt = stmt.strip()
-            if stmt.startswith('NEXT'):
-                parts = stmt.split()
-                if len(parts) == 1 or (len(parts) > 1 and parts[1] == var_name):
-                    return pos_idx
+            entry = emu.expanded_program.get(all_positions[pos_idx], '')
+            if isinstance(entry, CompiledCommand):
+                if entry.keyword == 'NEXT':
+                    if not entry.args or entry.args == var_name:
+                        return pos_idx
+            elif isinstance(entry, str):
+                stmt = entry.strip()
+                if stmt.startswith('NEXT'):
+                    parts = stmt.split()
+                    if len(parts) == 1 or (len(parts) > 1 and parts[1] == var_name):
+                        return pos_idx
         return None
 
     def _skip_if_or_else_block(self, current_pos_index, all_positions, stop_at_else):
@@ -115,19 +132,28 @@ class ProgramExecutor:
         nest_level = 0
         for pos_idx in range(current_pos_index + 1, len(all_positions)):
             entry = emu.expanded_program.get(all_positions[pos_idx], '')
-            if not isinstance(entry, str):
-                continue
-            stmt = entry.strip().upper()
-            if stmt.startswith('IF ') and 'THEN' in stmt:
+            if isinstance(entry, CompiledMultiLineIf):
                 nest_level += 1
-            elif stop_at_else and stmt.startswith('ELSE') and nest_level == 0:
-                return pos_idx, True
-            elif stmt.startswith('ENDIF'):
-                if nest_level == 0:
-                    # Always land ON the ENDIF so execute_endif can pop if_stack
+            elif isinstance(entry, CompiledCommand):
+                kw = entry.keyword
+                if stop_at_else and kw == 'ELSE' and nest_level == 0:
                     return pos_idx, True
-                else:
-                    nest_level -= 1
+                elif kw == 'ENDIF':
+                    if nest_level == 0:
+                        return pos_idx, True
+                    else:
+                        nest_level -= 1
+            elif isinstance(entry, str):
+                stmt = entry.strip().upper()
+                if stmt.startswith('IF ') and 'THEN' in stmt:
+                    nest_level += 1
+                elif stop_at_else and stmt.startswith('ELSE') and nest_level == 0:
+                    return pos_idx, True
+                elif stmt.startswith('ENDIF'):
+                    if nest_level == 0:
+                        return pos_idx, True
+                    else:
+                        nest_level -= 1
         return current_pos_index, False
 
     # ------------------------------------------------------------------
@@ -280,6 +306,9 @@ class ProgramExecutor:
                         if handler_idx is not None:
                             return handler_idx, 'jumped'
                     # No handler or handler line not found
+                    logger.warning('Runtime error at line %d: %s',
+                                   all_positions[current_pos_index][0],
+                                   item.get('message', '(unknown)'))
                     output.append(item)
                     emu.emit_output([item])
                     emu.running = False
@@ -301,16 +330,21 @@ class ProgramExecutor:
         and execute_cont.  Returns the accumulated output list."""
         emu = self.emulator
         output = []
+        has_graphics = False
         current_pos_index = start_index
 
         while current_pos_index < len(all_positions) and emu.running:
             # Safety check
             emu.iteration_count += 1
             if emu.safety_enabled and emu.iteration_count > emu.max_iterations:
+                logger.warning('Program stopped: too many iterations (%d > %d)',
+                               emu.iteration_count, emu.max_iterations)
                 output.append(error_message('PROGRAM STOPPED - TOO MANY ITERATIONS'))
                 emu.running = False
                 break
             if emu.iteration_count > emu.max_absolute_iterations:
+                logger.warning('Program stopped: absolute iteration limit reached (%d)',
+                               emu.max_absolute_iterations)
                 output.append(error_message('PROGRAM STOPPED - ABSOLUTE ITERATION LIMIT REACHED'))
                 emu.running = False
                 break
@@ -323,19 +357,48 @@ class ProgramExecutor:
             if emu.trace_mode and sub_index == 0:
                 output.append(text_message(f'[{line_num}]'))
 
-            # ASTNode entries execute directly; text entries go through dispatch
-            if not isinstance(statement, str):
+            # Dispatch: CompiledMultiLineIf → condition eval + if_stack,
+            # CompiledCommand → direct call, AST node → visitor,
+            # string → full process_statement (file I/O, DATA)
+            if isinstance(statement, CompiledMultiLineIf):
+                condition_result = basic_truthy(emu.ast_evaluator.visit(statement.condition_ast))
+                if_info = {
+                    'condition_met': condition_result,
+                    'line': line_num,
+                    'sub_line': sub_index,
+                    'in_else': False
+                }
+                emu.if_stack.append(if_info)
+                result = [{'type': 'skip_if_block'}] if not condition_result else []
+            elif isinstance(statement, CompiledCommand):
+                result = statement.handler(statement.args)
+            elif isinstance(statement, str):
+                result = emu.process_statement(statement)
+            else:
                 try:
                     result = emu.ast_evaluator.visit(statement)
                     if not isinstance(result, list):
                         result = None
                 except (ValueError, IndexError, KeyError, AttributeError,
-                        TypeError, ZeroDivisionError):
-                    result = None
-            else:
-                result = emu.process_statement(statement)
+                        TypeError, ZeroDivisionError) as e:
+                    error_msg = str(e) if str(e) else f"{type(e).__name__}"
+                    result = error_response(
+                        emu.error_context.runtime_error(error_msg, line_num)
+                    )
 
             if result:
+                # Auto-yield on PCLS: when a screen clear arrives after
+                # graphics output, flush the completed frame to the
+                # client and resume at the PCLS itself.
+                if has_graphics:
+                    for item in result:
+                        if item.get('type') == 'pcls':
+                            emu.program_counter = all_positions[current_pos_index]
+                            emu.waiting_for_pause_continuation = True
+                            emu.running = False
+                            output.append({'type': 'pause', 'duration': 0})
+                            return output
+
                 new_pos, action = self._handle_flow_control(
                     result, current_pos_index, all_positions, output)
                 if action == 'return':
@@ -347,6 +410,11 @@ class ProgramExecutor:
                     current_pos_index = new_pos
                 else:  # 'next'
                     current_pos_index = new_pos
+
+                for item in result:
+                    if item.get('type') in ('line', 'paint', 'pset',
+                                            'circle', 'draw'):
+                        has_graphics = True
             else:
                 current_pos_index += 1
 
