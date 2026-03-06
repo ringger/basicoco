@@ -55,5 +55,8 @@ Thumbs.db
 .coverage
 htmlcov/
 
+# Runtime data files
+programs/*.DAT
+
 # Server logs
 logs/
