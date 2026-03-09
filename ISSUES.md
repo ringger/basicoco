@@ -11,6 +11,15 @@ Low priority — rarely needed or hard to emulate meaningfully:
 - [ ] EXEC — execute machine language (no-op or educational stub)
 - [ ] USR — user-defined machine language function (no-op or educational stub)
 
+## Bugs
+
+- [ ] **Single-line nested FOR with multi-dim array access** — `FOR IX=0 TO 2: FOR IY=0 TO 2: FOR IZ=0 TO 2: FOR F=0 TO 5` followed by `CL(IX,IY,IZ,F)=-1` on the next line causes BAD SUBSCRIPT. Same code works when each FOR is on its own line. Likely a statement-splitting or variable-scoping issue with colon-separated FOR statements and 4D array indexing.
+
+## Testing
+
+- [x] **Exclude slow tests from default run** — e2e, CLI, animated programs (`TestPausePrograms`), and websocket tests all marked `slow`. `pytest.ini` has `-m "not slow"`. Default run: `python -m pytest`. All slow: `python -m pytest -m slow`.
+- [ ] **`interactive_session()` test harness helper** — create helper in conftest.py for pexpect-based program audit tests to reduce boilerplate in `test_program_audit.py`.
+
 ## Known Behavioral Limitations
 
 - **GOTO out of multi-line IF** leaves a stale `if_stack` entry (cleared on next RUN). This matches real CoCo behavior where GOTO from structured blocks is undefined.

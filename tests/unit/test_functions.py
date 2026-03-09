@@ -168,15 +168,13 @@ class TestFunction:
         assert abs(result - 2.71828 < 0.001)
 
     def test_rnd_function(self, basic, helpers):
-        """Test RND function for random numbers"""
-        # RND requires an argument in this implementation
+        """Test RND function for random numbers (CoCo: integer 1 to N)"""
         result = basic.evaluate_expression("RND(1)")
-        assert 0 <= result < 1
-        
-        # Test with different seeds
-        result1 = basic.evaluate_expression("RND(1)")
-        result2 = basic.evaluate_expression("RND(2)")
-        # Results should be random numbers between 0 and 1
+        assert result == 1  # RND(1) always returns 1
+
+        result = basic.evaluate_expression("RND(6)")
+        assert isinstance(result, int)
+        assert 1 <= result <= 6
 
     def test_len_function(self, basic, helpers):
         """Test LEN function for string length"""
@@ -575,12 +573,12 @@ class TestRandomize:
     def test_randomize_with_seed(self, basic, helpers):
         """RANDOMIZE with seed produces repeatable RND sequence"""
         basic.process_command('RANDOMIZE 42')
-        r1 = basic.evaluate_expression('RND(1)')
-        r2 = basic.evaluate_expression('RND(1)')
+        r1 = basic.evaluate_expression('RND(100)')
+        r2 = basic.evaluate_expression('RND(100)')
 
         basic.process_command('RANDOMIZE 42')
-        r3 = basic.evaluate_expression('RND(1)')
-        r4 = basic.evaluate_expression('RND(1)')
+        r3 = basic.evaluate_expression('RND(100)')
+        r4 = basic.evaluate_expression('RND(100)')
 
         assert r1 == r3
         assert r2 == r4
@@ -588,10 +586,10 @@ class TestRandomize:
     def test_randomize_different_seeds(self, basic, helpers):
         """Different seeds produce different sequences"""
         basic.process_command('RANDOMIZE 1')
-        r1 = basic.evaluate_expression('RND(1)')
+        r1 = basic.evaluate_expression('RND(100)')
 
         basic.process_command('RANDOMIZE 999')
-        r2 = basic.evaluate_expression('RND(1)')
+        r2 = basic.evaluate_expression('RND(100)')
 
         assert r1 != r2
 

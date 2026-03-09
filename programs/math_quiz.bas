@@ -12,9 +12,9 @@
 120 WHILE QUIT = 0
 130 TOTAL = TOTAL + 1
 140 REM PICK OPERATION: 1=ADD 2=SUB 3=MUL
-150 OP = INT(RND(1) * 3) + 1
-160 A = INT(RND(1) * 50) + 1
-170 B = INT(RND(1) * 20) + 1
+150 OP = RND(3)
+160 A = RND(50)
+170 B = RND(20)
 180 IF OP = 1 THEN
 190 PRINT A; " + "; B; " = ";
 200 ANSWER = A + B
@@ -23,8 +23,8 @@
 230 PRINT A; " - "; B; " = ";
 240 ANSWER = A - B
 250 ELSE
-260 A = INT(RND(1) * 12) + 1
-270 B = INT(RND(1) * 12) + 1
+260 A = RND(12)
+270 B = RND(12)
 280 PRINT A; " * "; B; " = ";
 290 ANSWER = A * B
 300 ENDIF

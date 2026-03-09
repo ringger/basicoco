@@ -40,6 +40,7 @@ class CoCoBasic:
         self.program = {}  # Line number -> code (original for LIST display)
         self.expanded_program = {}  # (line_num, sub_index) -> str or ASTNode (for execution)
         self.variables = {}
+        self.labels = {}  # label_name -> line_number (for GOTO/GOSUB label support)
         self.data_values = {}  # line_num -> list of parsed values (collected at store-time)
         self.data_statements = []
         self.data_pointer = 0
@@ -288,11 +289,32 @@ class CoCoBasic:
     def process_kill_confirmation(self, response, filename):
         return self.file_manager.process_kill_confirmation(response, filename)
 
+    def merge_program(self, filename):
+        return self.file_manager.merge_program(filename)
+
+    def chain_program(self, args):
+        return self.file_manager.chain_program(args)
+
     def change_directory(self, path):
         return self.file_manager.change_directory(path)
     
+    _LABEL_RE = re.compile(r'^([A-Za-z_][A-Za-z0-9_]*)\s*:\s*$')
+
+    def resolve_label(self, name):
+        """Look up a label name and return its line number, or None."""
+        return self.labels.get(name.upper())
+
     def expand_line_to_sublines(self, line_num, code):
         """Expand line using StatementSplitter or AST converter for single-line control structures"""
+        # Detect label definition (e.g. "CalcAvg:") before any splitting
+        m = self._LABEL_RE.match(code.strip())
+        if m:
+            label_name = m.group(1).upper()
+            self.labels[label_name] = line_num
+            # Store as a no-op so the line exists in expanded_program
+            self.expanded_program[(line_num, 0)] = CompiledCommand(lambda args: [], '', keyword='REM')
+            return
+
         # REM lines should never be split or AST-converted
         if StatementSplitter.is_rem_line(code):
             self.expanded_program[(line_num, 0)] = code.strip()
@@ -893,6 +915,7 @@ class CoCoBasic:
             self.program.clear()
             self.expanded_program.clear()
             self.data_values.clear()
+            self.labels.clear()
 
         self.variables.clear()
         self.arrays.clear()  # Clear all dimensioned arrays
@@ -1055,6 +1078,19 @@ class CoCoBasic:
                                      syntax="SAVE \"filename\"",
                                      examples=["SAVE \"MYGAME\"", "SAVE \"programs/utility.bas\""])
         
+        self.command_registry.register('MERGE', self.merge_program,
+                                     category='system',
+                                     description="Merge program lines from a file into current program",
+                                     syntax='MERGE "filename"',
+                                     examples=['MERGE "SUBS"', 'MERGE "library.bas"'])
+
+        self.command_registry.register('CHAIN', self.chain_program,
+                                     category='system',
+                                     description="Load and run another program",
+                                     syntax='CHAIN "filename" [, ALL] [, line_number]',
+                                     examples=['CHAIN "GAME"', 'CHAIN "PART2", ALL',
+                                               'CHAIN "MAIN", ALL, 1000'])
+
         self.command_registry.register('CSAVE', self.save_program,
                                      category='system',
                                      description="Save program (cassette version, redirects to SAVE)",

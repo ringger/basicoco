@@ -31,7 +31,6 @@ class DisplayManager {
                 break;
             case 'pmode':
             case 'set_pmode':
-                console.log(`PMODE: mode=${output.mode}, page=${output.page}`);
                 this.graphicsDisplay.setPmode(output.mode, output.page);
                 this.updateGraphicsInfo();
                 break;
@@ -43,7 +42,6 @@ class DisplayManager {
                 this.updateGraphicsInfo();
                 break;
             case 'pset':
-                console.log(`PSET: x=${output.x}, y=${output.y}, color=${output.color}`);
                 this.graphicsDisplay.pset(output.x, output.y, output.color);
                 break;
             case 'preset':
@@ -59,7 +57,6 @@ class DisplayManager {
                 }
                 break;
             case 'circle':
-                console.log(`CIRCLE: x=${output.x}, y=${output.y}, radius=${output.radius}, color=${output.color}`);
                 this.graphicsDisplay.drawCircle(output.x, output.y, output.radius, output.color);
                 break;
             case 'paint':
@@ -829,16 +826,10 @@ class GraphicsDisplay {
     setPmode(mode, page = 1) {
         this.graphicsMode = mode;
         this.clearGraphics();
-        
-        if (mode > 0) {
-            const res = this.pmodeResolutions[mode];
-            console.log(`PMODE ${mode}: ${res.width}x${res.height} graphics`);
-        }
     }
-    
+
     setScreen(mode) {
         this.screenMode = mode;
-        console.log(`SCREEN ${mode}`);
     }
     
     setColor(fg, bg) {
@@ -853,21 +844,16 @@ class GraphicsDisplay {
     }
     
     pset(x, y, color = null) {
-        console.log(`PSET called: x=${x}, y=${y}, color=${color}, graphicsMode=${this.graphicsMode}`);
-        if (this.graphicsMode === 0) {
-            console.log('PSET skipped - graphics mode is 0');
-            return;
-        }
-        
+        if (this.graphicsMode === 0) return;
+
         const res = this.pmodeResolutions[this.graphicsMode];
         const pixelColor = color !== null ? this.colors[color % this.colors.length] : this.currentColor;
-        console.log(`PSET drawing: pixelColor=${pixelColor}, rect=(${x * res.pixelWidth}, ${y * res.pixelHeight}, ${res.pixelWidth}, ${res.pixelHeight})`);
-        
+
         this.ctx.fillStyle = pixelColor;
         this.ctx.fillRect(
-            x * res.pixelWidth, 
-            y * res.pixelHeight, 
-            res.pixelWidth, 
+            x * res.pixelWidth,
+            y * res.pixelHeight,
+            res.pixelWidth,
             res.pixelHeight
         );
     }
@@ -1003,11 +989,19 @@ class GraphicsDisplay {
                 }
             }
             
-            // Check if pixel matches start color
-            if (pixels[idx] !== startR || pixels[idx + 1] !== startG || pixels[idx + 2] !== startB) {
-                continue;
+            // When border color is specified: boundary fill (fill everything within border)
+            // When no border color: flood fill (replace only matching start color)
+            if (stopColor === null) {
+                if (pixels[idx] !== startR || pixels[idx + 1] !== startG || pixels[idx + 2] !== startB) {
+                    continue;
+                }
+            } else {
+                // Skip pixels already filled (optimization for boundary fill)
+                if (pixels[idx] === fillRGB.r && pixels[idx + 1] === fillRGB.g && pixels[idx + 2] === fillRGB.b) {
+                    continue;
+                }
             }
-            
+
             // Fill pixel
             pixels[idx] = fillRGB.r;
             pixels[idx + 1] = fillRGB.g;
@@ -1751,10 +1745,15 @@ class DualMonitorEmulator {
     }
     
     handleOutput(outputArray) {
-        for (let output of outputArray) {
+        this._processOutputFrom(outputArray, 0);
+    }
+
+    _processOutputFrom(outputArray, startIndex) {
+        for (let i = startIndex; i < outputArray.length; i++) {
+            const output = outputArray[i];
             // Route output to appropriate display
             this.displayManager.routeOutput(output);
-            
+
             // Handle special cases
             switch (output.type) {
                 case 'sound':
@@ -1762,47 +1761,46 @@ class DualMonitorEmulator {
                     break;
                 case 'input_request':
                     this.handleInputRequest(output);
-                    break;
+                    return; // Stop processing — wait for user input
                 case 'pause':
-                    this.handlePause(output);
-                    break;
+                    this.handlePause(output, outputArray, i + 1);
+                    return; // Stop processing — resume after pause
                 case 'command_complete':
                     document.getElementById('program-status').textContent = 'Ready';
-                    // Program has stopped
                     this.programRunning = false;
                     console.log('Program stopped');
-                    // Show next prompt
                     this.displayManager.textDisplay.showPrompt();
                     break;
             }
         }
     }
     
-    handlePause(pauseCommand) {
+    handlePause(pauseCommand, remainingArray, remainingIndex) {
         // Handle PAUSE command - wait for specified duration then continue
-        const duration = pauseCommand.duration || 1.0; // Default 1 second if not specified
-        
-        // Show pause status (skip for auto-yield zero-duration pauses)
-        if (duration > 0) {
+        const duration = (pauseCommand.duration !== undefined && pauseCommand.duration !== null)
+            ? pauseCommand.duration : 1.0; // Default 1 second if not specified
+
+        // Show pause status (skip for short auto-yield pauses)
+        if (duration > 0.1) {
             document.getElementById('program-status').textContent = `Pausing (${duration}s)...`;
         }
-        
+
         // Clear any existing pause timer
         if (this.pauseTimer) {
             clearTimeout(this.pauseTimer);
         }
-        
-        // Wait for the specified duration, then continue execution
+
+        // Wait for the specified duration, then continue
         this.pauseTimer = setTimeout(() => {
-            // Only continue if timer wasn't cancelled (check if pauseTimer still exists)
-            if (this.pauseTimer !== null) {
-                this.pauseTimer = null; // Clear timer reference
-                // Send continue signal to server
+            if (this.pauseTimer === null) return; // cancelled
+            this.pauseTimer = null;
+            if (remainingArray && remainingIndex < remainingArray.length) {
+                this._processOutputFrom(remainingArray, remainingIndex);
+            } else {
                 this.socket.emit('continue_execution', { tabId: this.tabManager.activeTabId });
                 document.getElementById('program-status').textContent = 'Running...';
             }
-            // If pauseTimer was already cleared by break_execution, do nothing
-        }, duration * 1000); // Convert to milliseconds
+        }, duration * 1000);
     }
     
     handleInputRequest(request) {

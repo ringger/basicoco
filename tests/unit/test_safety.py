@@ -87,7 +87,7 @@ class TestAutoYield:
         result = basic.process_command('RUN')
         pauses = [item for item in result if item.get('type') == 'pause']
         assert len(pauses) >= 1
-        assert pauses[0]['duration'] == 0
+        assert pauses[0]['duration'] == 0.05
         # PRINT should NOT be in the first batch
         assert not any('FRAME2' in item.get('text', '') for item in result)
 

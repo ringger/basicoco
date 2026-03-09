@@ -57,6 +57,7 @@ class TestNonInteractivePrograms:
         child.close()
 
 
+@pytest.mark.slow
 class TestPausePrograms:
     """Programs that use PAUSE for animation — may not finish in test time."""
 

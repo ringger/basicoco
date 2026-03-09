@@ -486,11 +486,25 @@ class ASTEvaluator(ASTVisitor):
         self.emulator.stopped_position = None
         return []
 
+    def _resolve_target_line(self, node):
+        """Resolve a GOTO/GOSUB target that may be a label or line number expression.
+
+        If the target AST node is a bare variable whose name matches a label,
+        return the label's line number.  Otherwise evaluate the expression
+        normally and convert to int.
+        """
+        # Check for label reference before evaluating as variable
+        if isinstance(node, VariableNode):
+            label_line = self.emulator.resolve_label(node.name)
+            if label_line is not None:
+                return label_line
+        value = self.visit(node)
+        return int(value)
+
     def visit_goto_statement(self, node: GotoStatementNode) -> Any:
         """Visit GOTO statement"""
         try:
-            target_line = self.visit(node.target_line)
-            line_num = int(target_line)
+            line_num = self._resolve_target_line(node.target_line)
         except (ValueError, TypeError) as e:
             error = self.emulator.error_context.syntax_error(
                 "Invalid GOTO target",
@@ -520,8 +534,7 @@ class ASTEvaluator(ASTVisitor):
     def visit_gosub_statement(self, node: GosubStatementNode) -> Any:
         """Visit GOSUB statement"""
         try:
-            target_line = self.visit(node.target_line)
-            line_num = int(target_line)
+            line_num = self._resolve_target_line(node.target_line)
         except (ValueError, TypeError) as e:
             error = self.emulator.error_context.syntax_error(
                 "Invalid GOSUB target",
@@ -565,9 +578,9 @@ class ASTEvaluator(ASTVisitor):
         if index < 1 or index > len(node.targets):
             return []
 
-        # Evaluate the selected target line number
+        # Evaluate the selected target line number (may be a label)
         try:
-            target_line = int(self.visit(node.targets[index - 1]))
+            target_line = self._resolve_target_line(node.targets[index - 1])
         except (ValueError, TypeError) as e:
             error = self.emulator.error_context.syntax_error(
                 f"Invalid line number in ON statement: {str(e)}",
@@ -584,7 +597,7 @@ class ASTEvaluator(ASTVisitor):
     def visit_on_error_goto(self, node: OnErrorGotoNode) -> Any:
         """Visit ON ERROR GOTO statement"""
         try:
-            target = int(self.visit(node.target_line))
+            target = self._resolve_target_line(node.target_line)
         except (ValueError, TypeError):
             error = self.emulator.error_context.syntax_error(
                 "Expected ON ERROR GOTO line",

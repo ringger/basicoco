@@ -284,6 +284,10 @@ class ProgramExecutor:
                     return idx, 'jumped'
                 return current_pos_index + 1, 'next'
 
+            elif item_type == 'program_modified':
+                # MERGE changed expanded_program; rebuild all_positions
+                return current_pos_index, 'rebuild'
+
             elif item_type == 'resume_next':
                 idx = self._find_position_index(item['position'], all_positions)
                 if idx is not None:
@@ -396,7 +400,7 @@ class ProgramExecutor:
                             emu.program_counter = all_positions[current_pos_index]
                             emu.waiting_for_pause_continuation = True
                             emu.running = False
-                            output.append({'type': 'pause', 'duration': 0})
+                            output.append({'type': 'pause', 'duration': 0.05})
                             return output
 
                 new_pos, action = self._handle_flow_control(
@@ -406,6 +410,19 @@ class ProgramExecutor:
                 elif action == 'stop':
                     emu.running = False
                     break
+                elif action == 'rebuild':
+                    # MERGE modified the program — rebuild position list and data
+                    cur_key = all_positions[current_pos_index]
+                    all_positions = sorted(emu.expanded_program.keys())
+                    # Rebuild data_statements from merged data_values
+                    emu.data_statements = []
+                    for line_num in sorted(emu.data_values.keys()):
+                        emu.data_statements.extend(
+                            [(line_num, v) for v in emu.data_values[line_num]]
+                        )
+                    # Advance past the current (MERGE) statement
+                    idx = self._find_position_index(cur_key, all_positions)
+                    current_pos_index = (idx + 1) if idx is not None else 0
                 elif action == 'jumped':
                     current_pos_index = new_pos
                 else:  # 'next'
@@ -451,6 +468,54 @@ class ProgramExecutor:
 
         all_positions = sorted(emu.expanded_program.keys())
         output = self._execute_statements_loop(all_positions, 0)
+        if not emu.waiting_for_input and not emu.waiting_for_pause_continuation:
+            emu.running = False
+        return output
+
+    def run_program_from_line(self, start_line, clear_variables=True):
+        """Run the program starting at a specific line number.
+
+        Used by CHAIN "file", line_num to begin execution at an arbitrary line.
+        """
+        emu = self.emulator
+        if not emu.program:
+            error = emu.error_context.runtime_error(
+                "NO PROGRAM",
+                suggestions=[
+                    "Enter a program first using line numbers",
+                    'Example: 10 PRINT "HELLO"',
+                    'Use LOAD "filename" to load a program from disk'
+                ]
+            )
+            return error_response(error)
+
+        if clear_variables:
+            emu.clear_interpreter_state(clear_program=False)
+
+        emu.running = True
+
+        # Build data_statements
+        for line_num in sorted(emu.data_values.keys()):
+            emu.data_statements.extend(
+                [(line_num, v) for v in emu.data_values[line_num]]
+            )
+
+        all_positions = sorted(emu.expanded_program.keys())
+
+        # Find the starting position for the requested line
+        start_index = self._find_line_position(start_line, all_positions)
+        if start_index is None:
+            emu.running = False
+            error = emu.error_context.runtime_error(
+                f"UNDEFINED LINE NUMBER: {start_line}",
+                suggestions=[
+                    'Check that the target line exists in the chained program',
+                    'Use LIST to view the program after loading'
+                ]
+            )
+            return error_response(error)
+
+        output = self._execute_statements_loop(all_positions, start_index)
         if not emu.waiting_for_input and not emu.waiting_for_pause_continuation:
             emu.running = False
         return output

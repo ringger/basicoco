@@ -132,6 +132,25 @@ class TestHelpers:
         TestHelpers.load_program(basic, program_lines)
         return basic.process_command('RUN')
 
+    @staticmethod
+    def run_to_completion(basic: CoCoBasic, max_frames: int = 1000) -> List[Dict[str, Any]]:
+        """Run a loaded program to completion, continuing through auto-yield pauses.
+
+        Returns the accumulated output from all frames.  Useful for testing
+        animated programs that yield on PCLS.
+        """
+        all_output = basic.process_command('RUN')
+        frames = 1
+        while basic.waiting_for_pause_continuation and frames < max_frames:
+            basic.waiting_for_pause_continuation = False
+            basic.running = True
+            result = basic.continue_program_execution()
+            all_output.extend(result)
+            frames += 1
+            if any(r.get('type') == 'error' for r in result):
+                break
+        return all_output
+
 
 @pytest.fixture
 def helpers():
@@ -169,10 +188,12 @@ def pytest_collection_modifyitems(config, items):
         # Add e2e marker to tests in tests/integration/e2e/
         if "tests/integration/e2e/" in str(item.fspath):
             item.add_marker(pytest.mark.e2e)
+            item.add_marker(pytest.mark.slow)
 
         # Add cli marker to tests in tests/integration/cli/
         if "tests/integration/cli/" in str(item.fspath):
             item.add_marker(pytest.mark.cli)
+            item.add_marker(pytest.mark.slow)
 
         # Add markers based on test names
         if "graphics" in item.name.lower():

@@ -108,5 +108,7 @@ On RUN, `data_statements` is built from `data_values` in sorted order — no re-
 - Use `check_reserved_name(name)` on `CoCoBasic` to guard against reserved function names in assignments and DIM
 - Use `clear_all_stacks()`, `save_execution_state()`, `restore_execution_state()` for stack/state management
 - `source venv/bin/activate` before running anything
-- Tests: `python -m pytest --ignore=tests/integration/test_websocket_completion_signals.py`
+- Tests: `python -m pytest` (slow tests excluded by default via `-m "not slow"` in pytest.ini)
+- Run slow tests explicitly: `python -m pytest -m slow`
+- Run all tests: `python -m pytest -m ""`
 - Server logs: `./monitor_server_logs.sh` tails `logs/server_latest.log` (created by `./start_server_with_logging.sh`)

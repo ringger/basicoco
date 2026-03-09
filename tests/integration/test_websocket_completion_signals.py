@@ -19,6 +19,7 @@ import socketio
 from emulator.config import DEFAULT_PORT
 
 
+@pytest.mark.slow
 class TestWebSocketCompletionSignals:
     """Test WebSocket completion signal behavior for all command types"""
 
