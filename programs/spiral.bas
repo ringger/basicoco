@@ -2,10 +2,11 @@
 20 PMODE 4,1: SCREEN 1,1
 30 PCLS
 40 CX = 128: CY = 96
+45 PI = 4 * ATN(1)
 50 FOR R = 1 TO 150 STEP 3
 60   FOR A = 0 TO 360 STEP 15
-70     X = CX + R * COS(A * 3.14159 / 180)
-80     Y = CY + R * SIN(A * 3.14159 / 180)
+70     X = CX + R * COS(A * PI / 180)
+80     Y = CY + R * SIN(A * PI / 180)
 90     C = (INT(A / 45) MOD 8) + 1
 100    PSET(X,Y),C
 110    PAUSE 0.05

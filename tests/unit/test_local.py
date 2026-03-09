@@ -140,3 +140,20 @@ class TestLocal:
         result = basic.process_command('LOCAL X')
         errors = [item['message'] for item in result if item.get('type') == 'error']
         assert any('LOCAL WITHOUT GOSUB' in e for e in errors)
+
+    def test_local_with_on_gosub(self, basic, helpers):
+        """LOCAL works correctly when called via ON...GOSUB."""
+        results = helpers.execute_program(basic, [
+            '10 X=42',
+            '20 C=1',
+            '30 ON C GOSUB 100',
+            '40 PRINT X',
+            '50 END',
+            '100 LOCAL X',
+            '110 X=99',
+            '120 RETURN',
+        ])
+        errors = helpers.get_error_messages(results)
+        assert errors == [], f"Errors: {errors}"
+        texts = helpers.get_text_output(results)
+        assert any('42' in t for t in texts), f"X should be 42 after RETURN, got: {texts}"

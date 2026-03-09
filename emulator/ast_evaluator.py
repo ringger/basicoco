@@ -592,6 +592,7 @@ class ASTEvaluator(ASTVisitor):
 
         if node.branch_type == 'GOSUB':
             self.emulator.call_stack.append((self.emulator.current_line, self.emulator.current_sub_line))
+            self.emulator.local_stack.append([])
 
         return [{'type': 'jump', 'line': target_line}]
 

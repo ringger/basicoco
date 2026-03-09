@@ -22,59 +22,62 @@ REM   DL = DELAY PER TILE (0 FOR INSTANT)
 REM
 DrawFront:
 REM === FRONT FACE ===
+LOCAL ROW, COL, X1, Y1, X2, Y2
 FOR ROW = 0 TO 2
-FOR COL = 0 TO 2
-X1 = AX + COL * S
-Y1 = AY + ROW * S
-X2 = X1 + S
-Y2 = Y1 + S
-LINE (X1,Y1)-(X2,Y2),DC,B
-IF PC >= 0 THEN PAINT (X1 + S/2, Y1 + S/2), PC, OC
-IF DL > 0 THEN PAUSE DL
-NEXT COL
+  FOR COL = 0 TO 2
+    X1 = AX + COL * S
+    Y1 = AY + ROW * S
+    X2 = X1 + S
+    Y2 = Y1 + S
+    LINE (X1,Y1)-(X2,Y2),DC,B
+    IF PC >= 0 THEN PAINT (X1 + S/2, Y1 + S/2), PC, OC
+    IF DL > 0 THEN PAUSE DL
+  NEXT COL
 NEXT ROW
 RETURN
 REM
 DrawRight:
 REM === RIGHT FACE ===
+LOCAL ROW, COL, X1, Y1, X2, Y2, X3, Y3, X4, Y4
 FOR ROW = 0 TO 2
-FOR COL = 0 TO 2
-X1 = BX + COL * RX
-Y1 = BY + ROW * S - COL * RY
-X2 = X1
-Y2 = Y1 + S
-X3 = X1 + RX
-Y3 = Y1 - RY
-X4 = X3
-Y4 = Y3 + S
-LINE (X1,Y1)-(X3,Y3),DC
-LINE (X3,Y3)-(X4,Y4),DC
-LINE (X4,Y4)-(X2,Y2),DC
-LINE (X2,Y2)-(X1,Y1),DC
-IF PC >= 0 THEN PAINT (X1 + RX/2, Y1 + S/2 - RY/2), PC, OC
-IF DL > 0 THEN PAUSE DL
-NEXT COL
+  FOR COL = 0 TO 2
+    X1 = BX + COL * RX
+    Y1 = BY + ROW * S - COL * RY
+    X2 = X1
+    Y2 = Y1 + S
+    X3 = X1 + RX
+    Y3 = Y1 - RY
+    X4 = X3
+    Y4 = Y3 + S
+    LINE (X1,Y1)-(X3,Y3),DC
+    LINE (X3,Y3)-(X4,Y4),DC
+    LINE (X4,Y4)-(X2,Y2),DC
+    LINE (X2,Y2)-(X1,Y1),DC
+    IF PC >= 0 THEN PAINT (X1 + RX/2, Y1 + S/2 - RY/2), PC, OC
+    IF DL > 0 THEN PAUSE DL
+  NEXT COL
 NEXT ROW
 RETURN
 REM
 DrawTop:
 REM === TOP FACE ===
+LOCAL ROW, COL, X1, Y1, X2, Y2, X3, Y3, X4, Y4
 FOR ROW = 0 TO 2
-FOR COL = 0 TO 2
-X1 = TX + COL * S + ROW * RX
-Y1 = TY - ROW * RY
-X2 = X1 + RX
-Y2 = Y1 - RY
-X3 = X2 + S
-Y3 = Y2
-X4 = X1 + S
-Y4 = Y1
-LINE (X1,Y1)-(X2,Y2),DC
-LINE (X2,Y2)-(X3,Y3),DC
-LINE (X3,Y3)-(X4,Y4),DC
-LINE (X4,Y4)-(X1,Y1),DC
-IF PC >= 0 THEN PAINT (X1 + S/2 + RX/2, Y1 - RY/2), PC, OC
-IF DL > 0 THEN PAUSE DL
-NEXT COL
+  FOR COL = 0 TO 2
+    X1 = TX + COL * S + ROW * RX
+    Y1 = TY - ROW * RY
+    X2 = X1 + RX
+    Y2 = Y1 - RY
+    X3 = X2 + S
+    Y3 = Y2
+    X4 = X1 + S
+    Y4 = Y1
+    LINE (X1,Y1)-(X2,Y2),DC
+    LINE (X2,Y2)-(X3,Y3),DC
+    LINE (X3,Y3)-(X4,Y4),DC
+    LINE (X4,Y4)-(X1,Y1),DC
+    IF PC >= 0 THEN PAINT (X1 + S/2 + RX/2, Y1 - RY/2), PC, OC
+    IF DL > 0 THEN PAUSE DL
+  NEXT COL
 NEXT ROW
 RETURN
