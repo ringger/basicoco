@@ -62,9 +62,7 @@ def run_with_inputs(basic, program_lines, input_values):
                 input_idx += 1
                 basic.store_input_value(var_desc, value)
                 basic.current_input_index += 1
-            basic.input_variables = None
-            basic.input_prompt = None
-            basic.current_input_index = 0
+            basic.clear_input_state()
 
         # Resume
         basic.waiting_for_input = False

@@ -1315,6 +1315,13 @@ class TabManager {
     
     pauseTabForSwitch(tabId) {
         return new Promise((resolve) => {
+            // Cancel any active auto-yield pause timer to prevent it from
+            // firing continue_execution to the wrong tab after the switch
+            if (this.emulator.pauseTimer) {
+                clearTimeout(this.emulator.pauseTimer);
+                this.emulator.pauseTimer = null;
+            }
+
             // Store the tab's paused state
             const tabData = this.tabs.get(tabId);
             if (tabData) {
@@ -1364,11 +1371,17 @@ class TabManager {
             }
         }
         
+        // Cancel any pending tab resume timer for this tab
+        if (this.tabResumeTimer) {
+            clearTimeout(this.tabResumeTimer);
+            this.tabResumeTimer = null;
+        }
+
         // If closing the active tab, pause any running program first
         if (this.activeTabId === tabId) {
             await this.pauseTabForSwitch(tabId);
         }
-        
+
         // Remove tab
         this.tabs.delete(tabId);
         document.querySelector(`[data-tab-id="${tabId}"]`).remove();
@@ -1520,9 +1533,6 @@ class DualMonitorEmulator {
             this.handleOutput(data);
         });
         
-        this.socket.on('tab_switched', (data) => {
-            console.log('Tab switched to:', data.tabId);
-        });
     }
     
     setupUIHandlers() {

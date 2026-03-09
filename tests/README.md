@@ -35,7 +35,6 @@ Tests individual components in isolation using pytest fixtures:
 - `test_variables.py` - Variable management
 - `test_error_*.py` - Error handling and context management
 - `test_graphics_commands.py` - Graphics system components
-- `test_output_manager.py` - Output streaming and management
 - `test_direct_emulator.py` - Direct emulator unit testing
 - `test_program_management_commands.py` - DIR, FILES, DRIVE, SAVE, CLOAD, CSAVE commands
 - `test_renum_command.py` - RENUM line renumbering functionality

@@ -57,10 +57,6 @@ class BasicGraphics:
         registry.register('PCLS', self.execute_pcls)
         registry.register('PCLEAR', self.execute_pclear)
     
-    def _eval_int(self, expr):
-        """Evaluate an expression string and return an integer."""
-        return self.emulator.eval_int(expr)
-
     def _syntax_error(self, message, suggestions):
         """Create a standardized syntax error response list."""
         error = self.emulator.error_context.syntax_error(
@@ -89,7 +85,7 @@ class BasicGraphics:
                 suggestions=["Correct syntax: PCLEAR n (where n is 1-8)",
                              "Example: PCLEAR 4"])
         try:
-            pages = self._eval_int(args)
+            pages = self.emulator.eval_int(args)
         except (ValueError, TypeError):
             return self._syntax_error(
                 "PCLEAR requires a numeric argument",
@@ -138,8 +134,8 @@ class BasicGraphics:
                 [f'Correct syntax: {command_name}(x,y)',
                  f'Example: {command_name}(100,50)',
                  'Specify both X and Y coordinates'])
-        x = self._eval_int(coord_parts[0])
-        y = self._eval_int(coord_parts[1])
+        x = self.emulator.eval_int(coord_parts[0])
+        y = self.emulator.eval_int(coord_parts[1])
         remainder = args[coords_end + 1:].strip()
         return (x, y, remainder)
 
@@ -164,11 +160,11 @@ class BasicGraphics:
         """Execute PMODE command to set graphics mode"""
         # Parse arguments: PMODE mode[,page]
         parts = _split_args(args)
-        mode = self._eval_int(parts[0])
+        mode = self.emulator.eval_int(parts[0])
         page = 1
 
         if len(parts) > 1:
-            page = self._eval_int(parts[1])
+            page = self.emulator.eval_int(parts[1])
 
         if mode < 0 or mode > 4:
             return self._illegal_function_call()
@@ -183,10 +179,10 @@ class BasicGraphics:
         # Parse SCREEN mode[,page] parameters
         if ',' in args:
             parts = _split_args(args)
-            mode = self._eval_int(parts[0])
-            page = self._eval_int(parts[1])
+            mode = self.emulator.eval_int(parts[0])
+            page = self.emulator.eval_int(parts[1])
         else:
-            mode = self._eval_int(args)
+            mode = self.emulator.eval_int(args)
             page = 1  # Default page
 
         if mode < 1 or mode > 2:
@@ -201,10 +197,10 @@ class BasicGraphics:
         """Execute COLOR command to set foreground/background colors"""
         if ',' in args:
             parts = _split_args(args)
-            fg = self._eval_int(parts[0]) if parts[0] else None
-            bg = self._eval_int(parts[1]) if len(parts) > 1 and parts[1] else None
+            fg = self.emulator.eval_int(parts[0]) if parts[0] else None
+            bg = self.emulator.eval_int(parts[1]) if len(parts) > 1 and parts[1] else None
         else:
-            fg = self._eval_int(args)
+            fg = self.emulator.eval_int(args)
             bg = None
 
         return [{'type': 'set_color', 'fg': fg, 'bg': bg}]
@@ -222,7 +218,7 @@ class BasicGraphics:
             if remainder.startswith(','):
                 color_str = remainder[1:].strip()
                 if color_str:
-                    color = self._eval_int(color_str)
+                    color = self.emulator.eval_int(color_str)
             effective_color = color if color is not None else self.emulator.current_draw_color
             self.pixel_buffer[(x, y)] = effective_color
             return [{'type': 'pset', 'x': x, 'y': y, 'color': color}]
@@ -233,11 +229,11 @@ class BasicGraphics:
                     ['Correct syntax: PSET x,y or PSET x,y,color',
                      'Example: PSET 100,50',
                      'Specify both X and Y coordinates'])
-            x = self._eval_int(parts[0])
-            y = self._eval_int(parts[1])
+            x = self.emulator.eval_int(parts[0])
+            y = self.emulator.eval_int(parts[1])
             color = None
             if len(parts) > 2 and parts[2].strip():
-                color = self._eval_int(parts[2])
+                color = self.emulator.eval_int(parts[2])
             effective_color = color if color is not None else self.emulator.current_draw_color
             self.pixel_buffer[(x, y)] = effective_color
             return [{'type': 'pset', 'x': x, 'y': y, 'color': color}]
@@ -259,8 +255,8 @@ class BasicGraphics:
                 return self._syntax_error("PRESET requires exactly two coordinates",
                     ['Correct syntax: PRESET x,y', 'Example: PRESET 100,50',
                      'Specify both X and Y coordinates'])
-            x = self._eval_int(parts[0])
-            y = self._eval_int(parts[1])
+            x = self.emulator.eval_int(parts[0])
+            y = self.emulator.eval_int(parts[1])
             self.pixel_buffer[(x, y)] = 0
             return [{'type': 'preset', 'x': x, 'y': y}]
     
@@ -287,14 +283,14 @@ class BasicGraphics:
                 elif part in ('B', 'BF'):
                     box_type = part
                 elif part:
-                    color = self._eval_int(part)
+                    color = self.emulator.eval_int(part)
 
             start_coords, end_coords = CommandRegistry.parse_line_coordinates(coord_spec)
 
-            x1 = self._eval_int(start_coords[0].strip())
-            y1 = self._eval_int(start_coords[1].strip())
-            x2 = self._eval_int(end_coords[0].strip())
-            y2 = self._eval_int(end_coords[1].strip())
+            x1 = self.emulator.eval_int(start_coords[0].strip())
+            y1 = self.emulator.eval_int(start_coords[1].strip())
+            x2 = self.emulator.eval_int(end_coords[0].strip())
+            y2 = self.emulator.eval_int(end_coords[1].strip())
 
             return [{'type': 'line', 'x1': x1, 'y1': y1, 'x2': x2, 'y2': y2,
                      'color': color, 'mode': mode, 'box_type': box_type}]
@@ -306,14 +302,14 @@ class BasicGraphics:
                         'Example: LINE 10,10,100,100',
                         'Specify start and end coordinates'])
 
-            x1 = self._eval_int(parts[0].strip())
-            y1 = self._eval_int(parts[1].strip())
-            x2 = self._eval_int(parts[2].strip())
-            y2 = self._eval_int(parts[3].strip())
+            x1 = self.emulator.eval_int(parts[0].strip())
+            y1 = self.emulator.eval_int(parts[1].strip())
+            x2 = self.emulator.eval_int(parts[2].strip())
+            y2 = self.emulator.eval_int(parts[3].strip())
 
             color = None
             if len(parts) > 4 and parts[4].strip():
-                color = self._eval_int(parts[4].strip())
+                color = self.emulator.eval_int(parts[4].strip())
 
             return [{'type': 'line', 'x1': x1, 'y1': y1, 'x2': x2, 'y2': y2, 'color': color}]
     
@@ -331,11 +327,11 @@ class BasicGraphics:
             if remainder.startswith(','):
                 remainder = remainder[1:].strip()
             parts = _split_args(remainder)
-            radius = self._eval_int(parts[0])
+            radius = self.emulator.eval_int(parts[0])
 
             color = None
             if len(parts) > 1 and parts[1]:
-                color = self._eval_int(parts[1])
+                color = self.emulator.eval_int(parts[1])
 
             return [{'type': 'circle', 'x': x, 'y': y, 'radius': radius, 'color': color}]
         else:
@@ -346,13 +342,13 @@ class BasicGraphics:
                         'Example: CIRCLE 100,50,25',
                         'Specify center X, Y coordinates and radius'])
 
-            x = self._eval_int(parts[0].strip())
-            y = self._eval_int(parts[1].strip())
-            radius = self._eval_int(parts[2].strip())
+            x = self.emulator.eval_int(parts[0].strip())
+            y = self.emulator.eval_int(parts[1].strip())
+            radius = self.emulator.eval_int(parts[2].strip())
 
             color = None
             if len(parts) > 3 and parts[3].strip():
-                color = self._eval_int(parts[3].strip())
+                color = self.emulator.eval_int(parts[3].strip())
 
             return [{'type': 'circle', 'x': x, 'y': y, 'radius': radius, 'color': color}]
     
@@ -376,9 +372,9 @@ class BasicGraphics:
                         ['Correct syntax: PAINT(x,y),color',
                          'Example: PAINT(100,50),1',
                          'Specify the fill color after coordinates'])
-                paint_color = self._eval_int(parts[0])
+                paint_color = self.emulator.eval_int(parts[0])
                 if len(parts) > 1 and parts[1]:
-                    border_color = self._eval_int(parts[1])
+                    border_color = self.emulator.eval_int(parts[1])
             elif remainder == '':
                 return self._syntax_error("PAINT requires color parameter",
                     ['Correct syntax: PAINT(x,y),color',
@@ -410,10 +406,10 @@ class BasicGraphics:
             x1_str, y1_str = start_coords.split(',')
             x2_str, y2_str = end_coords.split(',')
 
-            x1 = self._eval_int(x1_str.strip())
-            y1 = self._eval_int(y1_str.strip())
-            x2 = self._eval_int(x2_str.strip())
-            y2 = self._eval_int(y2_str.strip())
+            x1 = self.emulator.eval_int(x1_str.strip())
+            y1 = self.emulator.eval_int(y1_str.strip())
+            x2 = self.emulator.eval_int(x2_str.strip())
+            y2 = self.emulator.eval_int(y2_str.strip())
 
             return [{'type': 'get', 'x1': x1, 'y1': y1, 'x2': x2, 'y2': y2, 'array': array_name}]
         else:

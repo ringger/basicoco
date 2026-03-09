@@ -314,14 +314,12 @@ class ProgramExecutor:
                                    all_positions[current_pos_index][0],
                                    item.get('message', '(unknown)'))
                     output.append(item)
-                    emu.emit_output([item])
                     emu.running = False
                     emu.clear_all_stacks()
                     return current_pos_index, 'stop'
                 # Regular output -- filter system OK messages
                 if not item.get('source') == 'system':
                     output.append(item)
-                    emu.emit_output([item])
 
         return current_pos_index + 1, 'next'
 
@@ -430,7 +428,7 @@ class ProgramExecutor:
 
                 for item in result:
                     if item.get('type') in ('line', 'paint', 'pset',
-                                            'circle', 'draw'):
+                                            'preset', 'circle', 'draw'):
                         has_graphics = True
             else:
                 current_pos_index += 1

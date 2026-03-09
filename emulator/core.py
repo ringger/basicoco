@@ -19,7 +19,6 @@ from .function_registry import FunctionRegistry
 from .functions import register_all_functions
 from .ast_parser import ASTParser
 from .ast_evaluator import ASTEvaluator
-from .output_manager import StreamingOutputManager, LegacyOutputAdapter
 from .error_context import ErrorContextManager, error_response, text_response, text_message
 from .program_files import FileManager
 from .file_io import FileIOManager
@@ -46,15 +45,6 @@ class CoCoBasic:
         self.data_pointer = 0
         self.running = False
         
-        # Initialize enhanced output management system
-        self.output_manager = StreamingOutputManager(debug_mode=debug_mode)
-        self.legacy_adapter = LegacyOutputAdapter(self.output_manager)
-        
-        # Set up legacy compatibility
-        if output_callback:
-            self.legacy_adapter.set_output_callback(output_callback)
-        
-        # Legacy property for backward compatibility
         self.output_callback = output_callback
         self.current_line = 0
         
@@ -123,26 +113,6 @@ class CoCoBasic:
         self.command_registry = CommandRegistry()
         self._register_all_commands()
         self.ast_parser.registry_commands = set(self.command_registry.commands.keys())
-    
-    def emit_output(self, output):
-        """
-        Emit output using the StreamingOutputManager.
-        
-        Maintains backward compatibility while using the enhanced output system.
-        """
-        return self.legacy_adapter.emit_output(output)
-    
-    def emit_text(self, text: str, source: str = None):
-        """Emit text output using the new system"""
-        self.output_manager.text(text, source=source, line_number=self.current_line)
-    
-    def emit_error(self, message: str, source: str = None):
-        """Emit error output using the new system"""
-        self.output_manager.error(message, source=source, line_number=self.current_line)
-    
-    def emit_debug(self, message: str, source: str = None):
-        """Emit debug output using the new system"""
-        self.output_manager.debug(message, source=source, line_number=self.current_line)
     
 
     def _remove_expanded_lines(self, line_num):
@@ -451,9 +421,8 @@ class CoCoBasic:
                 converted = parse_and_convert_single_line(code, self.ast_parser)
                 if converted:
                     return self._execute_converted_as_temporary_program(converted)
-            except (ValueError, IndexError, KeyError, AttributeError) as e:
-                if hasattr(self, 'emit_debug'):
-                    self.emit_debug(f"AST conversion failed for '{code}': {str(e)}")
+            except (ValueError, IndexError, KeyError, AttributeError):
+                pass
 
         # Split on colons; single statements go straight to process_statement
         statements = StatementSplitter.split_on_delimiter(code)
@@ -887,6 +856,12 @@ class CoCoBasic:
         self.while_stack.clear()
         self.do_stack.clear()
 
+    def clear_input_state(self):
+        """Clear multi-variable INPUT state."""
+        self.input_variables = None
+        self.input_prompt = None
+        self.current_input_index = 0
+
     def save_execution_state(self):
         """Snapshot program and execution state for later restoration."""
         return {
@@ -941,9 +916,7 @@ class CoCoBasic:
         self.in_error_handler = False
 
         # Clear multi-variable INPUT state
-        self.input_variables = None
-        self.input_prompt = None
-        self.current_input_index = 0
+        self.clear_input_state()
         self.current_line = 0
         self.current_sub_line = 0
         self.iteration_count = 0

@@ -489,6 +489,27 @@ def _parse_ast_for_statement(statement: str, parser, converter) -> Optional[List
             return None
 
         var_name = match.group(1)
+
+        # Split body and check if there's a matching NEXT for the outer FOR
+        body_parts = StatementSplitter.split_on_delimiter_paren_aware(body_part)
+        has_matching_next = any(
+            p.strip().upper() == 'NEXT' or
+            p.strip().upper() == f'NEXT {var_name.upper()}'
+            for p in body_parts
+        )
+
+        if not has_matching_next:
+            # Open FOR — body continues on subsequent program lines.
+            # Return FOR header + body statements as flat strings.
+            # Each becomes a separate subline, compiled individually by _store_subline().
+            result = [for_header]
+            for part in body_parts:
+                part_stripped = part.strip()
+                if part_stripped:
+                    result.append(part_stripped)
+            return result
+
+        # Self-contained FOR with matching NEXT — use AST converter
         start_expr = match.group(2).strip()
         end_expr = match.group(3).strip()
         step_expr = match.group(4).strip() if match.group(4) else "1"
@@ -500,9 +521,7 @@ def _parse_ast_for_statement(statement: str, parser, converter) -> Optional[List
         step_node = parser.parse_expression(step_expr) if step_expr != "1" else None
 
         # Parse body statements (excluding any NEXT statement)
-        body_parts = StatementSplitter.split_on_delimiter_paren_aware(body_part)
         body_statements = []
-
         for part in body_parts:
             part_stripped = part.strip()
             # Skip NEXT statements as they'll be added automatically

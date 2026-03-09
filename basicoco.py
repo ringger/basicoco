@@ -76,9 +76,7 @@ def handle_input_request(basic, item):
             basic.current_input_index += 1
 
         # All done — clean up multi-var state
-        basic.input_variables = None
-        basic.input_prompt = None
-        basic.current_input_index = 0
+        basic.clear_input_state()
 
 
 def process_output(basic, output):
@@ -138,9 +136,7 @@ def break_execution(basic):
     """Break any running program, resetting execution state."""
     basic.program_counter = None
     basic.waiting_for_input = False
-    basic.input_variables = None
-    basic.input_prompt = None
-    basic.current_input_index = 0
+    basic.clear_input_state()
     basic.running = False
 
 

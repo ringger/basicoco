@@ -87,7 +87,7 @@ Programs can be saved as `.bas` files in the `programs/` directory and loaded wi
 The dialect is based on Extended Color BASIC as shipped with the CoCo 1 and CoCo 2, with modern quality-of-life additions.
 
 ### From Extended Color BASIC
-- **Core**: NEW, RUN, LIST, END, STOP, CONT, CLEAR, LOAD, SAVE, FILES, KILL, TRON/TROFF
+- **Core**: NEW, RUN, LIST, END, STOP, CONT, CLEAR, LOAD, SAVE, MERGE, CHAIN, FILES, KILL, TRON/TROFF
 - **I/O**: PRINT (with separators), INPUT (with prompts, multi-variable), CLS, INKEY$
 - **Variables**: Numeric and string variables, operators (+, -, *, /, ^, comparisons)
 - **Control Flow**: FOR/NEXT (with STEP), IF/THEN, GOTO, GOSUB/RETURN, ON GOTO/GOSUB, ON ERROR GOTO/RESUME
@@ -108,6 +108,8 @@ These were not in Extended Color BASIC but make the environment more learner-fri
 - **IF/THEN/ELSE/ENDIF** multi-line conditional blocks
 - **PAUSE** *n* — delay execution for *n* seconds (real CoCo used busy loops)
 - **Single-line compound statements** like `IF A=1 THEN FOR I=1 TO 3: PRINT I: NEXT I`
+- **Labels** as GOTO/GOSUB targets (`MyLabel:` on its own line, used as `GOTO MyLabel`)
+- **Auto-numbering** — LOAD/MERGE/CHAIN auto-assign line numbers to unnumbered `.bas` files
 
 ### Not Yet Implemented
 See [ISSUES.md](ISSUES.md) for the full list. Highlights: PEEK/POKE, random-access file I/O (FIELD/GET/PUT).
@@ -157,7 +159,7 @@ basicoco/
 ├── emulator/
 │   ├── core.py             # Main CoCoBasic interpreter and command dispatch
 │   ├── program_executor.py # Program execution loop and flow control
-│   ├── program_files.py    # File ops: LOAD, SAVE, DIR, KILL, CD
+│   ├── program_files.py    # File ops: LOAD, SAVE, MERGE, CHAIN, DIR, KILL, CD
 │   ├── text_utils.py       # StatementSplitter: splitting, delimiter handling
 │   ├── ast_nodes.py        # AST node types, enums, and visitor base class
 │   ├── ast_parser.py       # AST parser (tokenizer and recursive descent)
@@ -172,7 +174,6 @@ basicoco/
 │   ├── file_io.py          # Sequential file I/O (OPEN, CLOSE, PRINT#, INPUT#, EOF)
 │   ├── variables.py        # Variable/array management (DIM, array access)
 │   ├── error_context.py    # Educational error reporting
-│   ├── output_manager.py   # Output streaming
 │   └── config.py           # Configuration constants
 ├── programs/               # BASIC program files (.bas)
 ├── templates/              # HTML templates (dual monitor interface)
@@ -192,21 +193,24 @@ BASIC's syntax is deeply context-dependent — `A(5)` could be an array or a fun
 2. **AST parsing** handles the core control flow and I/O commands (IF, FOR, WHILE, DO, GOTO, GOSUB, PRINT, INPUT, LET, END) — these are fully parsed into typed AST nodes and executed by the evaluator.
 3. **Command registry** handles everything else — loop closers (NEXT, WEND, LOOP), data commands (DATA, READ, RESTORE), graphics, sound, and system commands. These use string-based argument splitting before passing to `evaluate_expression()`.
 
-Single-line compound statements like `IF A=1 THEN B=2: C=3` are expanded into multi-line form at store-time by the AST converter, then executed as multi-line code. See [ISSUES.md](ISSUES.md) for planned improvements to this pipeline.
+Single-line compound statements like `IF A=1 THEN B=2: C=3` are expanded into multi-line form at store-time by the AST converter, then executed as multi-line code.
 
 ## Testing
 
-1105 tests passing.
+1100+ tests. Slow tests (e2e, CLI, websocket) are excluded by default.
 
 ```bash
-# Run all tests
+# Run tests (slow tests excluded by default)
 python -m pytest
+
+# Run slow tests only
+python -m pytest -m slow
+
+# Run all tests including slow
+python -m pytest -m ""
 
 # Run with coverage
 python -m pytest --cov=emulator --cov-report=term-missing
-
-# Run unit tests only
-python -m pytest tests/unit/ -v
 ```
 
 ## Server Logging

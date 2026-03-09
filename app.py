@@ -45,6 +45,38 @@ session_manager = SessionManager()
 # Track client sessions
 client_sessions = {}
 
+
+def _emit_command_complete_if_done(output, basic):
+    """Emit command_complete if the output contains no pause/input_request and the program has finished.
+
+    Call this after emitting *output* to the client.  It checks whether
+    execution is still in progress (paused, waiting for input, or the
+    program counter is still set) and only sends the completion signal
+    when none of those conditions hold.
+    """
+    has_pause = any(item.get('type') == 'pause' for item in output)
+    has_input_request = any(item.get('type') == 'input_request' for item in output)
+    if not has_pause and not has_input_request and basic.program_counter is None:
+        emit('output', [{'type': 'command_complete'}])
+
+
+def _get_session(data=None, error_event='output', error_payload=None):
+    """Retrieve (basic, session_id, tab_id) for the current request.
+
+    Returns (None, None, None) and emits an error if the session is missing.
+    *error_event* / *error_payload* let callers customise the failure response;
+    pass ``error_event=None`` to suppress any emit on failure.
+    """
+    session_id = client_sessions.get(request.sid)
+    if not session_id:
+        if error_event is not None:
+            payload = error_payload or [{'type': 'error', 'message': 'Session not found'}]
+            emit(error_event, payload)
+        return None, None, None
+    tab_id = data.get('tabId', 'main') if data else 'main'
+    basic = session_manager.get_session(session_id, tab_id)
+    return basic, session_id, tab_id
+
 @socketio.on('connect')
 def handle_connect():
     """Handle client connection and assign session ID"""
@@ -90,21 +122,15 @@ def dual_monitor():
 def handle_command(data):
     """Execute BASIC command with session and tab support"""
     command = data.get('command', '')
-    tab_id = data.get('tabId', 'main')
-    
+
     logger.debug("Executing command '%s' for client %s", command, request.sid)
-    
-    # Get session for this client
-    session_id = client_sessions.get(request.sid)
-    if not session_id:
+
+    basic, session_id, tab_id = _get_session(data)
+    if basic is None:
         logger.warning("Session not found for client %s. Available sessions: %s", request.sid, list(client_sessions.keys()))
-        emit('output', [{'type': 'error', 'message': 'Session not found'}])
         return
-    
+
     logger.debug("Using session %s for tab %s", session_id, tab_id)
-    
-    # Get BASIC interpreter for this session/tab
-    basic = session_manager.get_session(session_id, tab_id)
     
     line_num, code = basic.parse_line(command)
     
@@ -133,11 +159,7 @@ def handle_command(data):
             logger.debug("Command execution returned:\n%s", pprint.pformat(output))
             emit('output', output)
             
-            # Only send completion signal if command actually finished (no pause or input request)
-            has_pause = any(item.get('type') == 'pause' for item in output)
-            has_input_request = any(item.get('type') == 'input_request' for item in output)
-            if not has_pause and not has_input_request:
-                emit('output', [{'type': 'command_complete'}])
+            _emit_command_complete_if_done(output, basic)
                 
         except Exception as e:
             logger.error("Command execution error: %s", e, exc_info=True)
@@ -149,16 +171,10 @@ def handle_input_response(data):
     """Handle INPUT response with session support"""
     variable = data.get('variable', '')
     value = data.get('value', '')
-    tab_id = data.get('tabId', 'main')
-    
-    # Get session for this client
-    session_id = client_sessions.get(request.sid)
-    if not session_id:
-        emit('output', [{'type': 'error', 'message': 'Session not found'}])
+
+    basic, session_id, tab_id = _get_session(data)
+    if basic is None:
         return
-    
-    # Get BASIC interpreter for this session/tab
-    basic = session_manager.get_session(session_id, tab_id)
     
     # Handle special system variables
     if variable == '_kill_confirm':
@@ -201,9 +217,7 @@ def handle_input_response(data):
                 return
             else:
                 # All variables have been input, clean up and continue
-                basic.input_variables = None
-                basic.input_prompt = None
-                basic.current_input_index = 0
+                basic.clear_input_state()
         
         # Continue execution from where we left off  
         if (hasattr(basic, 'program_counter') and basic.program_counter is not None and 
@@ -213,10 +227,7 @@ def handle_input_response(data):
             output = basic.continue_program_execution()
             emit('output', output)
             
-            # Only send completion signal if execution actually finished (no pause)
-            has_pause = any(item.get('type') == 'pause' for item in output)
-            if not has_pause and basic.program_counter is None:
-                emit('output', [{'type': 'command_complete'}])
+            _emit_command_complete_if_done(output, basic)
         else:
             # Direct INPUT command (not in program) - complete immediately
             emit('output', [{'type': 'command_complete'}])
@@ -229,15 +240,10 @@ def handle_input_response(data):
 def handle_keypress(data):
     """Handle keypress for INKEY$ with session support"""
     key = data.get('key', '')
-    tab_id = data.get('tabId', 'main')
-    
-    # Get session for this client
-    session_id = client_sessions.get(request.sid)
-    if not session_id:
+
+    basic, session_id, tab_id = _get_session(data, error_event=None)
+    if basic is None:
         return
-    
-    # Get BASIC interpreter for this session/tab
-    basic = session_manager.get_session(session_id, tab_id)
     
     # Add the key to the keyboard buffer for INKEY$ function
     basic.keyboard_buffer.append(key)
@@ -245,16 +251,11 @@ def handle_keypress(data):
 @socketio.on('pause_for_tab_switch')
 def handle_pause_for_tab_switch(data):
     """Pause program execution for tab switching"""
-    tab_id = data.get('tabId', 'main')
-    
-    # Get session for this client
-    session_id = client_sessions.get(request.sid)
-    if not session_id:
-        emit('tab_switch_paused', {'success': False, 'error': 'Session not found'})
+    basic, session_id, tab_id = _get_session(
+        data, error_event='tab_switch_paused',
+        error_payload={'success': False, 'error': 'Session not found'})
+    if basic is None:
         return
-    
-    # Get BASIC interpreter for this session/tab
-    basic = session_manager.get_session(session_id, tab_id)
     
     # Check if program is running and pause it
     was_running = basic.program_counter is not None
@@ -267,59 +268,36 @@ def handle_pause_for_tab_switch(data):
 @socketio.on('resume_from_tab_switch')
 def handle_resume_from_tab_switch(data):
     """Resume program execution after returning to tab"""
-    tab_id = data.get('tabId', 'main')
-    
-    # Get session for this client
-    session_id = client_sessions.get(request.sid)
-    if not session_id:
-        emit('output', [{'type': 'error', 'message': 'Session not found'}])
+    basic, session_id, tab_id = _get_session(data)
+    if basic is None:
         return
     
-    # Get BASIC interpreter for this session/tab
-    basic = session_manager.get_session(session_id, tab_id)
-    
     # Resume if it was paused for tab switch
-    if hasattr(basic, 'paused_for_tab_switch') and basic.paused_for_tab_switch:
-        basic.paused_for_tab_switch = False
+    was_paused = hasattr(basic, 'paused_for_tab_switch') and basic.paused_for_tab_switch
+    basic.paused_for_tab_switch = False
+    if was_paused:
         if basic.program_counter:
             # Continue execution from where we left off
             output = basic.continue_program_execution()
             emit('output', output)
             
-            # Check if program finished or paused
-            has_pause = any(item.get('type') == 'pause' for item in output)
-            if not has_pause and basic.program_counter is None:
-                emit('output', [{'type': 'command_complete'}])
+            _emit_command_complete_if_done(output, basic)
 
 @socketio.on('switch_tab')
 def handle_switch_tab(data):
     """Handle tab switching - ensure session exists for new tab"""
-    tab_id = data.get('tabId', 'main')
-    
-    # Get session for this client
-    session_id = client_sessions.get(request.sid)
-    if not session_id:
-        emit('output', [{'type': 'error', 'message': 'Session not found'}])
+    basic, session_id, tab_id = _get_session(data)
+    if basic is None:
         return
     
-    # Ensure session exists for this tab
-    basic = session_manager.get_session(session_id, tab_id)
-    
-    # Send confirmation
-    emit('tab_switched', {'tabId': tab_id})
+    # Session is created/retrieved by _get_session; no response needed
 
 @socketio.on('get_state')
 def handle_get_state(data):
     """Get current state for a tab"""
-    tab_id = data.get('tabId', 'main')
-    
-    # Get session for this client
-    session_id = client_sessions.get(request.sid)
-    if not session_id:
+    basic, session_id, tab_id = _get_session(data, error_event=None)
+    if basic is None:
         return {'program': {}, 'variables': {}}
-    
-    # Get BASIC interpreter for this session/tab
-    basic = session_manager.get_session(session_id, tab_id)
     
     return {
         'program': dict(basic.program),
@@ -329,17 +307,12 @@ def handle_get_state(data):
 @socketio.on('set_state')
 def handle_set_state(data):
     """Set state for a tab"""
-    tab_id = data.get('tabId', 'main')
     program = data.get('program', {})
     variables = data.get('variables', {})
-    
-    # Get session for this client
-    session_id = client_sessions.get(request.sid)
-    if not session_id:
+
+    basic, session_id, tab_id = _get_session(data, error_event=None)
+    if basic is None:
         return
-    
-    # Get BASIC interpreter for this session/tab
-    basic = session_manager.get_session(session_id, tab_id)
     
     # Set state
     basic.program = program
@@ -347,34 +320,26 @@ def handle_set_state(data):
     
     # Expand program lines
     for line_num, code in program.items():
-        basic.expand_line_to_sublines(int(line_num), code)
+        try:
+            basic.expand_line_to_sublines(int(line_num), code)
+        except Exception as e:
+            logger.error("Error expanding line %s: %s", line_num, e, exc_info=True)
+            emit('output', [{'type': 'error', 'message': f'Error restoring line {line_num}: {str(e)}'}])
 
 @socketio.on('continue_execution')
 def handle_continue_execution(data=None):
     """Continue program execution after a pause."""
     try:
-        # Get tab ID from data or default to 'main'
-        tab_id = data.get('tabId', 'main') if data else 'main'
-        
-        # Get session for this client
-        session_id = client_sessions.get(request.sid)
-        if not session_id:
-            emit('output', [{'type': 'error', 'message': 'Session not found'}])
+        basic, session_id, tab_id = _get_session(data)
+        if basic is None:
             return
-        
-        # Get BASIC interpreter for this session/tab
-        basic = session_manager.get_session(session_id, tab_id)
-        
+
         # Continue execution from where we left off
         if basic.program_counter:
             output = basic.continue_program_execution()
             emit('output', output)
             
-            # Only send completion signal if program actually finished and no pause
-            # (program_counter becomes None when program completes)
-            has_pause = any(item.get('type') == 'pause' for item in output)
-            if not has_pause and basic.program_counter is None:
-                emit('output', [{'type': 'command_complete'}])
+            _emit_command_complete_if_done(output, basic)
         else:
             # Silently ignore stray continue_execution calls (likely from cancelled pause timers)
             # This prevents confusing error messages when Ctrl+C interrupts a pause
@@ -388,18 +353,10 @@ def handle_continue_execution(data=None):
 def handle_break_execution(data=None):
     """Break program execution (Ctrl+C)"""
     try:
-        # Get tab ID from data or default to 'main'
-        tab_id = data.get('tabId', 'main') if data else 'main'
-        
-        # Get session for this client
-        session_id = client_sessions.get(request.sid)
-        if not session_id:
-            emit('output', [{'type': 'error', 'message': 'Session not found'}])
+        basic, session_id, tab_id = _get_session(data)
+        if basic is None:
             return
-        
-        # Get BASIC interpreter for this session/tab
-        basic = session_manager.get_session(session_id, tab_id)
-        
+
         # Check if there was actually a program running
         was_running = basic.program_counter is not None or basic.waiting_for_input
         
@@ -407,9 +364,7 @@ def handle_break_execution(data=None):
         basic.program_counter = None
         basic.waiting_for_input = False
         if hasattr(basic, 'input_variables'):
-            basic.input_variables = None
-            basic.input_prompt = None
-            basic.current_input_index = 0
+            basic.clear_input_state()
         
         # Send appropriate response based on whether something was actually interrupted
         if was_running:
