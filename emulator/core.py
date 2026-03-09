@@ -52,6 +52,7 @@ class CoCoBasic:
         self.error_context = ErrorContextManager()
         self.current_sub_line = 0
         self.call_stack = []
+        self.local_stack = []  # Stack of frames for LOCAL variable save/restore
         self.for_stack = []
         self.if_stack = []
         self.while_stack = []
@@ -852,6 +853,7 @@ class CoCoBasic:
         """Clear all control-flow stacks."""
         self.for_stack.clear()
         self.call_stack.clear()
+        self.local_stack.clear()
         self.if_stack.clear()
         self.while_stack.clear()
         self.do_stack.clear()
@@ -872,6 +874,7 @@ class CoCoBasic:
             'current_sub_line': self.current_sub_line,
             'for_stack': self.for_stack.copy(),
             'call_stack': self.call_stack.copy(),
+            'local_stack': [frame.copy() for frame in self.local_stack],
         }
 
     def restore_execution_state(self, state):
@@ -883,6 +886,7 @@ class CoCoBasic:
         self.current_sub_line = state['current_sub_line']
         self.for_stack = state['for_stack']
         self.call_stack = state['call_stack']
+        self.local_stack = state['local_stack']
 
     def clear_interpreter_state(self, clear_program=True):
         """Clear interpreter state - shared function for NEW, LOAD, and other commands"""

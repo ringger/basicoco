@@ -100,12 +100,13 @@ The dialect is based on Extended Color BASIC as shipped with the CoCo 1 and CoCo
 - **Sound**: SOUND command (note: accepts frequency in Hz rather than the CoCo's 1-255 pitch table)
 
 ### Modern Extensions
-These were not in Extended Color BASIC but make the environment more learner-friendly:
+These were not in Extended Color BASIC but make the environment more learner-friendly. Any program that runs on a real CoCo will run here; these additions extend the dialect without breaking compatibility.
 
 - **MOD** operator for modular arithmetic
 - **EXIT FOR** to break out of FOR/NEXT loops early
 - **WHILE/WEND** and **DO/LOOP** (with WHILE/UNTIL) structured loop constructs
 - **IF/THEN/ELSE/ENDIF** multi-line conditional blocks
+- **LOCAL** *var1, var2, ...* — save variables in GOSUB, restore on RETURN (prevents subroutine variable collisions)
 - **PAUSE** *n* — delay execution for *n* seconds (real CoCo used busy loops)
 - **Single-line compound statements** like `IF A=1 THEN FOR I=1 TO 3: PRINT I: NEXT I`
 - **Labels** as GOTO/GOSUB targets (`MyLabel:` on its own line, used as `GOTO MyLabel`)
@@ -129,7 +130,7 @@ This is a BASIC interpreter, not a hardware emulator. It doesn't emulate the 680
 - **Graphics** are VDG-inspired but simplified — no CSS-based 4-color set switching, approximate PMODE 0/2 resolutions
 - **SOUND** accepts frequency in Hz (1-4095) rather than the CoCo's pitch table values (1-255)
 - **PRINT** spacing doesn't exactly match hardware behavior (number padding, 16-column comma zones)
-- **Modern extensions** (MOD, EXIT FOR, WHILE/WEND, DO/LOOP, PAUSE) are additions beyond the original ROM
+- **Modern extensions** (MOD, EXIT FOR, WHILE/WEND, DO/LOOP, LOCAL, PAUSE, labels) are additions beyond the original ROM
 - Can't run real CoCo binaries, cassette images, or disk images
 
 ## Related Projects

@@ -560,6 +560,7 @@ class ASTEvaluator(ASTVisitor):
             return error_response(error)
 
         self.emulator.call_stack.append((self.emulator.current_line, self.emulator.current_sub_line))
+        self.emulator.local_stack.append([])
         return [{'type': 'jump', 'line': line_num}]
 
     def visit_on_branch_statement(self, node: OnBranchStatementNode) -> Any:
@@ -633,6 +634,15 @@ class ASTEvaluator(ASTVisitor):
             return error_response(error)
 
         return_line, return_sub_line = self.emulator.call_stack.pop()
+        # Restore LOCAL variables saved during this GOSUB call
+        if self.emulator.local_stack:
+            frame = self.emulator.local_stack.pop()
+            for var_name, saved_value in reversed(frame):
+                if saved_value is None:
+                    # Variable didn't exist before LOCAL — remove it
+                    self.emulator.variables.pop(var_name, None)
+                else:
+                    self.emulator.variables[var_name] = saved_value
         return [{'type': 'jump_return', 'line': return_line, 'sub_line': return_sub_line}]
 
     def visit_for_statement(self, node: ForStatementNode) -> Any:

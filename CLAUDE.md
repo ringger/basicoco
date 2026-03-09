@@ -7,7 +7,7 @@
 1. **Multi-line IF** — bare `IF cond THEN` (no action). Must be first because the AST parser can't parse it.
 2. **File I/O intercepts** — PRINT#, INPUT#, LINE INPUT# (and console LINE INPUT). Intercepted before AST because the AST parser doesn't understand `#` syntax.
 3. **`_try_ast_execute()`** — anything not in the `CommandRegistry`. The parser knows registry command keywords via `registry_commands` set and raises `RegistryCommandError` for them. Handles: END, GOTO, LET, PRINT, GOSUB, RETURN, FOR, EXIT FOR, WHILE, DO, IF, INPUT, ON (GOTO/GOSUB and ERROR GOTO), and implicit assignment (`X = 5`).
-4. **`CommandRegistry`** — everything else: NEXT, WEND, LOOP, ELSE, ENDIF, DIM, STOP, CONT, DATA, READ, RESTORE, SOUND, PAUSE, etc.
+4. **`CommandRegistry`** — everything else: NEXT, WEND, LOOP, ELSE, ENDIF, LOCAL, DIM, STOP, CONT, DATA, READ, RESTORE, SOUND, PAUSE, etc.
 
 New control flow → AST visitor in `ast_evaluator.py`. New utility command → registry via `execute_*`. New BASIC function → `functions.py` only.
 
@@ -27,6 +27,7 @@ AST visitors push; registry closing commands pop:
 |-------|-----------|-----------|
 | `for_stack` | `visit_for_statement` | `execute_next` (control_flow.py) |
 | `call_stack` | `visit_gosub_statement` | `visit_return_statement` |
+| `local_stack` | `visit_gosub_statement` (empty frame) | `visit_return_statement` (restores variables) |
 | `while_stack` | `visit_while_statement` | `execute_wend` (control_flow.py) |
 | `do_stack` | `visit_do_statement` | `execute_loop` (control_flow.py) |
 | `if_stack` | `visit_if_statement` / multi-line IF handler | `execute_else`, `execute_endif` (control_flow.py) |
@@ -48,6 +49,16 @@ Nesting: `_skip_if_or_else_block()` counts nested IFs by checking `stmt.startswi
 State fields on `CoCoBasic`: `on_error_goto_line`, `error_number` (ERR), `error_line` (ERL), `error_resume_position`, `in_error_handler`. All reset by `clear_interpreter_state()`.
 
 `RESUME` / `RESUME NEXT` / `RESUME <line>` return `resume` / `resume_next` / `jump` directives handled by `_handle_flow_control()`. ERR and ERL are read-only pseudo-variables exposed in `visit_variable()`.
+
+## LOCAL Variables
+
+`LOCAL var1, var2, ...` inside a GOSUB subroutine saves the listed variables' current values. On RETURN, saved values are restored. This prevents subroutine variable collisions — the main pain point when all variables are global.
+
+- GOSUB pushes an empty frame onto `local_stack`; LOCAL appends (name, saved_value) entries to the current frame
+- RETURN pops the frame and restores variables in reverse order; variables that didn't exist before LOCAL are removed
+- LOCAL outside GOSUB is a runtime error
+- `local_stack` is managed alongside `call_stack` in `clear_all_stacks()`, `save_execution_state()`, `restore_execution_state()`
+- `execute_local` lives in `control_flow.py` (registry command)
 
 ## INPUT Protocol
 

@@ -52,6 +52,12 @@ class ControlFlowCommands:
                          syntax="ENDIF",
                          examples=["ENDIF"])
 
+        registry.register('LOCAL', self.execute_local,
+                         category='control',
+                         description="Save variables for restoration on RETURN",
+                         syntax="LOCAL var1, var2, ...",
+                         examples=["LOCAL IX, IY", "LOCAL N$, I"])
+
         registry.register('STOP', self.execute_stop,
                          category='control',
                          description="Stop program execution",
@@ -202,6 +208,48 @@ class ControlFlowCommands:
             return err
 
         em.if_stack.pop()
+        return []
+
+    def execute_local(self, args):
+        """LOCAL var1, var2, ... — save variable values for restoration on RETURN.
+
+        Must be inside a GOSUB call. Each listed variable's current value is
+        saved onto the local_stack frame. On RETURN, saved values are restored.
+        """
+        em = self.emulator
+        if not em.local_stack:
+            error = em.error_context.runtime_error(
+                "LOCAL WITHOUT GOSUB",
+                em.current_line,
+                suggestions=[
+                    "LOCAL can only be used inside a subroutine called with GOSUB",
+                    "Example: GOSUB MySub: ... : MySub: LOCAL I, J",
+                    "LOCAL saves variables so RETURN restores them"
+                ]
+            )
+            return error_response(error)
+
+        if not args:
+            error = em.error_context.syntax_error(
+                "LOCAL requires variable names",
+                em.current_line,
+                suggestions=[
+                    "Correct syntax: LOCAL var1, var2, ...",
+                    "Example: LOCAL IX, IY, N$",
+                    "Variables are saved and restored on RETURN"
+                ]
+            )
+            return error_response(error)
+
+        from .text_utils import StatementSplitter
+        var_names = StatementSplitter.split_args(args)
+        frame = em.local_stack[-1]
+        for var_name in var_names:
+            name = var_name.strip().upper()
+            if not name:
+                continue
+            saved_value = em.variables.get(name, None)
+            frame.append((name, saved_value))
         return []
 
     def execute_stop(self, args):
