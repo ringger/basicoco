@@ -165,6 +165,40 @@ class DataCommands:
             return error_response(error)
 
     def execute_restore(self, args):
-        """RESTORE command - reset data pointer to beginning."""
-        self.emulator.data_pointer = 0
+        """RESTORE [line | label] - reset data pointer.
+
+        No argument: reset to beginning of all DATA.
+        With line number: reset to first DATA at or after that line.
+        With label name: resolve label to line number, then same.
+        """
+        em = self.emulator
+        args = args.strip() if args else ''
+        if not args:
+            em.data_pointer = 0
+            return []
+
+        # Resolve label or line number
+        target_line = em.resolve_label(args.upper())
+        if target_line is None:
+            try:
+                target_line = em.eval_int(args, em.current_line)
+            except (ValueError, TypeError):
+                error = em.error_context.syntax_error(
+                    f"Invalid RESTORE target: {args}",
+                    em.current_line,
+                    suggestions=[
+                        "Use RESTORE, RESTORE line_number, or RESTORE label",
+                        "Example: RESTORE 1000 or RESTORE MyData"
+                    ]
+                )
+                return error_response(error)
+
+        # Find first data entry at or after target line
+        for i, (line_num, value) in enumerate(em.data_statements):
+            if line_num >= target_line:
+                em.data_pointer = i
+                return []
+
+        # No DATA at or after target — point past end (next READ will get OUT OF DATA)
+        em.data_pointer = len(em.data_statements)
         return []

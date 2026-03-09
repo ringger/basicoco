@@ -104,45 +104,134 @@ class TestExpressionEvaluation:
         assert result == "Value: HELLO"
 
     def test_comparison_operations(self, basic, helpers):
-        """Test comparison operators"""
-        # Test comparison results through PRINT to see actual behavior
-        result = basic.process_command("PRINT A > B")  # 10 > 5 should be true
-        text_output = helpers.get_text_output(result)
-        errors = helpers.get_error_messages(result)
+        """Comparison operators return -1 (true) or 0 (false), matching CoCo BASIC."""
+        # Greater than (true)
+        text = helpers.get_text_output(basic.process_command("PRINT A > B"))
+        assert text[0].strip() == "-1"
 
-        if not errors:
-            # Should print either -1 (BASIC true) or 1 (some implementations)
-            assert len(text_output) == 1, f"Expected single output, got: {text_output}"
-            value = text_output[0].strip()
-            assert value in ['-1', '1', 'True'], f"Expected true value (-1, 1, or True), got: {value}"
+        # Less than (false)
+        text = helpers.get_text_output(basic.process_command("PRINT A < B"))
+        assert text[0].strip() == "0"
 
-        result = basic.process_command("PRINT A < B")  # 10 < 5 should be false
-        text_output = helpers.get_text_output(result)
-        errors = helpers.get_error_messages(result)
+        # Equal (true)
+        text = helpers.get_text_output(basic.process_command("PRINT A = 10"))
+        assert text[0].strip() == "-1"
 
-        if not errors:
-            # Should print 0 (BASIC false)
-            assert len(text_output) == 1, f"Expected single output, got: {text_output}"
-            value = text_output[0].strip()
-            assert value in ['0', 'False'], f"Expected false value (0 or False), got: {value}"
+        # Equal (false)
+        text = helpers.get_text_output(basic.process_command("PRINT A = 5"))
+        assert text[0].strip() == "0"
 
-        # Numerical comparisons using subtract for equality check
-        result = basic.evaluate_expression("ABS(A - 10)")  # Check if A equals 10
-        assert result == 0  # Should be 0 if A = 10
+        # Not equal (true)
+        text = helpers.get_text_output(basic.process_command("PRINT A <> B"))
+        assert text[0].strip() == "-1"
 
-    def test_logical_operations(self, basic, helpers):
-        """Test logical operations using simpler expressions"""
-        # Test logical comparisons with variables
-        result = basic.evaluate_expression("A > 5")  # 10 > 5 = True
-        assert result in [True, -1]
-        
-        result = basic.evaluate_expression("B < 3")  # 5 < 3 = False  
-        assert result in [False, 0]
-        
-        # Use mathematical operations to simulate logical operations
-        # (A > B) would be 1 if true, 0 if false in mathematical context
-        result = basic.evaluate_expression("A + B")  # Simple addition instead
-        assert result == 15
+        # Not equal (false)
+        text = helpers.get_text_output(basic.process_command("PRINT B <> 5"))
+        assert text[0].strip() == "0"
+
+        # Less than or equal
+        text = helpers.get_text_output(basic.process_command("PRINT B <= 5"))
+        assert text[0].strip() == "-1"
+        text = helpers.get_text_output(basic.process_command("PRINT A <= 5"))
+        assert text[0].strip() == "0"
+
+        # Greater than or equal
+        text = helpers.get_text_output(basic.process_command("PRINT A >= 10"))
+        assert text[0].strip() == "-1"
+        text = helpers.get_text_output(basic.process_command("PRINT B >= 10"))
+        assert text[0].strip() == "0"
+
+    def test_comparison_returns_integers(self, basic, helpers):
+        """Comparisons return integer -1/0, not Python bool."""
+        result = basic.evaluate_expression("A > 5")
+        assert result == -1
+        assert type(result) is int
+
+        result = basic.evaluate_expression("B < 3")
+        assert result == 0
+        assert type(result) is int
+
+    def test_comparison_in_arithmetic(self, basic, helpers):
+        """Comparison results can be used in arithmetic (CoCo idiom)."""
+        # X = X + (condition) uses -1/0 to conditionally subtract
+        basic.variables['X'] = 100
+        result = basic.evaluate_expression("X + (X > 50)")
+        assert result == 99  # 100 + (-1)
+
+        result = basic.evaluate_expression("X + (X < 50)")
+        assert result == 100  # 100 + 0
+
+    def test_comparison_with_string(self, basic, helpers):
+        """String comparisons also return -1/0."""
+        result = basic.evaluate_expression('"A" < "B"')
+        assert result == -1
+        result = basic.evaluate_expression('"B" < "A"')
+        assert result == 0
+        result = basic.evaluate_expression('"HELLO" = "HELLO"')
+        assert result == -1
+
+    def test_bitwise_and(self, basic, helpers):
+        """AND is bitwise on integers, matching CoCo BASIC."""
+        assert basic.evaluate_expression("82 AND 223") == 82
+        assert basic.evaluate_expression("255 AND 15") == 15
+        assert basic.evaluate_expression("170 AND 85") == 0
+        assert basic.evaluate_expression("7 AND 3") == 3
+        assert basic.evaluate_expression("0 AND 255") == 0
+        assert basic.evaluate_expression("-1 AND 255") == 255
+
+    def test_bitwise_or(self, basic, helpers):
+        """OR is bitwise on integers, matching CoCo BASIC."""
+        assert basic.evaluate_expression("5 OR 3") == 7
+        assert basic.evaluate_expression("170 OR 85") == 255
+        assert basic.evaluate_expression("0 OR 0") == 0
+        assert basic.evaluate_expression("0 OR 255") == 255
+        assert basic.evaluate_expression("-1 OR 0") == -1
+
+    def test_bitwise_not(self, basic, helpers):
+        """NOT is bitwise complement, matching CoCo BASIC."""
+        assert basic.evaluate_expression("NOT 0") == -1
+        assert basic.evaluate_expression("NOT -1") == 0
+        assert basic.evaluate_expression("NOT 1") == -2
+        assert basic.evaluate_expression("NOT 255") == -256
+
+    def test_and_or_with_comparisons(self, basic, helpers):
+        """AND/OR work as logical when applied to comparison results (-1/0)."""
+        # -1 AND -1 = -1
+        assert basic.evaluate_expression("(A > 5) AND (B > 3)") == -1
+        # -1 AND 0 = 0
+        assert basic.evaluate_expression("(A > 5) AND (B > 10)") == 0
+        # 0 OR -1 = -1
+        assert basic.evaluate_expression("(A < 5) OR (B > 3)") == -1
+        # 0 OR 0 = 0
+        assert basic.evaluate_expression("(A < 5) OR (B > 10)") == 0
+
+    def test_not_with_comparisons(self, basic, helpers):
+        """NOT works as logical negation on comparison results (-1/0)."""
+        assert basic.evaluate_expression("NOT (A > 5)") == 0    # NOT -1 = 0
+        assert basic.evaluate_expression("NOT (A < 5)") == -1   # NOT 0 = -1
+
+    def test_and_with_chr_asc_pattern(self, basic, helpers):
+        """CHR$(ASC(x) AND 223) uppercase conversion pattern."""
+        text = helpers.get_text_output(
+            basic.process_command('PRINT CHR$(ASC("r") AND 223)'))
+        assert text[0].strip() == "R"
+        text = helpers.get_text_output(
+            basic.process_command('PRINT CHR$(ASC("R") AND 223)'))
+        assert text[0].strip() == "R"
+
+    def test_print_not_expression(self, basic, helpers):
+        """PRINT NOT expr works without parentheses."""
+        text = helpers.get_text_output(basic.process_command('PRINT NOT 0'))
+        assert text[0].strip() == "-1"
+        text = helpers.get_text_output(basic.process_command('PRINT NOT -1'))
+        assert text[0].strip() == "0"
+
+    def test_print_not_after_semicolon(self, basic, helpers):
+        """PRINT "X=";NOT 0 works."""
+        text = helpers.get_text_output(
+            basic.process_command('PRINT "X=";NOT 0'))
+        output = ''.join(text)
+        assert 'X=-1' in output or 'X= -1' in output
 
     def test_function_calls(self, basic, helpers):
         """Test function calls in expressions"""

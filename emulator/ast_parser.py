@@ -928,11 +928,15 @@ class ASTParser:
         expressions = []
         separators = []
 
-        # Detect bare PRINT with no expression. A keyword (ELSE, NEXT, etc.)
-        # or non-expression punctuation (:) means end of PRINT. Parentheses,
-        # semicolons, and commas can start or continue an expression.
+        # Detect bare PRINT with no expression. A statement keyword (ELSE,
+        # NEXT, etc.) or non-expression punctuation (:) means end of PRINT.
+        # Operator keywords (NOT, AND, OR, MOD) can start/continue expressions.
+        # Parentheses, semicolons, and commas can start or continue an expression.
+        _OPERATOR_KEYWORDS = {'NOT', 'AND', 'OR', 'MOD'}
         token = self._current_token()
-        if not token or token['type'] == 'KEYWORD' or (
+        if not token or (
+            token['type'] == 'KEYWORD' and token['value'] not in _OPERATOR_KEYWORDS
+        ) or (
             token['type'] == 'PUNCTUATION'
             and token['value'] not in ('(', ';', ',')
         ):
@@ -949,9 +953,10 @@ class ASTParser:
             sep_token = self._advance()
             separators.append(sep_token['value'])
 
-            # Check if there's another expression (not a keyword or another separator)
+            # Check if there's another expression (not a statement keyword or another separator)
             token = self._current_token()
-            if (token and token['type'] != 'KEYWORD' and
+            if (token and
+                not (token['type'] == 'KEYWORD' and token['value'] not in _OPERATOR_KEYWORDS) and
                 not (token['type'] == 'PUNCTUATION' and token['value'] in (';', ','))):
                 expressions.append(self._parse_or_expression())
 

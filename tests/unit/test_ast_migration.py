@@ -237,11 +237,11 @@ class TestGosubReturnMigration:
         result = basic._try_ast_execute('GOSUB 100')
         assert result == [{'type': 'jump', 'line': 100}]
         assert len(basic.call_stack) == 1
-        assert basic.call_stack[0] == (10, 0)
+        assert basic.call_stack[0][:2] == (10, 0)
 
     def test_return_via_ast_pops_stack(self, basic):
         """RETURN should pop call stack and return jump_return"""
-        basic.call_stack.append((10, 0))
+        basic.call_stack.append((10, 0, 0, 0))
         result = basic._try_ast_execute('RETURN')
         assert result == [{'type': 'jump_return', 'line': 10, 'sub_line': 0}]
         assert len(basic.call_stack) == 0

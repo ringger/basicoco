@@ -373,3 +373,158 @@ class TestDataCommand:
         assert len(errors) == 0, f"Should handle DATA in mixed line: {errors}"
         helpers.assert_variable_equals(basic, 'A', 100)
         helpers.assert_variable_equals(basic, 'B', 200)
+
+
+class TestRestoreWithTarget:
+    """Test RESTORE with line number and label targets."""
+
+    def test_restore_line_number(self, basic, helpers):
+        """RESTORE <line> sets pointer to first DATA at or after that line."""
+        program = [
+            '10 DATA 10, 20',
+            '20 DATA 30, 40',
+            '30 READ A, B, C, D',
+            '40 RESTORE 20',
+            '50 READ E, F',
+            '60 PRINT E; F',
+        ]
+        results = helpers.execute_program(basic, program)
+        errors = helpers.get_error_messages(results)
+        assert errors == [], f"Errors: {errors}"
+        helpers.assert_variable_equals(basic, 'E', 30)
+        helpers.assert_variable_equals(basic, 'F', 40)
+
+    def test_restore_line_number_skips_earlier(self, basic, helpers):
+        """RESTORE <line> skips DATA on earlier lines."""
+        program = [
+            '10 DATA 100',
+            '20 DATA 200',
+            '30 DATA 300',
+            '40 RESTORE 20',
+            '50 READ A',
+            '60 PRINT A',
+        ]
+        results = helpers.execute_program(basic, program)
+        errors = helpers.get_error_messages(results)
+        assert errors == [], f"Errors: {errors}"
+        helpers.assert_variable_equals(basic, 'A', 200)
+
+    def test_restore_line_number_at_exact_line(self, basic, helpers):
+        """RESTORE targets the exact line with DATA."""
+        program = [
+            '10 DATA 10',
+            '20 DATA 20',
+            '30 RESTORE 10',
+            '40 READ A',
+            '50 PRINT A',
+        ]
+        results = helpers.execute_program(basic, program)
+        errors = helpers.get_error_messages(results)
+        assert errors == [], f"Errors: {errors}"
+        helpers.assert_variable_equals(basic, 'A', 10)
+
+    def test_restore_line_after_all_data(self, basic, helpers):
+        """RESTORE to a line past all DATA causes OUT OF DATA on next READ."""
+        program = [
+            '10 DATA 10, 20',
+            '20 RESTORE 999',
+            '30 READ A',
+        ]
+        results = helpers.execute_program(basic, program)
+        errors = helpers.get_error_messages(results)
+        assert any('OUT OF DATA' in e for e in errors)
+
+    def test_restore_label(self, basic, helpers):
+        """RESTORE <label> sets pointer to DATA at that label's line."""
+        program = [
+            '10 DATA 10, 20',
+            '50 RESTORE SecondData',
+            '60 READ A',
+            '70 PRINT A',
+            '80 END',
+            '200 SecondData:',
+            '210 DATA 99, 88',
+        ]
+        results = helpers.execute_program(basic, program)
+        errors = helpers.get_error_messages(results)
+        assert errors == [], f"Errors: {errors}"
+        helpers.assert_variable_equals(basic, 'A', 99)
+
+    def test_restore_label_with_multiple_data_blocks(self, basic, helpers):
+        """RESTORE label selects the right DATA block among several."""
+        program = [
+            '100 BlockA:',
+            '110 DATA 1, 2, 3',
+            '200 BlockB:',
+            '210 DATA 4, 5, 6',
+            '300 BlockC:',
+            '310 DATA 7, 8, 9',
+            '10 RESTORE BlockB',
+            '20 READ A, B, C',
+            '30 PRINT A; B; C',
+            '40 END',
+        ]
+        results = helpers.execute_program(basic, program)
+        errors = helpers.get_error_messages(results)
+        assert errors == [], f"Errors: {errors}"
+        helpers.assert_variable_equals(basic, 'A', 4)
+        helpers.assert_variable_equals(basic, 'B', 5)
+        helpers.assert_variable_equals(basic, 'C', 6)
+
+    def test_restore_plain_then_targeted(self, basic, helpers):
+        """Plain RESTORE resets to beginning, targeted RESTORE skips ahead."""
+        program = [
+            '10 DATA 10, 20',
+            '20 DATA 30, 40',
+            '30 READ A, B, C, D',
+            '40 RESTORE',
+            '50 READ X',
+            '55 RESTORE 20',
+            '60 READ Y',
+            '70 PRINT X; Y',
+        ]
+        results = helpers.execute_program(basic, program)
+        errors = helpers.get_error_messages(results)
+        assert errors == [], f"Errors: {errors}"
+        helpers.assert_variable_equals(basic, 'X', 10)
+        helpers.assert_variable_equals(basic, 'Y', 30)
+
+    def test_restore_invalid_target(self, basic, helpers):
+        """RESTORE with invalid target gives syntax error."""
+        program = [
+            '10 DATA 10',
+            '20 RESTORE "bad"',
+            '30 END',
+        ]
+        results = helpers.execute_program(basic, program)
+        errors = helpers.get_error_messages(results)
+        assert len(errors) > 0, "Should error on invalid RESTORE target"
+
+    def test_restore_label_case_insensitive(self, basic, helpers):
+        """RESTORE label lookup is case-insensitive."""
+        program = [
+            '5 MyData:',
+            '10 DATA 42',
+            '20 RESTORE mydata',
+            '30 READ A',
+            '40 PRINT A',
+        ]
+        results = helpers.execute_program(basic, program)
+        errors = helpers.get_error_messages(results)
+        assert errors == [], f"Errors: {errors}"
+        helpers.assert_variable_equals(basic, 'A', 42)
+
+    def test_restore_with_expression(self, basic, helpers):
+        """RESTORE with a numeric expression for line number."""
+        program = [
+            '10 DATA 10',
+            '20 DATA 20',
+            '30 X=20',
+            '40 RESTORE X',
+            '50 READ A',
+            '60 PRINT A',
+        ]
+        results = helpers.execute_program(basic, program)
+        errors = helpers.get_error_messages(results)
+        assert errors == [], f"Errors: {errors}"
+        helpers.assert_variable_equals(basic, 'A', 20)

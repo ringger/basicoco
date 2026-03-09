@@ -508,3 +508,130 @@ class TestAutoNumbering:
         text = helpers.get_text_output(result)
         assert not any('SKIP' in t for t in text)
         assert any('ENTERED' in t for t in text)
+
+
+class TestMergeIfGosubReturn:
+    """Test MERGE with IF THEN GOSUB: RETURN pattern.
+
+    Reproduces the DoMoves/DoTurn bug where a merged label-only library
+    with IF cond THEN GOSUB sub: RETURN doesn't execute correctly.
+    """
+
+    @pytest.fixture(autouse=True)
+    def setup(self, temp_programs_dir):
+        self.programs_dir = temp_programs_dir
+
+    def _write_bas(self, filename, lines):
+        path = os.path.join(self.programs_dir, filename)
+        with open(path, 'w') as f:
+            for line in lines:
+                f.write(line + '\n')
+
+    def test_merged_if_gosub_return(self, basic, helpers):
+        """Merged sub with IF THEN GOSUB: RETURN works."""
+        self._write_bas('lib.bas', [
+            'DoWork:',
+            'IF 1=1 THEN GOSUB Worker: RETURN',
+            'RETURN',
+            'Worker:',
+            'X=X+1',
+            'RETURN',
+        ])
+        result = helpers.execute_program(basic, [
+            '10 X=0',
+            '20 MERGE "lib"',
+            '30 GOSUB DoWork',
+            '40 PRINT "X=";X',
+            '50 END',
+        ])
+        errors = helpers.get_error_messages(result)
+        assert errors == [], f"Errors: {errors}"
+        text = helpers.get_text_output(result)
+        output = ' '.join(text)
+        assert '1' in output, f"X should be 1: {text}"
+
+    def test_merged_for_loop_if_gosub_return(self, basic, helpers):
+        """Merged library: FOR loop calling sub with IF THEN GOSUB: RETURN."""
+        self._write_bas('lib.bas', [
+            'Outer:',
+            'LOCAL MI',
+            'FOR MI=1 TO 3',
+            '  GOSUB Inner',
+            'NEXT MI',
+            'RETURN',
+            'Inner:',
+            'IF 1=1 THEN GOSUB Worker: RETURN',
+            'RETURN',
+            'Worker:',
+            'X=X+1',
+            'RETURN',
+        ])
+        result = helpers.execute_program(basic, [
+            '10 X=0',
+            '20 MERGE "lib"',
+            '30 GOSUB Outer',
+            '40 PRINT "X=";X',
+            '50 END',
+        ])
+        errors = helpers.get_error_messages(result)
+        assert errors == [], f"Errors: {errors}"
+        text = helpers.get_text_output(result)
+        output = ' '.join(text)
+        assert '3' in output, f"X should be 3: {text}"
+
+    def test_merged_if_variable_gosub_return(self, basic, helpers):
+        """Merged library: IF var=0 THEN GOSUB: RETURN (AN=0 pattern)."""
+        self._write_bas('lib.bas', [
+            'DoTurn:',
+            'IF AN=0 THEN GOSUB Permute: RETURN',
+            'REM animated path',
+            'GOSUB Permute',
+            'RETURN',
+            'Permute:',
+            'X=X+1',
+            'RETURN',
+        ])
+        result = helpers.execute_program(basic, [
+            '10 AN=0: X=0',
+            '20 MERGE "lib"',
+            '30 GOSUB DoTurn',
+            '40 PRINT "X=";X',
+            '50 END',
+        ])
+        errors = helpers.get_error_messages(result)
+        assert errors == [], f"Errors: {errors}"
+        text = helpers.get_text_output(result)
+        output = ' '.join(text)
+        assert '1' in output, f"X should be 1: {text}"
+
+    def test_merged_full_domoves_pattern(self, basic, helpers):
+        """Full DoMoves/DoTurn simulation with merged label-only library."""
+        self._write_bas('engine.bas', [
+            'DoMoves:',
+            'LOCAL MI, MC$, UC$',
+            'FOR MI=1 TO LEN(MS$)',
+            '  MC$=MID$(MS$,MI,1)',
+            '  GOSUB DoTurn',
+            'NEXT MI',
+            'RETURN',
+            'DoTurn:',
+            'IF AN=0 THEN GOSUB Permute: RETURN',
+            'GOSUB Permute',
+            'RETURN',
+            'Permute:',
+            'X=X+1',
+            'RETURN',
+        ])
+        result = helpers.execute_program(basic, [
+            '10 AN=0: X=0',
+            '20 MERGE "engine"',
+            '30 MS$="RUF"',
+            '40 GOSUB DoMoves',
+            '50 PRINT "X=";X',
+            '60 END',
+        ])
+        errors = helpers.get_error_messages(result)
+        assert errors == [], f"Errors: {errors}"
+        text = helpers.get_text_output(result)
+        output = ' '.join(text)
+        assert '3' in output, f"X should be 3 (3 moves): {text}"

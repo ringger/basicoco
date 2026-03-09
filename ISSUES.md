@@ -15,9 +15,14 @@ Low priority — rarely needed or hard to emulate meaningfully:
 
 - [ ] **`interactive_session()` test harness helper** — create helper in conftest.py for pexpect-based program audit tests to reduce boilerplate in `test_program_audit.py`.
 
+## Rubik's Cube Solver
+
+- [x] **Bottom cross solver fails on R, B, RF, RU scrambles** — Fixed. `KickMid10` used `B` (disturbing solved edge 2) when TI=1; changed threshold from `TI>=2` to `TI>=1` to prefer `R` (which only disturbs the target slot).
+- [x] **Comparison operators return Python booleans** — Fixed. Comparisons now return `-1`/`0` integers matching CoCo BASIC.
+
 ## Known Behavioral Limitations
 
-- **GOTO out of multi-line IF** leaves a stale `if_stack` entry (cleared on next RUN). This matches real CoCo behavior where GOTO from structured blocks is undefined.
+- **GOTO out of multi-line IF** leaves a stale `if_stack` entry (cleared on next RUN). This matches real CoCo behavior where GOTO from structured blocks is undefined. Note: RETURN out of IF blocks inside GOSUB is handled correctly — GOSUB saves if_stack/for_stack depth and RETURN restores it.
 
 ## Refactoring Opportunities
 

@@ -28,6 +28,17 @@ class ASTEvaluator(ASTVisitor):
         self.emulator = emulator
 
     @staticmethod
+    def _to_basic_int(val):
+        """Convert a value to a BASIC integer for bitwise operations.
+
+        Python booleans (from comparisons) map to -1 (True) / 0 (False)
+        matching CoCo BASIC convention. Numbers are truncated to int.
+        """
+        if isinstance(val, bool):
+            return -1 if val else 0
+        return int(val)
+
+    @staticmethod
     def _format_print_value(value):
         """Format a value for PRINT output.
 
@@ -87,21 +98,21 @@ class ASTEvaluator(ASTVisitor):
         elif node.operator == Operator.POWER:
             return left_val ** right_val
         elif node.operator == Operator.EQUAL:
-            return left_val == right_val
+            return -1 if left_val == right_val else 0
         elif node.operator == Operator.NOT_EQUAL:
-            return left_val != right_val
+            return -1 if left_val != right_val else 0
         elif node.operator == Operator.LESS_THAN:
-            return left_val < right_val
+            return -1 if left_val < right_val else 0
         elif node.operator == Operator.GREATER_THAN:
-            return left_val > right_val
+            return -1 if left_val > right_val else 0
         elif node.operator == Operator.LESS_EQUAL:
-            return left_val <= right_val
+            return -1 if left_val <= right_val else 0
         elif node.operator == Operator.GREATER_EQUAL:
-            return left_val >= right_val
+            return -1 if left_val >= right_val else 0
         elif node.operator == Operator.AND:
-            return bool(left_val) and bool(right_val)
+            return self._to_basic_int(left_val) & self._to_basic_int(right_val)
         elif node.operator == Operator.OR:
-            return bool(left_val) or bool(right_val)
+            return self._to_basic_int(left_val) | self._to_basic_int(right_val)
         elif node.operator == Operator.MOD:
             # Modulo operation
             if right_val == 0:
@@ -126,7 +137,7 @@ class ASTEvaluator(ASTVisitor):
         elif node.operator == Operator.ADD:
             return +operand_val
         elif node.operator == Operator.NOT:
-            return not bool(operand_val)
+            return ~self._to_basic_int(operand_val)
         else:
             error = self.emulator.error_context.runtime_error(
                 f"Unknown unary operator: {node.operator}",
@@ -559,7 +570,9 @@ class ASTEvaluator(ASTVisitor):
             )
             return error_response(error)
 
-        self.emulator.call_stack.append((self.emulator.current_line, self.emulator.current_sub_line))
+        self.emulator.call_stack.append((
+            self.emulator.current_line, self.emulator.current_sub_line,
+            len(self.emulator.if_stack), len(self.emulator.for_stack)))
         self.emulator.local_stack.append([])
         return [{'type': 'jump', 'line': line_num}]
 
@@ -591,7 +604,9 @@ class ASTEvaluator(ASTVisitor):
             return error_response(error)
 
         if node.branch_type == 'GOSUB':
-            self.emulator.call_stack.append((self.emulator.current_line, self.emulator.current_sub_line))
+            self.emulator.call_stack.append((
+                self.emulator.current_line, self.emulator.current_sub_line,
+                len(self.emulator.if_stack), len(self.emulator.for_stack)))
             self.emulator.local_stack.append([])
 
         return [{'type': 'jump', 'line': target_line}]
@@ -634,7 +649,10 @@ class ASTEvaluator(ASTVisitor):
             )
             return error_response(error)
 
-        return_line, return_sub_line = self.emulator.call_stack.pop()
+        entry = self.emulator.call_stack.pop()
+        return_line, return_sub_line = entry[0], entry[1]
+        saved_if_depth = entry[2] if len(entry) > 2 else None
+        saved_for_depth = entry[3] if len(entry) > 3 else None
         # Restore LOCAL variables saved during this GOSUB call
         if self.emulator.local_stack:
             frame = self.emulator.local_stack.pop()
@@ -644,6 +662,13 @@ class ASTEvaluator(ASTVisitor):
                     self.emulator.variables.pop(var_name, None)
                 else:
                     self.emulator.variables[var_name] = saved_value
+        # Clean up stale if_stack/for_stack entries from early RETURN
+        if saved_if_depth is not None:
+            while len(self.emulator.if_stack) > saved_if_depth:
+                self.emulator.if_stack.pop()
+        if saved_for_depth is not None:
+            while len(self.emulator.for_stack) > saved_for_depth:
+                self.emulator.for_stack.pop()
         return [{'type': 'jump_return', 'line': return_line, 'sub_line': return_sub_line}]
 
     def visit_for_statement(self, node: ForStatementNode) -> Any:

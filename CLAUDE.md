@@ -26,7 +26,7 @@ AST visitors push; registry closing commands pop:
 | Stack | Pushed by | Popped by |
 |-------|-----------|-----------|
 | `for_stack` | `visit_for_statement` | `execute_next` (control_flow.py) |
-| `call_stack` | `visit_gosub_statement` | `visit_return_statement` |
+| `call_stack` | `visit_gosub_statement` (4-tuple: line, sub_line, if_depth, for_depth) | `visit_return_statement` (also restores if_stack/for_stack depth) |
 | `local_stack` | `visit_gosub_statement` (empty frame) | `visit_return_statement` (restores variables) |
 | `while_stack` | `visit_while_statement` | `execute_wend` (control_flow.py) |
 | `do_stack` | `visit_do_statement` | `execute_loop` (control_flow.py) |

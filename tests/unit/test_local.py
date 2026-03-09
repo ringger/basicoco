@@ -157,3 +157,156 @@ class TestLocal:
         assert errors == [], f"Errors: {errors}"
         texts = helpers.get_text_output(results)
         assert any('42' in t for t in texts), f"X should be 42 after RETURN, got: {texts}"
+
+
+class TestLocalWithIfReturn:
+    """Test LOCAL + GOSUB + IF THEN GOSUB: RETURN patterns.
+
+    These isolate the DoMoves/DoTurn bug where:
+    - Outer sub has LOCAL + FOR loop + GOSUB to inner sub
+    - Inner sub has IF cond THEN GOSUB worker: RETURN
+    - The RETURN in the IF-expanded block may exit wrong GOSUB level
+    """
+
+    def test_if_then_gosub_return(self, basic, helpers):
+        """IF cond THEN GOSUB sub: RETURN — basic pattern."""
+        results = helpers.execute_program(basic, [
+            '10 X=0',
+            '20 GOSUB 100',
+            '30 PRINT "X=";X',
+            '40 END',
+            '100 REM OUTER',
+            '110 IF 1=1 THEN GOSUB 200: RETURN',
+            '120 RETURN',
+            '200 X=99',
+            '210 RETURN',
+        ])
+        errors = helpers.get_error_messages(results)
+        assert errors == [], f"Errors: {errors}"
+        texts = helpers.get_text_output(results)
+        output = ' '.join(texts)
+        assert '99' in output, f"X should be 99: {texts}"
+
+    def test_if_then_gosub_return_false(self, basic, helpers):
+        """IF false THEN GOSUB: RETURN — should fall through."""
+        results = helpers.execute_program(basic, [
+            '10 X=0',
+            '20 GOSUB 100',
+            '30 PRINT "X=";X',
+            '40 END',
+            '100 REM OUTER',
+            '110 IF 1=0 THEN GOSUB 200: RETURN',
+            '120 X=50',
+            '130 RETURN',
+            '200 X=99',
+            '210 RETURN',
+        ])
+        errors = helpers.get_error_messages(results)
+        assert errors == [], f"Errors: {errors}"
+        texts = helpers.get_text_output(results)
+        output = ' '.join(texts)
+        assert '50' in output, f"X should be 50: {texts}"
+
+    def test_for_loop_with_if_gosub_return(self, basic, helpers):
+        """FOR loop calling sub with IF THEN GOSUB: RETURN.
+        This is the DoMoves/DoTurn pattern."""
+        results = helpers.execute_program(basic, [
+            '10 X=0',
+            '20 GOSUB 100',
+            '30 PRINT "X=";X',
+            '40 END',
+            '100 REM OUTER (LIKE DoMoves)',
+            '110 FOR I=1 TO 3',
+            '120   GOSUB 200',
+            '130 NEXT I',
+            '140 RETURN',
+            '200 REM INNER (LIKE DoTurn)',
+            '210 IF 1=1 THEN GOSUB 300: RETURN',
+            '220 RETURN',
+            '300 REM WORKER (LIKE Permute)',
+            '310 X=X+1',
+            '320 RETURN',
+        ])
+        errors = helpers.get_error_messages(results)
+        assert errors == [], f"Errors: {errors}"
+        texts = helpers.get_text_output(results)
+        output = ' '.join(texts)
+        assert '3' in output, f"X should be 3 (called 3 times): {texts}"
+
+    def test_local_for_loop_with_if_gosub_return(self, basic, helpers):
+        """LOCAL + FOR loop + IF THEN GOSUB: RETURN.
+        Exact DoMoves pattern with LOCAL variables."""
+        results = helpers.execute_program(basic, [
+            '10 X=0',
+            '20 GOSUB 100',
+            '30 PRINT "X=";X',
+            '40 END',
+            '100 REM OUTER (LIKE DoMoves)',
+            '110 LOCAL I',
+            '120 FOR I=1 TO 3',
+            '130   GOSUB 200',
+            '140 NEXT I',
+            '150 RETURN',
+            '200 REM INNER (LIKE DoTurn)',
+            '210 IF 1=1 THEN GOSUB 300: RETURN',
+            '220 RETURN',
+            '300 REM WORKER (LIKE Permute)',
+            '310 X=X+1',
+            '320 RETURN',
+        ])
+        errors = helpers.get_error_messages(results)
+        assert errors == [], f"Errors: {errors}"
+        texts = helpers.get_text_output(results)
+        output = ' '.join(texts)
+        assert '3' in output, f"X should be 3 (called 3 times): {texts}"
+
+    def test_local_for_loop_if_gosub_return_with_string(self, basic, helpers):
+        """Full DoMoves simulation: LOCAL string + FOR + IF GOSUB: RETURN."""
+        results = helpers.execute_program(basic, [
+            '10 X=0: MS$="ABC"',
+            '20 GOSUB 100',
+            '30 PRINT "X=";X',
+            '40 END',
+            '100 REM DoMoves sim',
+            '110 LOCAL MI, MC$',
+            '120 FOR MI=1 TO LEN(MS$)',
+            '130   MC$=MID$(MS$,MI,1)',
+            '140   GOSUB 200',
+            '150 NEXT MI',
+            '160 RETURN',
+            '200 REM DoTurn sim',
+            '210 IF 1=1 THEN GOSUB 300: RETURN',
+            '220 RETURN',
+            '300 REM Permute sim',
+            '310 X=X+1',
+            '320 RETURN',
+        ])
+        errors = helpers.get_error_messages(results)
+        assert errors == [], f"Errors: {errors}"
+        texts = helpers.get_text_output(results)
+        output = ' '.join(texts)
+        assert '3' in output, f"X should be 3 (3 chars processed): {texts}"
+
+    def test_if_variable_then_gosub_return(self, basic, helpers):
+        """IF var=0 THEN GOSUB: RETURN — matching AN=0 pattern."""
+        results = helpers.execute_program(basic, [
+            '10 AN=0: X=0',
+            '20 FOR I=1 TO 3',
+            '30   GOSUB 100',
+            '40 NEXT I',
+            '50 PRINT "X=";X',
+            '60 END',
+            '100 REM DoTurn',
+            '110 IF AN=0 THEN GOSUB 200: RETURN',
+            '120 REM animated path',
+            '130 GOSUB 200',
+            '140 RETURN',
+            '200 REM Permute',
+            '210 X=X+1',
+            '220 RETURN',
+        ])
+        errors = helpers.get_error_messages(results)
+        assert errors == [], f"Errors: {errors}"
+        texts = helpers.get_text_output(results)
+        output = ' '.join(texts)
+        assert '3' in output, f"X should be 3: {texts}"
