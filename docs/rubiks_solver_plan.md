@@ -3,7 +3,7 @@
 Beginner's layer-by-layer method implemented in CoCo BASIC.
 Reference: [Ruwix Beginner Method](https://ruwix.com/the-rubiks-cube/how-to-solve-the-rubiks-cube-beginners-method/). See `docs/rubiks_reference_algorithms.md` for standard algorithms. Our solver uses the same method but solves bottom-first (Ruwix solves white/top-first), so first-layer algorithms use U instead of D.
 
-## Engine (rubiks_engine.bas)
+## Engine (lib_rubiks_engine.bas)
 
 ### Cube State
 - `CL(IX,IY,IZ,F)` — color of face F on subcube at (IX,IY,IZ)
@@ -110,8 +110,8 @@ Messages are printed before the action they describe. Animation (`AN=1`) is turn
 
 ### Program Structure
 ```basic
-rubiks_solver.bas:
-  MERGE "rubiks_engine"
+lib_rubiks_solver.bas:
+  MERGE "lib_rubiks_engine"
   GOSUB InitCube
   Scramble (20 random moves)
   GOSUB SolveBottomCross    (Step 1)

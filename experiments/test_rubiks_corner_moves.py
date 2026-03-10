@@ -12,8 +12,8 @@ import pytest
 @pytest.fixture(autouse=True)
 def setup_engine(temp_programs_dir):
     programs_dir = os.path.join(os.path.dirname(__file__), '..', '..', 'programs')
-    src = os.path.abspath(os.path.join(programs_dir, 'rubiks_engine.bas'))
-    shutil.copy(src, os.path.join(temp_programs_dir, 'rubiks_engine.bas'))
+    src = os.path.abspath(os.path.join(programs_dir, 'lib_rubiks_engine.bas'))
+    shutil.copy(src, os.path.join(temp_programs_dir, 'lib_rubiks_engine.bas'))
 
 
 def _run(basic, helpers, lines, max_frames=10000):
@@ -22,7 +22,7 @@ def _run(basic, helpers, lines, max_frames=10000):
     program = [
         '5 SAFETY OFF',
         '10 PMODE 4: SCREEN 1',
-        '20 MERGE "rubiks_engine"',
+        '20 MERGE "lib_rubiks_engine"',
         '30 GOSUB InitCube',
         '35 AN=0',
     ] + lines
@@ -42,7 +42,7 @@ class TestCornerAlgorithms:
         program = [
             '5 SAFETY OFF',
             '10 PMODE 4: SCREEN 1',
-            '20 MERGE "rubiks_engine"',
+            '20 MERGE "lib_rubiks_engine"',
             '30 GOSUB InitCube',
             '35 AN=0',
             '36 PRINT "BEFORE:";CL(2,2,0,5);CL(2,2,0,0);CL(2,2,0,2)',

@@ -12,9 +12,9 @@ import pytest
 
 @pytest.fixture(autouse=True)
 def setup_solver(temp_programs_dir):
-    """Copy rubiks_engine.bas and rubiks_solver.bas into the temp programs dir."""
+    """Copy lib_rubiks_engine.bas and lib_rubiks_solver.bas into the temp programs dir."""
     programs_dir = os.path.join(os.path.dirname(__file__), '..', '..', 'programs')
-    for fname in ('rubiks_engine.bas', 'rubiks_solver.bas'):
+    for fname in ('lib_rubiks_engine.bas', 'lib_rubiks_solver.bas'):
         src = os.path.abspath(os.path.join(programs_dir, fname))
         shutil.copy(src, os.path.join(temp_programs_dir, fname))
 
@@ -24,8 +24,8 @@ def _build_solver_test(scramble_moves, max_frames=20000):
     return [
         '5 SAFETY OFF',
         '10 PMODE 4: SCREEN 1',
-        '20 MERGE "rubiks_engine"',
-        '25 MERGE "rubiks_solver"',
+        '20 MERGE "lib_rubiks_engine"',
+        '25 MERGE "lib_rubiks_solver"',
         '30 GOSUB InitCube',
         '35 AN=0',
         f'40 MS$="{scramble_moves}": GOSUB DoMoves',
@@ -122,8 +122,8 @@ def _build_corners_test(scramble_moves, max_frames=40000):
     return [
         '5 SAFETY OFF',
         '10 PMODE 4: SCREEN 1',
-        '20 MERGE "rubiks_engine"',
-        '25 MERGE "rubiks_solver"',
+        '20 MERGE "lib_rubiks_engine"',
+        '25 MERGE "lib_rubiks_solver"',
         '30 GOSUB InitCube',
         '35 AN=0',
         f'40 MS$="{scramble_moves}": GOSUB DoMoves',

@@ -25,7 +25,7 @@ def setup_emulator():
     programs_dir = os.path.join(test_dir, 'programs')
     os.makedirs(programs_dir, exist_ok=True)
     src_dir = os.path.join(os.path.dirname(__file__), 'programs')
-    for fname in ('rubiks_engine.bas', 'rubiks_solver.bas'):
+    for fname in ('lib_rubiks_engine.bas', 'lib_rubiks_solver.bas'):
         shutil.copy(os.path.join(src_dir, fname), os.path.join(programs_dir, fname))
     emulator = CoCoBasic()
     emulator.process_command('NEW')
@@ -87,8 +87,8 @@ def run_diagnostic():
         program = [
             '5 SAFETY OFF',
             '10 PMODE 4: SCREEN 1',
-            '20 MERGE "rubiks_engine"',
-            '25 MERGE "rubiks_solver"',
+            '20 MERGE "lib_rubiks_engine"',
+            '25 MERGE "lib_rubiks_solver"',
             '30 GOSUB InitCube',
             '35 AN=0',
             '40 TC1=7: TC2=5: TC3=3: CI=2',
@@ -176,8 +176,8 @@ def run_diagnostic():
             program = [
                 '5 SAFETY OFF',
                 '10 PMODE 4: SCREEN 1',
-                '20 MERGE "rubiks_engine"',
-                '25 MERGE "rubiks_solver"',
+                '20 MERGE "lib_rubiks_engine"',
+                '25 MERGE "lib_rubiks_solver"',
                 '30 GOSUB InitCube',
                 '35 AN=0',
                 '40 TC1=7: TC2=5: TC3=3',
@@ -208,8 +208,8 @@ def run_diagnostic():
             program = [
                 '5 SAFETY OFF',
                 '10 PMODE 4: SCREEN 1',
-                '20 MERGE "rubiks_engine"',
-                '25 MERGE "rubiks_solver"',
+                '20 MERGE "lib_rubiks_engine"',
+                '25 MERGE "lib_rubiks_solver"',
                 '30 GOSUB InitCube',
                 '35 AN=0',
                 '40 TC1=7: TC2=5: TC3=3: CI=2',
@@ -237,8 +237,8 @@ def run_diagnostic():
         program = [
             '5 SAFETY OFF',
             '10 PMODE 4: SCREEN 1',
-            '20 MERGE "rubiks_engine"',
-            '25 MERGE "rubiks_solver"',
+            '20 MERGE "lib_rubiks_engine"',
+            '25 MERGE "lib_rubiks_solver"',
             '30 GOSUB InitCube',
             '35 AN=0',
             '40 TC1=7: TC2=5: TC3=3',
@@ -256,8 +256,8 @@ def run_diagnostic():
         program = [
             '5 SAFETY OFF',
             '10 PMODE 4: SCREEN 1',
-            '20 MERGE "rubiks_engine"',
-            '25 MERGE "rubiks_solver"',
+            '20 MERGE "lib_rubiks_engine"',
+            '25 MERGE "lib_rubiks_solver"',
             '30 GOSUB InitCube',
             '35 AN=0',
             '40 TC1=7: TC2=5: TC3=3',
@@ -275,8 +275,8 @@ def run_diagnostic():
         program = [
             '5 SAFETY OFF',
             '10 PMODE 4: SCREEN 1',
-            '20 MERGE "rubiks_engine"',
-            '25 MERGE "rubiks_solver"',
+            '20 MERGE "lib_rubiks_engine"',
+            '25 MERGE "lib_rubiks_solver"',
             '30 GOSUB InitCube',
             '35 AN=0',
             '40 TC1=7: TC2=5: TC3=3',
@@ -294,8 +294,8 @@ def run_diagnostic():
         program = [
             '5 SAFETY OFF',
             '10 PMODE 4: SCREEN 1',
-            '20 MERGE "rubiks_engine"',
-            '25 MERGE "rubiks_solver"',
+            '20 MERGE "lib_rubiks_engine"',
+            '25 MERGE "lib_rubiks_solver"',
             '30 GOSUB InitCube',
             '35 AN=0',
             '40 TC1=7: TC2=5: TC3=3',
@@ -337,8 +337,8 @@ def run_diagnostic():
         program = [
             '5 SAFETY OFF',
             '10 PMODE 4: SCREEN 1',
-            '20 MERGE "rubiks_engine"',
-            '25 MERGE "rubiks_solver"',
+            '20 MERGE "lib_rubiks_engine"',
+            '25 MERGE "lib_rubiks_solver"',
             '30 GOSUB InitCube',
             '35 AN=0',
             # Scramble with just R - this moves BBR corner
@@ -371,8 +371,8 @@ def run_diagnostic():
         program = [
             '5 SAFETY OFF',
             '10 PMODE 4: SCREEN 1',
-            '20 MERGE "rubiks_engine"',
-            '25 MERGE "rubiks_solver"',
+            '20 MERGE "lib_rubiks_engine"',
+            '25 MERGE "lib_rubiks_solver"',
             '30 GOSUB InitCube',
             '35 AN=0',
             '40 MS$="B": GOSUB DoMoves',
@@ -407,8 +407,8 @@ def run_diagnostic():
         program = [
             '5 SAFETY OFF',
             '10 PMODE 4: SCREEN 1',
-            '20 MERGE "rubiks_engine"',
-            '25 MERGE "rubiks_solver"',
+            '20 MERGE "lib_rubiks_engine"',
+            '25 MERGE "lib_rubiks_solver"',
             '30 GOSUB InitCube',
             '35 AN=0',
             '40 TC1=7: TC2=5: TC3=3: CI=2',

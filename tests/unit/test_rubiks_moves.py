@@ -12,9 +12,9 @@ import pytest
 
 @pytest.fixture(autouse=True)
 def setup_engine(temp_programs_dir):
-    """Copy rubiks_engine.bas into the temp programs dir."""
-    src = os.path.join(os.path.dirname(__file__), '..', '..', 'programs', 'rubiks_engine.bas')
-    shutil.copy(os.path.abspath(src), os.path.join(temp_programs_dir, 'rubiks_engine.bas'))
+    """Copy lib_rubiks_engine.bas into the temp programs dir."""
+    src = os.path.join(os.path.dirname(__file__), '..', '..', 'programs', 'lib_rubiks_engine.bas')
+    shutil.copy(os.path.abspath(src), os.path.join(temp_programs_dir, 'lib_rubiks_engine.bas'))
 
 
 def _run_move_test(basic, helpers, moves, expect_solved=True):
@@ -22,7 +22,7 @@ def _run_move_test(basic, helpers, moves, expect_solved=True):
     program = [
         '5 SAFETY OFF',
         '10 PMODE 4: SCREEN 1',
-        '20 MERGE "rubiks_engine"',
+        '20 MERGE "lib_rubiks_engine"',
         '30 GOSUB InitCube',
         f'40 MS$="{moves}": GOSUB DoMoves',
         '50 OK=1',

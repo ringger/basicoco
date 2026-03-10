@@ -1,6 +1,6 @@
 REM === RUBIK'S CUBE SOLVER LIBRARY ===
 REM BEGINNER'S LAYER-BY-LAYER METHOD
-REM MERGE THIS FILE — REQUIRES rubiks_engine
+REM MERGE THIS FILE — REQUIRES lib_rubiks_engine
 REM
 REM ==========================================
 REM  STEP 1: BOTTOM CROSS
