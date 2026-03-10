@@ -80,7 +80,7 @@ class StatementSplitter:
     @staticmethod
     def parse_line(line):
         """Parse a line to extract line number and code"""
-        line = line.strip().upper()
+        line = line.strip()
         if not line:
             return None, None
             
