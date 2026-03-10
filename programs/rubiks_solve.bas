@@ -21,7 +21,9 @@
 94 AN=0
 100 GOSUB SolveBottomCross
 110 GOSUB CheckBottomCross
-112 AN=1
-114 GOSUB ShowCube
+115 GOSUB SolveBottomCorners
+120 GOSUB CheckBottomCorners
+122 AN=1
+124 GOSUB ShowCube
 120 PRINT "DONE!"
 130 END
