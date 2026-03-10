@@ -60,33 +60,42 @@ CL(1,2,1,5) = 7  bottom center = magenta
 
 ### Piece Positions
 
+#### Terminology
+
+- **EP** (edge position): Index 0-11 identifying an edge slot (see table below)
+- **CP** (corner position): Index 0-7 identifying a corner slot (see table below)
+- **EI** (edge index): Iteration index for target edges within a step (e.g., 0-3 for the 4 middle edges in Step 3)
+- **CI** (corner index): Iteration index for target corners within a step (e.g., 0-3 for the 4 bottom corners in Step 2)
+- **EO** (edge orientation): 0 = bottom/top color on the Y-face (top or bottom sticker), 1 = bottom/top color on the side face (Z or X sticker)
+- **CO** (corner orientation): 0 = bottom/top color on the Y-face, 1 = on the Z-face, 2 = on the X-face
+
 #### Edge Pieces (12 edges, 2 visible stickers each)
-| Edge | Coords | Sticker Faces |
-|------|--------|--------------|
-| Bottom-Front | (1,2,0) | F5, F0 |
-| Bottom-Right | (2,2,1) | F5, F2 |
-| Bottom-Back | (1,2,2) | F5, F1 |
-| Bottom-Left | (0,2,1) | F5, F3 |
-| Top-Front | (1,0,0) | F4, F0 |
-| Top-Right | (2,0,1) | F4, F2 |
-| Top-Back | (1,0,2) | F4, F1 |
-| Top-Left | (0,0,1) | F4, F3 |
-| Front-Right | (2,1,0) | F0, F2 |
-| Front-Left | (0,1,0) | F0, F3 |
-| Back-Right | (2,1,2) | F1, F2 |
-| Back-Left | (0,1,2) | F1, F3 |
+| EP | Edge | Coords | Sticker Faces |
+|----|------|--------|--------------|
+| 0 | Bottom-Front | (1,2,0) | F5, F0 |
+| 1 | Bottom-Right | (2,2,1) | F5, F2 |
+| 2 | Bottom-Back | (1,2,2) | F5, F1 |
+| 3 | Bottom-Left | (0,2,1) | F5, F3 |
+| 4 | Top-Front | (1,0,0) | F4, F0 |
+| 5 | Top-Right | (2,0,1) | F4, F2 |
+| 6 | Top-Back | (1,0,2) | F4, F1 |
+| 7 | Top-Left | (0,0,1) | F4, F3 |
+| 8 | Front-Right | (2,1,0) | F0, F2 |
+| 9 | Front-Left | (0,1,0) | F0, F3 |
+| 10 | Back-Right | (2,1,2) | F1, F2 |
+| 11 | Back-Left | (0,1,2) | F1, F3 |
 
 #### Corner Pieces (8 corners, 3 visible stickers each)
-| Corner | Coords | Sticker Faces |
-|--------|--------|--------------|
-| Bottom-Front-Right (BFR) | (2,2,0) | F5, F0, F2 |
-| Bottom-Front-Left (BFL) | (0,2,0) | F5, F0, F3 |
-| Bottom-Back-Right (BBR) | (2,2,2) | F5, F1, F2 |
-| Bottom-Back-Left (BBL) | (0,2,2) | F5, F1, F3 |
-| Top-Front-Right (TFR) | (2,0,0) | F4, F0, F2 |
-| Top-Front-Left (TFL) | (0,0,0) | F4, F0, F3 |
-| Top-Back-Right (TBR) | (2,0,2) | F4, F1, F2 |
-| Top-Back-Left (TBL) | (0,0,2) | F4, F1, F3 |
+| CP | Corner | Coords | Sticker Faces |
+|----|--------|--------|--------------|
+| 0 | Bottom-Front-Right (BFR) | (2,2,0) | F5, F0, F2 |
+| 1 | Bottom-Front-Left (BFL) | (0,2,0) | F5, F0, F3 |
+| 2 | Bottom-Back-Right (BBR) | (2,2,2) | F5, F1, F2 |
+| 3 | Bottom-Back-Left (BBL) | (0,2,2) | F5, F1, F3 |
+| 4 | Top-Front-Right (TFR) | (2,0,0) | F4, F0, F2 |
+| 5 | Top-Front-Left (TFL) | (0,0,0) | F4, F0, F3 |
+| 6 | Top-Back-Right (TBR) | (2,0,2) | F4, F1, F2 |
+| 7 | Top-Back-Left (TBL) | (0,0,2) | F4, F1, F3 |
 
 ## Solving Steps
 
@@ -114,7 +123,7 @@ rubiks_solver.bas:
   GOSUB SolveTopCornerOrient (Step 7)
 ```
 
-### Step 1: Bottom Cross (DONE)
+### Step 1: Bottom Cross
 
 **Display**: `"STEP 1: BOTTOM CROSS"` at start. `"  FRONT EDGE"` / `"  RIGHT EDGE"` / `"  BACK EDGE"` / `"  LEFT EDGE"` before each edge.
 
@@ -124,17 +133,52 @@ rubiks_solver.bas:
 - `CL(1,2,2,5)=7` AND `CL(1,2,2,1)=5` (bottom-back: magenta down, buff on back)
 - `CL(0,2,1,5)=7` AND `CL(0,2,1,3)=6` (bottom-left: magenta down, cyan on left)
 
-**Strategy** (for each of the 4 edges):
-a. Find the target piece by searching all 12 edge positions for the two target colors
-b. If already in place, skip
-c. If in bottom layer (wrong position or flipped), kick to top with a face turn
-d. If in middle layer, kick to top with a face turn
-e. Rotate U to align the edge above its target slot
-f. Insert:
-   - If bottom-color on top (EO=0): double face turn (e.g., `FF` for front slot)
-   - If bottom-color on side (EO=1): 3-move insert (e.g., `uRF` for front slot)
+**Target edges** (EI = iteration order, solved in this order):
+| EI | Slot | Target EP | Target colors | Coords |
+|----|------|-----------|---------------|--------|
+| 0 | Front | 0 | 7 (magenta), 4 (red) | (1,2,0) |
+| 1 | Right | 1 | 7 (magenta), 3 (blue) | (2,2,1) |
+| 2 | Back | 2 | 7 (magenta), 5 (buff) | (1,2,2) |
+| 3 | Left | 3 | 7 (magenta), 6 (cyan) | (0,2,1) |
 
-Retry loop (up to 3 passes over all 4 edges) handles cases where inserting one edge disturbs another.
+**Finding**: Use FindEdge to search all 12 edge positions (EP 0-11) for the two target colors.
+
+**Extraction from bottom**: If the target edge is in the bottom layer (EP 0-3) but wrong position or flipped, a double face turn kicks it to the top:
+| Current EP | Slot | Algorithm |
+|-----------|------|-----------|
+| 0 | Front | `FF` |
+| 1 | Right | `RR` |
+| 2 | Back | `BB` |
+| 3 | Left | `LL` |
+
+**Extraction from middle**: If the target edge is in the middle layer (EP 8-11), a single face turn kicks it to the top. The choice of turn avoids disturbing already-solved bottom edges (TI = number of edges solved so far, 0-3):
+| Current EP | Slot | Default | If would disturb solved edge |
+|-----------|------|---------|------------------------------|
+| 8 | FR | `f` | `r` (if TI≥1), `fUF` (if TI≥2) |
+| 9 | FL | `F` | `L` (if TI≥1) |
+| 10 | BR | `B` | `R` (if TI≥1), `BUb` (if TI≥3) |
+| 11 | BL | `b` | `l` (if TI≥3) |
+
+**Alignment**: After the edge is in the top layer (EP 4-7), rotate U to position it above its target slot. Top-edge cycle under U CW: EP 4 (front) → EP 7 (left) → EP 6 (back) → EP 5 (right) → EP 4. Compute 0-3 U turns needed.
+
+**Insertion** (dispatch on target slot EI and edge orientation EO):
+| EI | Slot | EO=0 (bottom-color on top) | EO=1 (bottom-color on side) |
+|----|------|---------------------------|----------------------------|
+| 0 | Front | `FF` | `uRF` |
+| 1 | Right | `RR` | `uBR` |
+| 2 | Back | `BB` | `uLB` |
+| 3 | Left | `LL` | `uFL` |
+
+EO=0 inserts with a double face turn. EO=1 uses a 3-move sequence: U' then two CW turns (the adjacent face in the CW direction, then the target face).
+
+**Strategy** (retry loop, up to 3 passes over all 4 edges):
+a. Find the target edge (search all 12 positions for the two target colors)
+b. If already solved (correct EP and both stickers match), skip
+c. If in bottom layer (EP 0-3) but not solved, extract to top using the current slot's bottom extraction algorithm
+d. If in middle layer (EP 8-11), extract to top using the current slot's middle extraction algorithm (context-sensitive to avoid disturbing solved edges)
+e. Rotate U to align the edge above its target slot
+f. Look up the target slot's insertion algorithm for the current EO value. Apply it.
+g. Check if solved; if not, retry loop handles it
 
 **Invariant**: 4 bottom edges correct: `CL(x,y,z,5)=7` and side sticker matches center, for all 4 bottom edge positions.
 
@@ -150,18 +194,15 @@ Retry loop (up to 3 passes over all 4 edges) handles cases where inserting one e
 
 Each bottom corner sits between two side faces (A and B). CO=0 means bottom color on Y-face (top), CO=1 on Z-face, CO=2 on X-face.
 
-**Handedness**: BFR and BBL are "CCW-first" — their adjacent face-prime turns keep the top corner in the top layer, so triggers use the pattern `face' U face`. BFL and BBR are "CW-first" — face-prime turns drop the top corner directly to the bottom, so triggers use the pattern `face U face'`.
+**Target corners** (CI = iteration order):
+| CI | Slot | Target CP | Target colors | Coords |
+|----|------|-----------|---------------|--------|
+| 0 | BFR | 0 | 7 (magenta), 4 (red), 3 (blue) | (2,2,0) |
+| 1 | BFL | 1 | 7 (magenta), 4 (red), 6 (cyan) | (0,2,0) |
+| 2 | BBR | 2 | 7 (magenta), 5 (buff), 3 (blue) | (2,2,2) |
+| 3 | BBL | 3 | 7 (magenta), 5 (buff), 6 (cyan) | (0,2,2) |
 
-Each trigger has one CO fixed point (a CO value it cannot change). The two triggers for a slot complement each other — each handles the other's fixed point. Exception: BBR has no working R-face trigger (`Rur` has fixed points at CO=1 AND CO=2), so only the B trigger is used.
-
-**Insertion** (dispatch on target CI and CO):
-
-| Target | Handedness | CO=0 default | CO=1 (Z-face) | CO=2 (X-face) |
-|--------|-----------|-------------|---------------|---------------|
-| BFR | CCW-first | `fuF` | `fuF` (F' U' F) | `rUR` (R' U R) |
-| BFL | CW-first | `FUf` | `FUf` (F U F') | `Lul` (L U' L') |
-| BBR | CW-first | `BUb` | `BUb` (B U B') | `BUb` (B U B') |
-| BBL | CCW-first | `buB` | `buB` (B' U' B) | `lUL` (L' U L) |
+**Finding**: Use FindCorner to search all 8 corner positions (CP 0-7) for the 3 target colors.
 
 **Extraction** (dispatch on current position CP, not target CI — a corner can be in any bottom slot):
 
@@ -172,17 +213,26 @@ Each trigger has one CO fixed point (a CO value it cannot change). The two trigg
 | 2 | BBR | `BUb` (B U B') |
 | 3 | BBL | `luL` (L' U' L) |
 
-CO=0 (bottom color on top) converges in 2 insert+retry cycles using the default listed above.
-
-BFR and BBL verified against engine (CCW-first). BFL and BBR verified against engine (CW-first, CO transitions traced through face remappings).
-
-**Corner alignment**: Each bottom corner (CI) maps to the top corner directly above it:
+**Alignment**: Each bottom corner (CI) maps to the top corner directly above it:
 - BFR (CI=0) → TFR (CP=4)
 - BFL (CI=1) → TFL (CP=5)
 - BBR (CI=2) → TBR (CP=6)
 - BBL (CI=3) → TBL (CP=7)
 
 U CW cycle for corners: TFR(4)→TFL(5)→TBL(7)→TBR(6)→TFR(4). Cycle positions: 4=0, 5=1, 7=2, 6=3.
+
+**Insertion** (dispatch on target CI and CO):
+
+Handedness: BFR and BBL are "CCW-first" — triggers use the pattern `face' U' face`. BFL and BBR are "CW-first" — triggers use the pattern `face U face'`. Each trigger has one CO fixed point; the two triggers for a slot complement each other. Exception: BBR has no working R-face trigger, so only the B trigger is used.
+
+| Target | Handedness | CO=0 default | CO=1 (Z-face) | CO=2 (X-face) |
+|--------|-----------|-------------|---------------|---------------|
+| BFR | CCW-first | `fuF` | `fuF` (F' U' F) | `rUR` (R' U R) |
+| BFL | CW-first | `FUf` | `FUf` (F U F') | `Lul` (L U' L') |
+| BBR | CW-first | `BUb` | `BUb` (B U B') | `BUb` (B U B') |
+| BBL | CCW-first | `buB` | `buB` (B' U' B) | `lUL` (L' U L) |
+
+CO=0 (bottom color on top) converges in 2 insert+retry cycles using the default listed above.
 
 **Strategy** (for each corner, retry loop up to 6 iterations):
 a. Find the target corner (search all 8 positions for 3 target colors)
@@ -204,17 +254,17 @@ f. Loop back to step (a)
 - `CL(2,1,2,1)=5` AND `CL(2,1,2,2)=3` (BR: buff on back, blue on right)
 - `CL(0,1,2,1)=5` AND `CL(0,1,2,3)=6` (BL: buff on back, cyan on left)
 
-**Target colors** (EI = edge index for iteration order):
-| EI | Slot | TC1 | TC2 | Coords |
-|----|------|-----|-----|--------|
-| 0 | FR | 4 (red) | 3 (blue) | (2,1,0) |
-| 1 | FL | 4 (red) | 6 (cyan) | (0,1,0) |
-| 2 | BR | 5 (buff) | 3 (blue) | (2,1,2) |
-| 3 | BL | 5 (buff) | 6 (cyan) | (0,1,2) |
+**Target edges** (EI = iteration order):
+| EI | Slot | Target EP | Target colors | Coords |
+|----|------|-----------|---------------|--------|
+| 0 | FR | 8 | 4 (red), 3 (blue) | (2,1,0) |
+| 1 | FL | 9 | 4 (red), 6 (cyan) | (0,1,0) |
+| 2 | BR | 10 | 5 (buff), 3 (blue) | (2,1,2) |
+| 3 | BL | 11 | 5 (buff), 6 (cyan) | (0,1,2) |
 
-**Finding edges**: Use FindEdge (same as Step 1) to search all 12 positions. After Steps 1-2, middle edges can only be in the top layer (EP 4-7) or middle layer (EP 8-11) — never bottom, since bottom edges contain magenta.
+**Finding**: Use FindEdge (same as Step 1) to search all 12 positions. After Steps 1-2, middle edges can only be in the top layer (EP 4-7) or middle layer (EP 8-11) — never bottom, since bottom edges contain magenta.
 
-**Extraction from middle**: If the target edge is in a wrong middle slot (EP 8-11), apply the first insert algorithm for that slot to eject it to the top layer:
+**Extraction**: If the target edge is in a wrong middle slot (EP 8-11), apply the first insert algorithm for that slot to eject it to the top layer:
 | Current EP | Current slot | Extraction algorithm |
 |-----------|-------------|---------------------|
 | 8 | FR | `URurufUF` |
@@ -224,8 +274,8 @@ f. Loop back to step (a)
 
 **Alignment**: After the edge is in the top layer (EP 4-7), one sticker is on the top face (F4) and one is on a side face (F0/F1/F2/F3). Rotate U until the side sticker's color matches the center color on that same face. The top-edge side stickers cycle under U CW as: top-front(F0) → top-left(F3) → top-back(F1) → top-right(F2) → top-front(F0). Compute the number of U turns needed (0-3) using cycle positions, same method as Steps 1-2 alignment. After alignment, the top sticker's color determines which direction to insert.
 
-**Insert algorithms**:
-| Slot | Edge aligned with | Goes to | Algorithm | Standard notation |
+**Insertion**:
+| Slot | Side sticker matches | Insert toward | Algorithm | Standard notation |
 |------|-------------------|---------|-----------|-------------------|
 | FR | F | R | `URurufUF` | U R U' R' U' F' U F |
 | FR | R | F | `ufUFURur` | U' F' U F U R U' R' |
@@ -236,7 +286,7 @@ f. Loop back to step (a)
 | BL | L | B | `ubUBULul` | U' B' U B U L U' L' |
 | BL | B | L | `ULulubuB` | U L U' L' U' B' U B |
 
-"Edge aligned with" = the face whose center matches the side sticker after U alignment. "Goes to" = the face the top sticker's color matches, which is the insertion direction.
+"Side sticker matches" = the face whose center matches the side sticker after U alignment. "Insert toward" = the face whose center matches the top sticker's color, determining the insertion direction.
 
 FR and FL are the standard Ruwix algorithms. All others follow the same two patterns with substituted face letters:
 - `U [target] U' [target]' U' [source]' U [source]` (target is CW from source, viewed from top)
@@ -248,7 +298,7 @@ b. If already solved (correct position and orientation), skip
 c. If in middle layer but wrong (EP 8-11), extract to top using the **current slot's** extraction algorithm
 d. Re-find edge (now in top layer, EP 4-7)
 e. Rotate U until the side sticker matches its adjacent center, then re-find edge
-f. Look up the insert algorithm from the table: "Edge aligned with" = the face the side sticker now touches, "Goes to" = the face matching the top sticker's color
+f. Look up the insert algorithm from the table: "Side sticker matches" = the face the side sticker now touches, "Insert toward" = the face matching the top sticker's color
 g. Apply insert algorithm
 h. Check if solved; if not, retry loop handles it
 
@@ -266,14 +316,15 @@ h. Check if solved; if not, retry loop handles it
 
 **Algorithm**: `FRUruf` (F R U R' U' F')
 
-**Strategy** (loop until cross):
+**Strategy** (loop, at most 3 algorithm applications):
 a. Count how many of the 4 top edges show yellow (YC)
 b. If YC=4, done
-c. If YC=0 (dot): apply algorithm → creates L-shape, loop back
+c. If YC=0 (dot): apply algorithm (no pre-rotation needed) → creates L-shape, loop back
 d. If YC=2, distinguish L-shape from line:
    - **L-shape** (two adjacent edges yellow): rotate U until the two yellow edges are at back and left (i.e., `CL(1,0,2,4)=2` AND `CL(0,0,1,4)=2`), apply algorithm → creates line, loop back
    - **Line** (two opposite edges yellow): rotate U until yellow edges are at left and right (i.e., `CL(2,0,1,4)=2` AND `CL(0,0,1,4)=2`), apply algorithm → creates cross
-e. Loop back to step (a)
+e. If YC=1 or YC=3, error out (impossible on a valid cube — indicates a bug or bad state)
+f. Loop back to step (a). Error out if not solved after 4 iterations.
 
 Adjacent vs opposite: if front+right, front+left, back+right, or back+left are yellow → L-shape. If front+back or left+right → line.
 
@@ -289,19 +340,18 @@ Adjacent vs opposite: if front+right, front+left, back+right, or back+left are y
 - `CL(1,0,2,1)=5` (back edge side = buff)
 - `CL(0,0,1,3)=6` (left edge side = cyan)
 
-**Algorithm**: `RUrURUUrU` (R U R' U R U2 R' U) — swaps front and left edges. Verify against engine before implementation (as done for Step 2).
+**Algorithm**: `RUrURUUrU` (R U R' U R U2 R' U) — swaps the front and left edges (right and back preserved). Verified against engine. Note: also disrupts corner positions/orientations, so must be applied after Step 4 (OLL edges) but corners are handled in Steps 6-7.
 
 **Edge side sticker cycle under U CW**: front(F0) → left(F3) → back(F1) → right(F2) → front(F0). Cycle positions: front=0, left=1, back=2, right=3.
 
-**Strategy** (loop until all match):
+**Strategy** (loop, at most 4 algorithm applications):
 a. For each r=0..3, shift the 4 side sticker colors by r positions in the cycle and count how many match their target center colors (front=4, right=3, back=5, left=6). Pick the r with the highest count.
 b. Apply r U turns (0=none, 1=`U`, 2=`UU`, 3=`u`)
 c. If all 4 match, done
-d. Rotate U to position a matching edge at the back (the algorithm preserves the back edge)
-e. Apply algorithm (swaps front and left)
-f. Loop back to step (a)
-
-If no rotation gives any match (rare but possible), apply algorithm once to create a match, then loop.
+d. If no rotation gives any match (rare but possible), apply algorithm once to create a match, then loop back to (a)
+e. Rotate U to position a matching edge at the back or right (the algorithm preserves both; back is conventional)
+f. Apply algorithm (swaps front and left edges; right and back preserved)
+g. Loop back to step (a). Error out if not solved after 5 iterations.
 
 **Invariant**: Steps 1-4 still hold, plus 4 top edge side stickers match centers.
 
@@ -321,15 +371,14 @@ A corner is "correctly positioned" if its 3 sticker colors (as a set) match the 
 
 **Corner position cycle under U CW**: TFR→TFL→TBL→TBR→TFR. Cycle positions: TFR=0, TFL=1, TBL=2, TBR=3.
 
-**Strategy** (loop until all positioned):
+**Strategy** (loop, at most 4 algorithm applications):
 a. For each r=0..3, shift the 4 corner color sets by r positions in the cycle and count how many match their target color sets (TFR={2,4,3}, TFL={2,4,6}, TBR={2,5,3}, TBL={2,5,6}). Pick the r with the highest count.
 b. Apply r U turns (0=none, 1=`U`, 2=`UU`, 3=`u`)
 c. If all 4 correct, done
-d. Rotate U to place a correct corner at TFR (the algorithm keeps TFR fixed)
-e. Apply algorithm (cycles the other 3 corners)
-f. Loop back to step (a)
-
-If no rotation gives any correct corner (rare), apply algorithm once to create one, then loop. At most 3 applications needed after finding a correct TFR.
+d. If no rotation gives any correct corner (rare), apply algorithm once to create one, then loop back to (a)
+e. Rotate U to place a correct corner at TFR (the algorithm keeps TFR fixed)
+f. Apply algorithm (cycles the other 3 corners)
+g. Loop back to step (a). Error out if not solved after 5 iterations.
 
 **Invariant**: Steps 1-5 still hold, plus 4 top corners in correct positions (colors match adjacent centers, any orientation).
 
@@ -345,29 +394,32 @@ If no rotation gives any correct corner (rare), apply algorithm once to create o
 
 **Algorithm**: `rdRD` (R' D' R D) applied 2 or 4 times per corner.
 
-**Strategy**:
-a. For each of the 4 corners:
-   - Check if `CL(2,0,0,4)=2` (TFR already oriented). If not, proceed. If yes, rotate U to bring the next unsolved corner to TFR:
-     - To bring TFL to TFR: apply `u` (U')
-     - To bring TBL to TFR: apply `UU`
-     - To bring TBR to TFR: apply `U`
-     - Check each in order; use the first unsolved one found
-   - Apply `rdRD` repeatedly (checking `CL(2,0,0,4)` after each pair of applications) until `CL(2,0,0,4)=2` — takes exactly 2 or 4 repetitions. If not solved after 6 repetitions, error out.
-   - Do NOT rotate the whole cube or apply any non-U move between corners
-b. After all 4 corners are oriented, rotate U (0-3 turns) until the top edge side stickers match their centers (use the same cycle-position method as Step 5) — this final alignment completes the solve
+**U rotation to bring corner to TFR**:
+| Corner | U moves |
+|--------|---------|
+| TFR | (already there) |
+| TFL | `u` (U') |
+| TBR | `U` |
+| TBL | `UU` |
+
+**Strategy** (process up to 4 corners, then final alignment):
+a. If all 4 top corners show `CL(x,0,z,4)=2`, go to (e)
+b. If TFR is already oriented (`CL(2,0,0,4)=2`), find the first unsolved corner (check TFL, TBR, TBL in order) and rotate U per the table above to bring it to TFR
+c. Apply `rdRD` repeatedly (checking `CL(2,0,0,4)` after each pair of applications) until `CL(2,0,0,4)=2` — takes exactly 2 or 4 repetitions. Error out if not solved after 6 repetitions.
+d. Loop back to (a). Only U moves are allowed between corners — no other face moves, no whole-cube rotations.
+e. Final alignment: rotate U (0-3 turns) until the top edge side stickers match their centers (same cycle-position method as Step 5). This completes the solve.
 
 **Critical**: Bottom layers appear scrambled during this step. This is normal — they restore after all 4 corners are processed. Only use U between corners. Always complete the full `rdRD` sequence (don't stop partway).
 
 **Invariant**: Entire cube solved: all 54 visible stickers match solved state.
 
-## Implementation Sequence
+## Implementation Progress
 
-1. ~~Phase 1: Engine extension (L/D/B + DoMoves)~~ DONE
-2. ~~Phase 2: Solver skeleton + Step 1 (bottom cross)~~ DONE — 16/16 scramble tests pass
-3. Phase 3: Steps 2-3 (bottom corners + middle edges) — IN PROGRESS
-   - ~~Step 2 (bottom corners)~~ DONE — 16/16 scramble tests pass. FindCorner, extraction, alignment, insertion all implemented. Handedness issue resolved (CW-first vs CCW-first triggers).
-   - Step 3 (middle edges): not yet written
-4. Phase 4: Steps 4-7 (top layer — more formulaic, fewer cases)
+- ~~Engine extension (L/D/B + DoMoves)~~ DONE
+- ~~Step 1 (bottom cross)~~ DONE — 16/16 scramble tests pass
+- ~~Step 2 (bottom corners)~~ DONE — 16/16 scramble tests pass. FindCorner, extraction, alignment, insertion all implemented. Handedness issue resolved (CW-first vs CCW-first triggers).
+- Step 3 (middle edges): not yet written
+- Steps 4-7 (top layer): not yet written
 
 Verify each step's algorithms against our engine before writing the BASIC code.
 
