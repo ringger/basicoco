@@ -164,13 +164,13 @@ REM
 PermRight:
 FOR IY=0 TO 2
   FOR IZ=0 TO 2
-    NY=2-IZ: NZ=IY
-    TC(NY,NZ,0)=CL(2,IY,IZ,4)
-    TC(NY,NZ,1)=CL(2,IY,IZ,5)
+    NY=IZ: NZ=2-IY
+    TC(NY,NZ,0)=CL(2,IY,IZ,5)
+    TC(NY,NZ,1)=CL(2,IY,IZ,4)
     TC(NY,NZ,2)=CL(2,IY,IZ,2)
     TC(NY,NZ,3)=CL(2,IY,IZ,3)
-    TC(NY,NZ,4)=CL(2,IY,IZ,1)
-    TC(NY,NZ,5)=CL(2,IY,IZ,0)
+    TC(NY,NZ,4)=CL(2,IY,IZ,0)
+    TC(NY,NZ,5)=CL(2,IY,IZ,1)
   NEXT IZ
 NEXT IY
 FOR IY=0 TO 2
@@ -185,11 +185,11 @@ REM
 PermTop:
 FOR IX=0 TO 2
   FOR IZ=0 TO 2
-    NX=IZ: NZ=2-IX
-    TC(NX,NZ,0)=CL(IX,0,IZ,2)
-    TC(NX,NZ,1)=CL(IX,0,IZ,3)
-    TC(NX,NZ,2)=CL(IX,0,IZ,1)
-    TC(NX,NZ,3)=CL(IX,0,IZ,0)
+    NX=2-IZ: NZ=IX
+    TC(NX,NZ,0)=CL(IX,0,IZ,3)
+    TC(NX,NZ,1)=CL(IX,0,IZ,2)
+    TC(NX,NZ,2)=CL(IX,0,IZ,0)
+    TC(NX,NZ,3)=CL(IX,0,IZ,1)
     TC(NX,NZ,4)=CL(IX,0,IZ,4)
     TC(NX,NZ,5)=CL(IX,0,IZ,5)
   NEXT IZ
@@ -301,13 +301,13 @@ REM
 PermLeft:
 FOR IY=0 TO 2
   FOR IZ=0 TO 2
-    NY=IZ: NZ=2-IY
-    TC(NY,NZ,0)=CL(0,IY,IZ,5)
-    TC(NY,NZ,1)=CL(0,IY,IZ,4)
+    NY=2-IZ: NZ=IY
+    TC(NY,NZ,0)=CL(0,IY,IZ,4)
+    TC(NY,NZ,1)=CL(0,IY,IZ,5)
     TC(NY,NZ,2)=CL(0,IY,IZ,2)
     TC(NY,NZ,3)=CL(0,IY,IZ,3)
-    TC(NY,NZ,4)=CL(0,IY,IZ,0)
-    TC(NY,NZ,5)=CL(0,IY,IZ,1)
+    TC(NY,NZ,4)=CL(0,IY,IZ,1)
+    TC(NY,NZ,5)=CL(0,IY,IZ,0)
   NEXT IZ
 NEXT IY
 FOR IY=0 TO 2

@@ -17,6 +17,8 @@ Low priority — rarely needed or hard to emulate meaningfully:
 
 ## Rubik's Cube Solver
 
+- [ ] **Step 3 algorithms differ from standard F2L** — Our middle-edge insertion algorithms work but are not the standard Ruwix F2L algorithms (e.g., FR EP=4 is `U' R U R' U F' U' F` instead of standard `U R U' R' U' F' U F`). Consider adopting the standard algorithms so the code is easier to audit against external references. Would require updating AlignMidEdge alignment logic and all 8 insertion + extraction algorithms.
+
 ## Known Behavioral Limitations
 
 - **GOTO out of multi-line IF** leaves a stale `if_stack` entry (cleared on next RUN). This matches real CoCo behavior where GOTO from structured blocks is undefined. Note: RETURN out of IF blocks inside GOSUB is handled correctly — GOSUB saves if_stack/for_stack depth and RETURN restores it.
