@@ -95,7 +95,7 @@ The dialect is based on Extended Color BASIC as shipped with the CoCo 1 and CoCo
 - **Math**: ABS, INT, SGN, SQR, SIN, COS, TAN, ATN, EXP, LOG, RND, RANDOMIZE, TIMER
 - **Strings**: LEN, LEFT$, RIGHT$, MID$, CHR$, ASC, STR$, VAL, STRING$, INSTR, SPACE$, HEX$, OCT$
 - **Arrays**: DIM with multi-dimensional support (DIM A(10) creates indices 0-10, as on the real CoCo)
-- **Graphics**: PMODE, PCLEAR, SCREEN, PCLS, PSET, PRESET, PPOINT, LINE, CIRCLE, PAINT, GET/PUT, DRAW (with B/N/S modifiers)
+- **Graphics**: PMODE, PCLEAR, SCREEN, PCLS, PSET, PRESET, PPOINT, LINE, CIRCLE, PAINT, GET/PUT, DRAW (with B/N/S/A/X modifiers)
 - **File I/O**: OPEN, CLOSE, PRINT#, INPUT#, LINE INPUT, EOF
 - **Sound**: SOUND command (note: accepts frequency in Hz rather than the CoCo's 1-255 pitch table)
 
@@ -111,6 +111,7 @@ These were not in Extended Color BASIC but make the environment more learner-fri
 - **Single-line compound statements** like `IF A=1 THEN FOR I=1 TO 3: PRINT I: NEXT I`
 - **Labels** as GOTO/GOSUB targets (`MyLabel:` on its own line, used as `GOTO MyLabel`)
 - **Auto-numbering** — LOAD/MERGE/CHAIN auto-assign line numbers to unnumbered `.bas` files
+- **GPRINT(x,y),"text"[,color]** — draw text on the graphics screen using a built-in 4x6 pixel font
 
 ### Not Yet Implemented
 See [ISSUES.md](ISSUES.md) for the full list. Highlights: PEEK/POKE, random-access file I/O (FIELD/GET/PUT).
@@ -198,7 +199,7 @@ Single-line compound statements like `IF A=1 THEN B=2: C=3` are expanded into mu
 
 ## Testing
 
-1100+ tests. Slow tests (e2e, CLI, websocket) are excluded by default.
+1250+ tests. Slow tests (e2e, CLI, websocket) are excluded by default.
 
 ```bash
 # Run tests (slow tests excluded by default)

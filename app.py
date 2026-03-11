@@ -225,8 +225,9 @@ def handle_input_response(data):
             # We're in program execution - continue from where we paused for input
             basic.waiting_for_input = False
             output = basic.continue_program_execution()
+            logger.debug("Input continuation returned:\n%s", pprint.pformat(output))
             emit('output', output)
-            
+
             _emit_command_complete_if_done(output, basic)
         else:
             # Direct INPUT command (not in program) - complete immediately
@@ -279,8 +280,9 @@ def handle_resume_from_tab_switch(data):
         if basic.program_counter:
             # Continue execution from where we left off
             output = basic.continue_program_execution()
+            logger.debug("Tab resume returned:\n%s", pprint.pformat(output))
             emit('output', output)
-            
+
             _emit_command_complete_if_done(output, basic)
 
 @socketio.on('switch_tab')
@@ -337,8 +339,9 @@ def handle_continue_execution(data=None):
         # Continue execution from where we left off
         if basic.program_counter:
             output = basic.continue_program_execution()
+            logger.debug("Pause continuation returned:\n%s", pprint.pformat(output))
             emit('output', output)
-            
+
             _emit_command_complete_if_done(output, basic)
         else:
             # Silently ignore stray continue_execution calls (likely from cancelled pause timers)

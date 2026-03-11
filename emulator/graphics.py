@@ -2,7 +2,7 @@
 Graphics module for TRS-80 Color Computer BASIC Emulator
 
 Graphics commands: PMODE, SCREEN, PSET, PRESET, LINE, CIRCLE, PAINT,
-GET, PUT, DRAW, COLOR, PCLEAR, and PCLS.
+GET, PUT, DRAW, COLOR, PCLEAR, PCLS, and GPRINT.
 """
 
 from .text_utils import StatementSplitter
@@ -56,6 +56,7 @@ class BasicGraphics:
         registry.register('DRAW', self.execute_draw)
         registry.register('PCLS', self.execute_pcls)
         registry.register('PCLEAR', self.execute_pclear)
+        registry.register('GPRINT', self.execute_gprint)
     
     def _syntax_error(self, message, suggestions):
         """Create a standardized syntax error response list."""
@@ -388,6 +389,38 @@ class BasicGraphics:
                  'Example: PAINT(100,50),1',
                  'Coordinates must be enclosed in parentheses'])
     
+    @_graphics_command('GPRINT', require_graphics=True)
+    def execute_gprint(self, args):
+        """Execute GPRINT command to draw text on graphics screen.
+        Syntax: GPRINT(x,y),"text"[,color]
+        """
+        result = self._parse_coord_pair(args, 'GPRINT')
+        if isinstance(result, list):
+            return result
+        x, y, remainder = result
+
+        if not remainder.startswith(','):
+            return self._syntax_error("GPRINT requires text after coordinates",
+                ['Correct syntax: GPRINT(x,y),"text"',
+                 'Example: GPRINT(10,5),"HELLO"',
+                 'Optional color: GPRINT(10,5),"HELLO",3'])
+
+        parts = _split_args(remainder[1:])
+        if not parts or not parts[0]:
+            return self._syntax_error("GPRINT requires text string",
+                ['Correct syntax: GPRINT(x,y),"text"',
+                 'Example: GPRINT(10,5),"HELLO"'])
+
+        text = self.emulator.evaluate_expression(parts[0])
+        if not isinstance(text, str):
+            text = str(text)
+
+        color = 1  # Default to green (OC)
+        if len(parts) > 1 and parts[1].strip():
+            color = self.emulator.eval_int(parts[1])
+
+        return [{'type': 'gtext', 'x': x, 'y': y, 'text': text, 'color': color}]
+
     @_graphics_command('GET', require_graphics=True)
     def execute_get(self, args):
         """Execute GET command to capture graphics area"""

@@ -109,6 +109,7 @@ On RUN, `data_statements` is built from `data_values` in sorted order — no re-
 
 - `functions.py` owns all BASIC functions — never duplicate elsewhere
 - Graphics commands go in `graphics.py`, DIM/arrays in `variables.py`, control-flow closing commands in `control_flow.py`, DATA/READ/RESTORE in `data_commands.py`
+- `GPRINT(x,y),"text"[,color]` draws text on the graphics screen using a 4x6 pixel font. Implemented as registry command in `graphics.py` (server emits `{'type': 'gtext', ...}`), rendered client-side by `drawText()` using `GPRINT_FONT` bitmap data in `dual_monitor.js`
 - Graphics helpers: `self.emulator.eval_int(expr)` for expression→int, `_syntax_error(msg, suggestions)` for error responses
 - LINE coordinate pair syntax: `CommandRegistry.is_coordinate_pair_syntax()` and `parse_line_coordinates()` handle `(x1,y1)-(x2,y2)` with optional spaces around the dash
 - System OK messages use `_system_ok()` (tagged with `'source': 'system'`)

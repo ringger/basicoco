@@ -3,6 +3,60 @@
  * Revolutionary split-screen interface with persistent REPL and dedicated graphics display
  */
 
+// 4x6 pixel font for GPRINT (4 wide, 6 rows per glyph, MSB-first)
+const GPRINT_FONT = {
+    32: [0,0,0,0,0,0],             // space
+    33: [4,4,4,0,4,0],             // !
+    34: [10,10,0,0,0,0],           // "
+    39: [4,4,0,0,0,0],             // '
+    40: [2,4,4,4,2,0],             // (
+    41: [8,4,4,4,8,0],             // )
+    42: [0,10,4,10,0,0],           // *
+    43: [0,4,14,4,0,0],            // +
+    44: [0,0,0,4,4,8],             // ,
+    45: [0,0,14,0,0,0],            // -
+    46: [0,0,0,0,4,0],             // .
+    47: [1,2,4,8,0,0],             // /
+    48: [6,9,9,9,6,0],             // 0
+    49: [4,12,4,4,14,0],           // 1
+    50: [6,9,2,4,15,0],            // 2
+    51: [6,9,2,9,6,0],             // 3
+    52: [2,6,10,15,2,0],           // 4
+    53: [15,8,14,1,14,0],          // 5
+    54: [6,8,14,9,6,0],            // 6
+    55: [15,1,2,4,4,0],            // 7
+    56: [6,9,6,9,6,0],             // 8
+    57: [6,9,7,1,6,0],             // 9
+    58: [0,4,0,4,0,0],             // :
+    63: [6,9,2,0,2,0],             // ?
+    65: [6,9,15,9,9,0],            // A
+    66: [14,9,14,9,14,0],          // B
+    67: [6,9,8,9,6,0],             // C
+    68: [14,9,9,9,14,0],           // D
+    69: [15,8,14,8,15,0],          // E
+    70: [15,8,14,8,8,0],           // F
+    71: [6,8,11,9,6,0],            // G
+    72: [9,9,15,9,9,0],            // H
+    73: [14,4,4,4,14,0],           // I
+    74: [1,1,1,9,6,0],             // J
+    75: [9,10,12,10,9,0],          // K
+    76: [8,8,8,8,15,0],            // L
+    77: [9,15,15,9,9,0],           // M
+    78: [9,13,11,9,9,0],           // N
+    79: [6,9,9,9,6,0],             // O
+    80: [14,9,14,8,8,0],           // P
+    81: [6,9,9,10,5,0],            // Q
+    82: [14,9,14,10,9,0],          // R
+    83: [7,8,6,1,14,0],            // S
+    84: [14,4,4,4,4,0],            // T
+    85: [9,9,9,9,6,0],             // U
+    86: [9,9,9,6,6,0],             // V
+    87: [9,9,15,15,9,0],           // W
+    88: [9,9,6,9,9,0],             // X
+    89: [9,9,6,4,4,0],             // Y
+    90: [15,1,6,8,15,0],           // Z
+};
+
 // Display Manager - Coordinates both text and graphics displays
 class DisplayManager {
     constructor() {
@@ -70,6 +124,9 @@ class DisplayManager {
                 break;
             case 'draw':
                 this.graphicsDisplay.executeDraw(output.commands);
+                break;
+            case 'gtext':
+                this.graphicsDisplay.drawText(output.x, output.y, output.text, output.color);
                 break;
             case 'error':
                 this.textDisplay.printText(`ERROR: ${output.message}\n`);
@@ -147,7 +204,7 @@ class TextDisplay {
             'GOTO', 'GOSUB', 'RETURN', 'END', 'STOP', 'RUN', 'LIST', 'NEW',
             'SAVE', 'LOAD', 'FILES', 'KILL', 'DELETE', 'CD', 'INPUT', 'DATA', 'READ', 'RESTORE', 'DIM',
             'PSET', 'PRESET', 'PMODE', 'PCLS', 'SCREEN', 'COLOR', 'PAINT',
-            'LINE', 'CIRCLE', 'DRAW', 'GET', 'PUT', 'CLS', 'SOUND',
+            'LINE', 'CIRCLE', 'DRAW', 'GET', 'PUT', 'GPRINT', 'CLS', 'SOUND',
             'RND', 'INT', 'ABS', 'SGN', 'SQR', 'SIN', 'COS', 'TAN', 'ATN',
             'LOG', 'EXP', 'LEN', 'MID$', 'LEFT$', 'RIGHT$', 'STR$', 'VAL',
             'CHR$', 'ASC', 'INKEY$', 'POS', 'PEEK', 'POKE'
@@ -947,76 +1004,96 @@ class GraphicsDisplay {
     
     paint(x, y, paintColor, borderColor) {
         if (this.graphicsMode === 0) return;
-        
+
         const res = this.pmodeResolutions[this.graphicsMode];
         const fillColor = this.colors[paintColor % this.colors.length];
-        const stopColor = borderColor !== undefined ? 
+        const stopColor = borderColor !== undefined && borderColor !== null ?
             this.colors[borderColor % this.colors.length] : null;
-        
-        // Flood fill algorithm
+
+        // Work at BASIC pixel granularity to match LINE drawing (which fills
+        // pixelWidth x pixelHeight blocks). Operating at canvas pixel level
+        // would leak through diagonal gaps between adjacent BASIC pixels.
+        const pw = res.pixelWidth;
+        const ph = res.pixelHeight;
+        const bWidth = Math.floor(this.canvas.width / pw);
+        const bHeight = Math.floor(this.canvas.height / ph);
+
         const imageData = this.ctx.getImageData(0, 0, this.canvas.width, this.canvas.height);
         const pixels = imageData.data;
-        const startX = Math.floor(x * res.pixelWidth);
-        const startY = Math.floor(y * res.pixelHeight);
-        
-        // Get starting pixel color
-        const startIdx = (startY * this.canvas.width + startX) * 4;
-        const startR = pixels[startIdx];
-        const startG = pixels[startIdx + 1];
-        const startB = pixels[startIdx + 2];
-        
-        // Convert fill color to RGB
-        const fillRGB = this.hexToRgb(fillColor);
-        
-        // Stack-based flood fill
-        const stack = [[startX, startY]];
-        const visited = new Set();
-        
-        while (stack.length > 0) {
-            const [px, py] = stack.pop();
-            const key = `${px},${py}`;
-            
-            if (visited.has(key)) continue;
-            if (px < 0 || px >= this.canvas.width || py < 0 || py >= this.canvas.height) continue;
-            
-            const idx = (py * this.canvas.width + px) * 4;
-            
-            // Check if we hit the border color
-            if (stopColor !== null) {
-                const stopRGB = this.hexToRgb(stopColor);
-                if (pixels[idx] === stopRGB.r && pixels[idx + 1] === stopRGB.g && pixels[idx + 2] === stopRGB.b) {
-                    continue;
+
+        // Sample a BASIC pixel's color from its top-left canvas pixel
+        const sampleColor = (bx, by) => {
+            const idx = (by * ph * this.canvas.width + bx * pw) * 4;
+            return { r: pixels[idx], g: pixels[idx + 1], b: pixels[idx + 2] };
+        };
+
+        // Fill a BASIC pixel block
+        const fillBlock = (bx, by, rgb) => {
+            for (let dy = 0; dy < ph; dy++) {
+                for (let dx = 0; dx < pw; dx++) {
+                    const idx = ((by * ph + dy) * this.canvas.width + bx * pw + dx) * 4;
+                    pixels[idx] = rgb.r;
+                    pixels[idx + 1] = rgb.g;
+                    pixels[idx + 2] = rgb.b;
+                    pixels[idx + 3] = 255;
                 }
             }
-            
-            // When border color is specified: boundary fill (fill everything within border)
-            // When no border color: flood fill (replace only matching start color)
-            if (stopColor === null) {
-                if (pixels[idx] !== startR || pixels[idx + 1] !== startG || pixels[idx + 2] !== startB) {
-                    continue;
-                }
-            } else {
-                // Skip pixels already filled (optimization for boundary fill)
-                if (pixels[idx] === fillRGB.r && pixels[idx + 1] === fillRGB.g && pixels[idx + 2] === fillRGB.b) {
+        };
+
+        const startBX = Math.floor(x);
+        const startBY = Math.floor(y);
+
+        if (startBX < 0 || startBX >= bWidth || startBY < 0 || startBY >= bHeight) return;
+
+        const startColor = sampleColor(startBX, startBY);
+        const fillRGB = this.hexToRgb(fillColor);
+        const stopRGB = stopColor !== null ? this.hexToRgb(stopColor) : null;
+
+        // Stack-based flood fill at BASIC pixel granularity
+        const stack = [[startBX, startBY]];
+        const visited = new Set();
+
+        while (stack.length > 0) {
+            const [bx, by] = stack.pop();
+            const key = (by << 16) | bx;
+
+            if (visited.has(key)) continue;
+            if (bx < 0 || bx >= bWidth || by < 0 || by >= bHeight) continue;
+
+            const color = sampleColor(bx, by);
+
+            // Check if we hit the border color
+            if (stopRGB !== null) {
+                if (color.r === stopRGB.r && color.g === stopRGB.g && color.b === stopRGB.b) {
                     continue;
                 }
             }
 
-            // Fill pixel
-            pixels[idx] = fillRGB.r;
-            pixels[idx + 1] = fillRGB.g;
-            pixels[idx + 2] = fillRGB.b;
-            pixels[idx + 3] = 255;
-            
+            // When border color is specified: boundary fill (fill everything within border)
+            // When no border color: flood fill (replace only matching start color)
+            if (stopRGB === null) {
+                if (color.r !== startColor.r || color.g !== startColor.g || color.b !== startColor.b) {
+                    continue;
+                }
+            } else {
+                // Skip pixels already filled
+                if (color.r === fillRGB.r && color.g === fillRGB.g && color.b === fillRGB.b) {
+                    continue;
+                }
+            }
+
+            // Fill BASIC pixel block
+            fillBlock(bx, by, fillRGB);
+
             visited.add(key);
-            
-            // Add neighbors
-            stack.push([px + 1, py]);
-            stack.push([px - 1, py]);
-            stack.push([px, py + 1]);
-            stack.push([px, py - 1]);
+
+            // Add neighbors (in BASIC pixel coordinates)
+            stack.push([bx + 1, by]);
+            stack.push([bx - 1, by]);
+            stack.push([bx, by + 1]);
+            stack.push([bx, by - 1]);
         }
-        
+
         this.ctx.putImageData(imageData, 0, 0);
     }
     
@@ -1029,6 +1106,38 @@ class GraphicsDisplay {
         } : null;
     }
     
+    drawText(x, y, text, color) {
+        if (this.graphicsMode === 0) return;
+
+        const res = this.pmodeResolutions[this.graphicsMode];
+        const textColor = this.colors[color % this.colors.length];
+
+        // Render using a small pixel font scaled to BASIC pixel size.
+        // Each character is 4 BASIC pixels wide, 6 tall (fits CoCo style).
+        const pw = res.pixelWidth;
+        const ph = res.pixelHeight;
+        const charW = 4;  // BASIC pixels per glyph width
+        const charStep = 5; // BASIC pixels per character cell (4 + 1 spacing)
+        const charH = 6;  // BASIC pixels per character height
+
+        this.ctx.fillStyle = textColor;
+
+        for (let ci = 0; ci < text.length; ci++) {
+            const ch = text.charCodeAt(ci);
+            const glyph = GPRINT_FONT[ch] || GPRINT_FONT[63]; // '?' fallback
+            for (let row = 0; row < glyph.length; row++) {
+                const bits = glyph[row];
+                for (let col = 0; col < charW; col++) {
+                    if (bits & (1 << (charW - 1 - col))) {
+                        const px = (x + ci * charStep + col) * pw;
+                        const py = (y + row) * ph;
+                        this.ctx.fillRect(px, py, pw, ph);
+                    }
+                }
+            }
+        }
+    }
+
     getGraphics(x1, y1, x2, y2, arrayName) {
         if (this.graphicsMode === 0) return;
         
