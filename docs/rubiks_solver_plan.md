@@ -35,6 +35,8 @@ Reference: [Ruwix Beginner Method](https://ruwix.com/the-rubiks-cube/how-to-solv
 
 DR=1 for CW, DR=-1 for CCW. CW is defined looking at each face from outside.
 
+**Important**: The engine's CW direction for R and L is REVERSED from standard Rubik's notation. Engine CW R (uppercase `R`) = standard R' (counterclockwise). Engine CCW R (lowercase `r`) = standard R (clockwise). Same for L. F, B, D, and U match standard notation. When converting standard algorithms to engine notation, swap case for R and L only.
+
 ### DoMoves Subroutine
 Set `MS$` then `GOSUB DoMoves`. Uppercase = CW, lowercase = CCW.
 Example: `MS$="RUruf"` executes R, U, R', U', F'.
@@ -184,7 +186,7 @@ g. Check if solved; if not, retry loop handles it
 
 ### Step 2: Bottom Corners
 
-**Display**: `"STEP 2: BOTTOM CORNERS"` at start. `"  BFR CORNER"` / `"  BFL CORNER"` / `"  BBR CORNER"` / `"  BBL CORNER"` before each corner. `"  EXTRACTING"` / `"  ALIGNING"` / `"  INSERTING"` for sub-actions.
+**Display**: `"STEP 2: BOTTOM CORNERS"` at start. `"  BFR CORNER"` / `"  BFL CORNER"` / `"  BBR CORNER"` / `"  BBL CORNER"` before each corner. `"    EXTRACTING"` / `"    ALIGNING"` / `"    INSERTING"` for sub-actions (4-space indent).
 
 **Goal**: 4 bottom corners placed with correct stickers on all 3 faces.
 - `CL(2,2,0,5)=7` AND `CL(2,2,0,0)=4` AND `CL(2,2,0,2)=3` (BFR: magenta, red, blue)
@@ -208,10 +210,10 @@ Each bottom corner sits between two side faces (A and B). CO=0 means bottom colo
 
 | Current CP | Slot | Algorithm |
 |-----------|------|-----------|
-| 0 | BFR | `ruR` (R' U' R) |
+| 0 | BFR | `ruR` (R U' R') |
 | 1 | BFL | `FUf` (F U F') |
 | 2 | BBR | `BUb` (B U B') |
-| 3 | BBL | `luL` (L' U' L) |
+| 3 | BBL | `luL` (L U' L') |
 
 **Alignment**: Each bottom corner (CI) maps to the top corner directly above it:
 - BFR (CI=0) → TFR (CP=4)
@@ -227,20 +229,21 @@ Handedness: BFR and BBL are "CCW-first" — triggers use the pattern `face' U' f
 
 | Target | Handedness | CO=0 default | CO=1 (Z-face) | CO=2 (X-face) |
 |--------|-----------|-------------|---------------|---------------|
-| BFR | CCW-first | `fuF` | `fuF` (F' U' F) | `rUR` (R' U R) |
-| BFL | CW-first | `FUf` | `FUf` (F U F') | `Lul` (L U' L') |
+| BFR | CCW-first | `fuF` | `fuF` (F' U' F) | `rUR` (R U R') |
+| BFL | CW-first | `FUf` | `FUf` (F U F') | `Lul` (L' U' L) |
 | BBR | CW-first | `BUb` | `BUb` (B U B') | `BUb` (B U B') |
-| BBL | CCW-first | `buB` | `buB` (B' U' B) | `lUL` (L' U L) |
+| BBL | CCW-first | `buB` | `buB` (B' U' B) | `lUL` (L U L') |
 
 CO=0 (bottom color on top) converges in 2 insert+retry cycles using the default listed above.
 
-**Strategy** (for each corner, retry loop up to 6 iterations):
+**Strategy** (up to 6 passes over all 4 corners; for each corner, retry loop up to 6 iterations):
 a. Find the target corner (search all 8 positions for 3 target colors)
 b. If solved (CP = target slot AND CO=0), done
 c. If in bottom layer (CP 0-3) but not solved, extract to top using the **current slot's** extraction algorithm (dispatch on CP, not CI)
 d. Rotate U to align corner above its target slot (use cycle positions to compute number of U turns)
 e. Look up the target slot's row in the algorithm table. Apply the insert for the current CO value (CO=1 or CO=2 column). For CO=0, use the CO=0 default.
 f. Loop back to step (a)
+After each pass over all 4 corners, check if all are solved; if so, return early.
 
 **Invariant**: Step 1 still holds, plus 4 bottom corners correct: `CL(x,y,z,5)=7` and both side stickers match centers.
 
@@ -267,24 +270,24 @@ f. Loop back to step (a)
 **Extraction**: If the target edge is in a wrong middle slot (EP 8-11), apply the first insert algorithm for that slot to eject it to the top layer:
 | Current EP | Current slot | Extraction algorithm |
 |-----------|-------------|---------------------|
-| 8 | FR | `URurufUF` |
-| 9 | FL | `ulULUFuf` |
-| 10 | BR | `UBuburUR` |
-| 11 | BL | `ubUBULul` |
+| 8 | FR | `UruRufUF` |
+| 9 | FL | `uLUlUFuf` |
+| 10 | BR | `UBubuRUr` |
+| 11 | BL | `UluLubUB` |
 
 **Alignment**: After the edge is in the top layer (EP 4-7), one sticker is on the top face (F4) and one is on a side face (F0/F1/F2/F3). Rotate U until the side sticker's color matches the center color on that same face. The top-edge side stickers cycle under U CW as: top-front(F0) → top-left(F3) → top-back(F1) → top-right(F2) → top-front(F0). Compute the number of U turns needed (0-3) using cycle positions, same method as Steps 1-2 alignment. After alignment, the top sticker's color determines which direction to insert.
 
 **Insertion**:
 | Slot | Side sticker matches | Insert toward | Algorithm | Standard notation |
 |------|-------------------|---------|-----------|-------------------|
-| FR | F | R | `URurufUF` | U R U' R' U' F' U F |
-| FR | R | F | `ufUFURur` | U' F' U F U R U' R' |
-| FL | F | L | `ulULUFuf` | U' L' U L U F U' F' |
-| FL | L | F | `UFufulUL` | U F U' F' U' L' U L |
-| BR | R | B | `UBuburUR` | U B U' B' U' R' U R |
-| BR | B | R | `urURUBub` | U' R' U R U B U' B' |
-| BL | L | B | `ubUBULul` | U' B' U B U L U' L' |
-| BL | B | L | `ULulubuB` | U L U' L' U' B' U B |
+| FR | F | R | `UruRufUF` | U R U' R' U' F' U F |
+| FR | R | F | `ufUFUruR` | U' F' U F U R U' R' |
+| FL | F | L | `uLUlUFuf` | U' L' U L U F U' F' |
+| FL | L | F | `UFufuLUl` | U F U' F' U' L' U L |
+| BR | R | B | `UBubuRUr` | U B U' B' U' R' U R |
+| BR | B | R | `uRUrUBub` | U' R' U R U B U' B' |
+| BL | L | B | `ubUBUluL` | U' B' U B U L U' L' |
+| BL | B | L | `UluLubUB` | U L U' L' U' B' U B |
 
 "Side sticker matches" = the face whose center matches the side sticker after U alignment. "Insert toward" = the face whose center matches the top sticker's color, determining the insertion direction.
 
@@ -314,7 +317,7 @@ h. Check if solved; if not, retry loop handles it
 - `CL(1,0,2,4)=2` (top-back)
 - `CL(0,0,1,4)=2` (top-left)
 
-**Algorithm**: `FRUruf` (F R U R' U' F')
+**Algorithm**: `FrURuf` (F R U R' U' F')
 
 **Strategy** (loop, at most 3 algorithm applications):
 a. Count how many of the 4 top edges show yellow (YC)
@@ -340,7 +343,7 @@ Adjacent vs opposite: if front+right, front+left, back+right, or back+left are y
 - `CL(1,0,2,1)=5` (back edge side = buff)
 - `CL(0,0,1,3)=6` (left edge side = cyan)
 
-**Algorithm**: `RUrURUUrU` (R U R' U R U2 R' U) — swaps the front and left edges (right and back preserved). Verified against engine. Note: also disrupts corner positions/orientations, so must be applied after Step 4 (OLL edges) but corners are handled in Steps 6-7.
+**Algorithm**: `rURUrUURU` (R U R' U R U2 R' U) — swaps the front and left edges (right and back preserved). Note: also disrupts corner positions/orientations, so must be applied after Step 4 (OLL edges) but corners are handled in Steps 6-7.
 
 **Edge side sticker cycle under U CW**: front(F0) → left(F3) → back(F1) → right(F2) → front(F0). Cycle positions: front=0, left=1, back=2, right=3.
 
@@ -367,7 +370,7 @@ A corner is "correctly positioned" if its 3 sticker colors (as a set) match the 
 - TBR (2,0,2): `{CL(2,0,2,4), CL(2,0,2,1), CL(2,0,2,2)}` = `{2, 5, 3}` (yellow, buff, blue)
 - TBL (0,0,2): `{CL(0,0,2,4), CL(0,0,2,1), CL(0,0,2,3)}` = `{2, 5, 6}` (yellow, buff, cyan)
 
-**Algorithm**: `URulUruL` (U R U' L' U R' U' L) — cycles 3 corners CCW (TFL→TBL→TBR), keeps TFR fixed.
+**Algorithm**: `UruLURul` (U R U' L' U R' U' L) — cycles 3 corners CCW (TFL→TBL→TBR), keeps TFR fixed.
 
 **Corner position cycle under U CW**: TFR→TFL→TBL→TBR→TFR. Cycle positions: TFR=0, TFL=1, TBL=2, TBR=3.
 
@@ -392,7 +395,7 @@ g. Loop back to step (a). Error out if not solved after 5 iterations.
 - `CL(2,0,2,4)=2` (TBR)
 - `CL(0,0,2,4)=2` (TBL)
 
-**Algorithm**: `rdRD` (R' D' R D) applied 2 or 4 times per corner.
+**Algorithm**: `RdrD` (R' D' R D) applied 2 or 4 times per corner.
 
 **U rotation to bring corner to TFR**:
 | Corner | U moves |
@@ -405,11 +408,11 @@ g. Loop back to step (a). Error out if not solved after 5 iterations.
 **Strategy** (process up to 4 corners, then final alignment):
 a. If all 4 top corners show `CL(x,0,z,4)=2`, go to (e)
 b. If TFR is already oriented (`CL(2,0,0,4)=2`), find the first unsolved corner (check TFL, TBR, TBL in order) and rotate U per the table above to bring it to TFR
-c. Apply `rdRD` repeatedly (checking `CL(2,0,0,4)` after each pair of applications) until `CL(2,0,0,4)=2` — takes exactly 2 or 4 repetitions. Error out if not solved after 6 repetitions.
+c. Apply `RdrD` repeatedly (checking `CL(2,0,0,4)` after each pair of applications) until `CL(2,0,0,4)=2` — takes exactly 2 or 4 repetitions. Error out if not solved after 6 repetitions.
 d. Loop back to (a). Only U moves are allowed between corners — no other face moves, no whole-cube rotations.
 e. Final alignment: rotate U (0-3 turns) until the top edge side stickers match their centers (same cycle-position method as Step 5). This completes the solve.
 
-**Critical**: Bottom layers appear scrambled during this step. This is normal — they restore after all 4 corners are processed. Only use U between corners. Always complete the full `rdRD` sequence (don't stop partway).
+**Critical**: Bottom layers appear scrambled during this step. This is normal — they restore after all 4 corners are processed. Only use U between corners. Always complete the full `RdrD` sequence (don't stop partway).
 
 **Invariant**: Entire cube solved: all 54 visible stickers match solved state.
 
@@ -418,7 +421,7 @@ e. Final alignment: rotate U (0-3 turns) until the top edge side stickers match 
 - ~~Engine extension (L/D/B + DoMoves)~~ DONE
 - ~~Step 1 (bottom cross)~~ DONE — 16/16 scramble tests pass
 - ~~Step 2 (bottom corners)~~ DONE — 16/16 scramble tests pass. FindCorner, extraction, alignment, insertion all implemented. Handedness issue resolved (CW-first vs CCW-first triggers).
-- Step 3 (middle edges): not yet written
+- ~~Step 3 (middle edges)~~ DONE — 16/16 scramble tests pass. FindEdge, extraction, alignment, insertion all implemented. Engine's R/L face directions are reversed from standard notation (engine CW R = standard CCW R); F/B/D/U match standard. All 8 insertion algorithms verified empirically.
 - Steps 4-7 (top layer): not yet written
 
 Verify each step's algorithms against our engine before writing the BASIC code.
