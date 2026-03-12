@@ -217,9 +217,25 @@ This is the danger of testing a system only against itself. The solver and the e
 
 ### The Deeper Lesson
 
-The Phase 5 lesson was "don't search — implement published algorithms." The Phase 6 lesson goes deeper: **validate your foundations against a trusted external reference before building on them.** Symmetries matter. A Rubik's cube has 48 symmetries, and a move that rotates the wrong direction looks locally consistent — it still cycles 4 pieces, still returns to identity after 4 applications, still composes cleanly with itself. The error only becomes visible when you compose it with moves on other axes, breaking the symmetry group's internal consistency.
+The Phase 5 lesson was "don't search — implement published algorithms." The Phase 6 lesson goes deeper: **validate your foundations against a trusted external reference before building on them.**
 
-Passing tests are not proof of correctness. They are proof of internal consistency — which is a much weaker property.
+In retrospect, pycuber should have been the starting point. Before writing a single solver algorithm, each of the engine's six basic moves should have been validated against a trusted library. That one comparison — run `U` through the engine, run `U` through pycuber, diff the stickers — would have caught the bug in seconds. Instead, three phases of solver work were built on a flawed foundation, and the error was only discovered when a published algorithm failed to produce published results.
+
+The cost wasn't just debugging time. Every solver algorithm for Steps 1–3 had to be re-derived after the fix, because the originals had silently compensated for the backwards U. The direction test written alongside the fix initially had its expected values backwards too — the same geometric confusion that produced the original bug persisted in the mental model even after the code was corrected. Only the pycuber comparison was immune to this, because it didn't depend on anyone's mental model of which direction "clockwise" goes.
+
+Symmetries matter. A Rubik's cube has 48 symmetries, and a move that rotates the wrong direction looks locally consistent — it still cycles 4 pieces, still returns to identity after 4 applications, still composes cleanly with itself. The error only becomes visible when you compose it with moves on other axes, breaking the symmetry group's internal consistency.
+
+Passing tests are not proof of correctness. They are proof of internal consistency — which is a much weaker property. Start with external ground truth.
+
+### The Thinking Token Trap
+
+Both the Phase 5 and Phase 6 failures share a deeper root cause: a natural impulse to *reason about* the puzzle rather than *execute code against* it.
+
+The project's explicit strategy was to implement a known, published solution — the beginner's method, with algorithms taken directly from Ruwix. No discovery required. But at every stage, the conversation drifted toward puzzle-solving behavior: mentally tracing where stickers move, exploring candidate move sequences, reasoning about which direction "clockwise" goes when viewed from above. The Rubik's cube is especially seductive because each sub-problem feels tractable — "just trace where this one sticker goes" — but the combinatorial explosion makes thinking tokens the worst possible tool for the job.
+
+This is a true AI assistant failure mode, not a one-off mistake. Given a problem that *could* be reasoned about, the assistant defaults to reasoning about it — even when the plan is to look up the answer and transcribe it. The emulator can answer any concrete question about cube state in milliseconds. The published algorithms exist. The correct workflow is: look up, transcribe, test, fix. Not: think, trace, hypothesize, explore.
+
+The directive that captures all three lessons: **Don't reason about the puzzle. Look up the answer. Validate against ground truth. Run the test.**
 
 ## By the Numbers
 
@@ -231,12 +247,10 @@ Passing tests are not proof of correctness. They are proof of internal consisten
 
 ## What's Next
 
-The solver has three of seven steps complete (with the engine fix, Steps 1–3 need re-verification against the corrected U move — the solver algorithms were tuned to the backwards U). Remaining:
+After the engine fix, Steps 1–3 were re-verified against pycuber, their algorithms re-derived, and all 48 tests pass again. Step 4 (top cross) also passes 16/16 scramble tests. Four of seven steps complete. Remaining:
 
-- Re-verify Steps 1–3 with corrected engine
-- Step 4: Top cross (OLL edges)
 - Step 5: Top edge alignment (PLL edges)
 - Step 6: Top corner positioning (PLL corners)
 - Step 7: Top corner orientation
 
-The engine validation tool (`tools/validate_moves.py`) now stands as a gate: no solver work proceeds until all 6 basic moves match pycuber exactly. The algorithms are published. The engine is now trustworthy. The job ahead is implementation — with a foundation that has been verified against ground truth, not just against itself.
+The engine validation tool (`tools/validate_moves.py`) now stands as a gate: no solver work proceeds until all 6 basic moves match pycuber exactly. The algorithms are published. The engine is trustworthy. The job ahead is implementation — with a foundation that has been verified against ground truth, not just against itself.
