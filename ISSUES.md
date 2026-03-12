@@ -27,7 +27,7 @@ Areas that work but haven't been stress-tested with adversarial or exotic inputs
 
 ## Rubik's Cube Solver
 
-- [ ] **Step 3 algorithms differ from standard F2L** — Our middle-edge insertion algorithms work but are not the standard Ruwix F2L algorithms (e.g., FR EP=4 is `U' R U R' U F' U' F` instead of standard `U R U' R' U' F' U F`). Consider adopting the standard algorithms so the code is easier to audit against external references. Would require updating AlignMidEdge alignment logic and all 8 insertion + extraction algorithms.
+- [ ] **Step 4 wide-f algorithm** — `F R U R' U' F'` (narrow F) disrupts F2L by swapping a middle-layer edge into the top. The correct OLL edge algorithm is `f R U R' U' f'` (wide f), decomposed as `Z B' R U R' U' B z` since the engine doesn't support wide moves natively. Solver passes all 16 scramble tests with narrow F, but 2 algorithm-level tests fail. See plan file for details.
 
 ## Known Behavioral Limitations
 
