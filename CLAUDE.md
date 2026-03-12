@@ -1,5 +1,7 @@
 # BasiCoCo
 
+The main interpreter module is `emulator/core.py` (`CoCoBasic` class). All emulator source lives under `emulator/`. The conftest with test fixtures (`basic`, `helpers`, `temp_programs_dir`) is at `conftest.py` (project root).
+
 ## Command Dispatch
 
 `process_statement()` in `core.py` tries these in order:

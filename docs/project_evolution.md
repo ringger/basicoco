@@ -160,9 +160,70 @@ Each level was a reasonable response to the previous level's limitations, but al
 
 The directive that eventually stuck: **"No state space search in thinking tokens. Never trace permutations, face remappings, or combinatorial computations mentally — write a test and execute it."**
 
+### Step 3: Middle Edges — Smooth Sailing
+
+With the handedness lesson learned, Step 3 (middle layer edges) went smoothly. 8 insertion algorithms, all verified empirically against the engine. 16/16 tests passing. The F2L was complete.
+
+## Phase 6: The Flawed Engine
+
+### Step 4: The Algorithm That Couldn't Work
+
+Step 4 (top cross) uses a single well-known algorithm: `F R U R' U' F'`. It's one of the most widely published algorithms in Rubik's cube pedagogy. Apply it to a dot, get an L-shape. Apply it to an L-shape, get a line. Apply it to a line, get a cross. Simple.
+
+6 of 16 tests failed. The algorithm appeared to disrupt the F2L — the first two layers, which should be untouched by any OLL algorithm.
+
+### The Misdirection
+
+What followed was a multi-session investigation that went in circles. The algorithm was correct (verified by pycuber, a trusted Python Rubik's library). The algorithm's group-theoretic order was correct (`(F R U R' U' F')^6 = identity`). Individual moves seemed to work. Yet the composition produced wrong results.
+
+Multiple hypotheses were explored and discarded:
+- Was `F R U R' U' F'` the wrong algorithm? No — pycuber confirmed it preserves F2L.
+- Was the wide-f variant (`f R U R' U' f'`) needed instead? No — the regular algorithm is correct.
+- Was the sticker remap wrong for the F move? No — F matched pycuber perfectly.
+- Was the U move going the wrong direction? This question was asked and then lost in a sea of manual permutation tracing.
+
+A hand-written Python cubie simulator was built to investigate. It had the same bug as the engine — because the same geometric misunderstanding informed both implementations. A plan was drafted to decompose `f R U R' U' f'` into basic moves using whole-cube rotations, working around the alleged F2L disruption. The conversation consumed enormous context tracing permutations mentally — exactly the behavior the project's own directive warned against.
+
+### The Breakthrough: Trust But Verify
+
+The breakthrough came from a simple principle: **validate the engine's basic moves against a trusted implementation before debugging anything built on top of them.**
+
+A test script applied each of the 6 basic face moves (R, U, F, L, D, B) through the actual BASIC engine and compared every sticker on all 6 faces against pycuber. The results were immediate and unambiguous:
+
+| Move | Result |
+|------|--------|
+| R | MATCH |
+| U | **MISMATCH** |
+| F | MATCH |
+| L | MATCH |
+| D | MATCH |
+| B | MATCH |
+
+One move was wrong. Just one. The U move rotated the top layer counterclockwise instead of clockwise — a mirror image of the correct behavior.
+
+### The Fix
+
+The bug was in `PermTop`, the engine subroutine that permutes the top layer. The coordinate transform that maps each subcube's old position to its new position had two terms swapped. Where PermRight (which was correct) used the pattern `new_first = old_second, new_second = 2 - old_first`, PermTop used the reversed pattern: `new_first = 2 - old_second, new_second = old_first`. The corresponding sticker face remap was also reversed, consistent with the backwards coordinate transform.
+
+A two-line fix. Every sticker on every face now matched pycuber for all 6 basic moves, and `F R U R' U' F'` correctly preserved F2L.
+
+### Why Steps 1–3 Passed With a Broken Engine
+
+This is the most instructive part. Steps 1–3 passed 48/48 tests with the backwards U move. How?
+
+The solver algorithms for Steps 1–3 were developed empirically — each step was tuned and verified against the engine's actual behavior. When the solver needed to "rotate U to align a piece above its target slot," it computed the number of U turns based on where pieces actually ended up, not where they should end up in standard notation. The algorithms compensated for the broken U without anyone realizing the engine was wrong.
+
+This is the danger of testing a system only against itself. The solver and the engine agreed with each other — they just both disagreed with the rest of the world. It took an algorithm that combines multiple move types (F and U together in `F R U R' U' F'`) to expose the inconsistency, because the individual moves' errors didn't cancel out the way they did in U-only sequences.
+
+### The Deeper Lesson
+
+The Phase 5 lesson was "don't search — implement published algorithms." The Phase 6 lesson goes deeper: **validate your foundations against a trusted external reference before building on them.** Symmetries matter. A Rubik's cube has 48 symmetries, and a move that rotates the wrong direction looks locally consistent — it still cycles 4 pieces, still returns to identity after 4 applications, still composes cleanly with itself. The error only becomes visible when you compose it with moves on other axes, breaking the symmetry group's internal consistency.
+
+Passing tests are not proof of correctness. They are proof of internal consistency — which is a much weaker property.
+
 ## By the Numbers
 
-- **126 commits** over 6 months (September 2025 — March 2026)
+- **130+ commits** over 6 months (September 2025 — March 2026)
 - **~1250 tests** (unit + integration, slow tests excluded by default)
 - **24 BASIC programs** in the programs directory
 - **7 experiment files** documenting the corner algorithm search
@@ -170,11 +231,12 @@ The directive that eventually stuck: **"No state space search in thinking tokens
 
 ## What's Next
 
-The solver has two of seven steps complete. The bottom layer is solved — cross and corners. Remaining:
+The solver has three of seven steps complete (with the engine fix, Steps 1–3 need re-verification against the corrected U move — the solver algorithms were tuned to the backwards U). Remaining:
 
-- Step 3: Middle layer edges (F2L)
-- Steps 4–7: Top layer (cross, edge alignment, corner positioning, corner orientation)
+- Re-verify Steps 1–3 with corrected engine
+- Step 4: Top cross (OLL edges)
+- Step 5: Top edge alignment (PLL edges)
+- Step 6: Top corner positioning (PLL corners)
+- Step 7: Top corner orientation
 
-Each step will bring its own algorithmic challenges, but the hard lesson has been learned. The algorithms are published. The job is to implement them faithfully, using targeted tests to verify the mapping from abstract notation to concrete cube state — not to rediscover them through search.
-
-The experiments directory stands as an archive: a record of the path from "this should be straightforward" to "why is the cube inside out" to "oh, handedness is a thing" to working code. It's the kind of story that only happens when you build something real enough to surprise you.
+The engine validation tool (`tools/validate_moves.py`) now stands as a gate: no solver work proceeds until all 6 basic moves match pycuber exactly. The algorithms are published. The engine is now trustworthy. The job ahead is implementation — with a foundation that has been verified against ground truth, not just against itself.

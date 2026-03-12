@@ -154,12 +154,12 @@ lib_rubiks_solver.bas:
 **Extraction from middle**: If the target edge is in the middle layer (EP 8-11), a single face turn kicks it to the top. The choice of turn avoids disturbing already-solved bottom edges (TI = number of edges solved so far, 0-3):
 | Current EP | Slot | Default | If would disturb solved edge |
 |-----------|------|---------|------------------------------|
-| 8 | FR | `f` | `R` (if TI≥1), `fuF` (if TI≥2) |
+| 8 | FR | `f` | `R` (if TI≥1), `fUF` (if TI≥2) |
 | 9 | FL | `F` | `l` (if TI≥1) |
-| 10 | BR | `B` | `r` (if TI≥1), `Bub` (if TI≥3) |
+| 10 | BR | `B` | `r` (if TI≥1), `BUb` (if TI≥3) |
 | 11 | BL | `b` | `L` (if TI≥3) |
 
-**Alignment**: After the edge is in the top layer (EP 4-7), rotate U to position it above its target slot. Top-edge cycle under U CW: EP 4 (front) → EP 5 (right) → EP 6 (back) → EP 7 (left) → EP 4. Compute 0-3 U turns needed.
+**Alignment**: After the edge is in the top layer (EP 4-7), rotate U to position it above its target slot. Top-edge cycle under U CW: EP 4 (front) → EP 7 (left) → EP 6 (back) → EP 5 (right) → EP 4. Cycle positions: 4=0, 7=1, 6=2, 5=3. Compute 0-3 U turns needed.
 
 **Insertion** (dispatch on target slot EI and edge orientation EO):
 | EI | Slot | EO=0 (bottom-color on top) | EO=1 (bottom-color on side) |
@@ -208,10 +208,10 @@ Each bottom corner sits between two side faces (A and B). CO=0 means bottom colo
 
 | Current CP | Slot | Algorithm |
 |-----------|------|-----------|
-| 0 | BFR | `RUr` (R U R') |
-| 1 | BFL | `Fuf` (F U' F') |
-| 2 | BBR | `Bub` (B U' B') |
-| 3 | BBL | `LUl` (L U L') |
+| 0 | BFR | `Rur` (R U' R') |
+| 1 | BFL | `FUf` (F U F') |
+| 2 | BBR | `BUb` (B U B') |
+| 3 | BBL | `Lul` (L U' L') |
 
 **Alignment**: Each bottom corner (CI) maps to the top corner directly above it:
 - BFR (CI=0) → TFR (CP=4)
@@ -219,18 +219,18 @@ Each bottom corner sits between two side faces (A and B). CO=0 means bottom colo
 - BBR (CI=2) → TBR (CP=6)
 - BBL (CI=3) → TBL (CP=7)
 
-U CW cycle for corners: TFR(4)→TBR(6)→TBL(7)→TFL(5)→TFR(4). Cycle positions: 4=0, 5=3, 6=1, 7=2.
+U CW cycle for corners: TFR(4)→TFL(5)→TBL(7)→TBR(6)→TFR(4). Cycle positions: 4=0, 5=1, 7=2, 6=3.
 
 **Insertion** (dispatch on target CI and CO):
 
-Handedness: BFR and BBL are "CCW-first" — triggers use the pattern `face' U' face`. BFL and BBR are "CW-first" — triggers use the pattern `face U face'`. Each trigger has one CO fixed point; the two triggers for a slot complement each other. Exception: BBR has no working R-face trigger, so only the B trigger is used.
+Each slot has two adjacent faces with one trigger each. CO=1 and CO=2 each have a single-application trigger. CO=0 (bottom color on top) requires two applications — the first trigger changes the CO, then a retry with the complementary trigger solves it.
 
-| Target | Handedness | CO=0 default | CO=1 (Z-face) | CO=2 (X-face) |
-|--------|-----------|-------------|---------------|---------------|
-| BFR | CCW-first | `fUF` | `fUF` (F' U F) | `Rur` (R U' R') |
-| BFL | CW-first | `Fuf` | `Fuf` (F U' F') | `lUL` (L' U L) |
-| BBR | CW-first | `Bub` | `Bub` (B U' B') | `Bub` (B U' B') |
-| BBL | CCW-first | `bUB` | `bUB` (B' U B) | `Lul` (L U' L) |
+| Target | CO=0 default | CO=1 (Z-face) | CO=2 (X-face) |
+|--------|-------------|---------------|---------------|
+| BFR | `fuF` | `fuF` (F' U' F) | `RUr` (R U R') |
+| BFL | `FUf` | `FUf` (F U F') | `luL` (L' U' L) |
+| BBR | `BUb` | `BUb` (B U B') | `ruR` (R' U' R) |
+| BBL | `buB` | `buB` (B' U' B) | `LUl` (L U L') |
 
 CO=0 (bottom color on top) converges in 2 insert+retry cycles using the default listed above.
 
@@ -268,29 +268,29 @@ After each pass over all 4 corners, check if all are solved; if so, return early
 **Extraction**: If the target edge is in a wrong middle slot (EP 8-11), apply the first insert algorithm for that slot to eject it to the top layer:
 | Current EP | Current slot | Extraction algorithm |
 |-----------|-------------|---------------------|
-| 8 | FR | `uRUrUfuF` |
-| 9 | FL | `UluLuFUf` |
-| 10 | BR | `uBUbUruR` |
-| 11 | BL | `uLUlUbuB` |
+| 8 | FR | `URurufUF` |
+| 9 | FL | `ulULUFuf` |
+| 10 | BR | `urURUBub` |
+| 11 | BL | `ULulubUB` |
 
-**Alignment**: After the edge is in the top layer (EP 4-7), one sticker is on the top face (F4) and one is on a side face (F0/F1/F2/F3). Rotate U until the side sticker's color matches the center color on that same face. The top-edge side stickers cycle under U CW as: top-front(F0) → top-right(F2) → top-back(F1) → top-left(F3) → top-front(F0). Compute the number of U turns needed (0-3) using cycle positions, same method as Steps 1-2 alignment. After alignment, the top sticker's color determines which direction to insert.
+**Alignment**: After the edge is in the top layer (EP 4-7), one sticker is on the top face (F4) and one is on a side face (F0/F1/F2/F3). Rotate U until the side sticker's color matches the center color on that same face. The top-edge side stickers cycle under U CW as: top-front(F0) → top-left(F3) → top-back(F1) → top-right(F2) → top-front(F0). Compute the number of U turns needed (0-3) using cycle positions, same method as Steps 1-2 alignment. After alignment, the top sticker's color determines which direction to insert.
 
 **Insertion**:
 | Slot | Side sticker matches | Insert toward | Algorithm | Standard notation |
 |------|-------------------|---------|-----------|-------------------|
-| FR | F | R | `uRUrUfuF` | U' R U R' U F' U' F |
-| FR | R | F | `UfuFuRUr` | U F' U' F U' R U R' |
-| FL | F | L | `UluLuFUf` | U L' U' L U' F U F' |
-| FL | L | F | `uFUfUluL` | U' F U F' U L' U' L |
-| BR | R | B | `uBUbUruR` | U' B U B' U R' U' R |
-| BR | B | R | `UruRuBUb` | U R' U' R U' B U B' |
-| BL | L | B | `UbuBuLUl` | U B' U' B U' L U L' |
-| BL | B | L | `uLUlUbuB` | U' L U L' U B' U' B |
+| FR | F | R | `URurufUF` | U R U' R' U' F' U F |
+| FR | R | F | `ufUFURur` | U' F' U F U R U' R' |
+| FL | F | L | `ulULUFuf` | U' L' U L U F U' F' |
+| FL | L | F | `UFufulUL` | U F U' F' U' L' U L |
+| BR | B | R | `urURUBub` | U' R' U R U B U' B' |
+| BR | R | B | `UBuburUR` | U B U' B' U' R' U R |
+| BL | B | L | `ULulubUB` | U L U' L' U' B' U B |
+| BL | L | B | `ubUBULul` | U' B' U B U L U' L' |
 
 "Side sticker matches" = the face whose center matches the side sticker after U alignment. "Insert toward" = the face whose center matches the top sticker's color, determining the insertion direction.
 
-Note: These are not the standard Ruwix F2L algorithms (which are `U R U' R' U' F' U F` / `U' L' U L U F U' F'`). They are equivalent alternative algorithms that achieve the same result. All 8 follow two symmetric patterns with substituted face letters:
-- `U [target] U' [target]' U' [source]' U [source]` (target is CW from source, viewed from top)
+These are the standard Ruwix F2L algorithms (`U R U' R' U' F' U F` / `U' L' U L U F U' F'`) with face letters substituted for each slot. All 8 follow two symmetric patterns:
+- `U [target] U' [target]' U' [source]' U [source]` (target is CW from source in physical layout F→R→B→L)
 - `U' [target]' U [target] U [source] U' [source]'` (target is CCW from source)
 
 **Strategy** (retry loop, up to 6 passes over all 4 edges):
@@ -304,6 +304,12 @@ g. Apply insert algorithm
 h. Check if solved; if not, retry loop handles it
 
 **Invariant**: Steps 1-2 still hold, plus 4 middle edges correct: both stickers match adjacent centers.
+
+### Steps 4-7: Top Layer (Last Layer)
+
+**Minimal invariants**: Each step preserves all prior work. Steps 4-7 do NOT need to be treated as a unit — each algorithm individually preserves F2L. Exception: Step 7's `R' D' R D` temporarily scrambles bottom layers *during* execution, but restores them after all 4 corners are processed.
+
+**Note**: The original engine had a reversed PermTop (U move rotated counterclockwise instead of clockwise). This caused `F R U R' U' F'` to appear to disrupt F2L. Fixed by correcting the coordinate transform in PermTop. See "Engine move validation" in the Validation section.
 
 ### Step 4: Top Cross (OLL Edges)
 
@@ -329,7 +335,7 @@ f. Loop back to step (a). Error out if not solved after 4 iterations.
 
 Adjacent vs opposite: if front+right, front+left, back+right, or back+left are yellow → L-shape. If front+back or left+right → line.
 
-**Invariant**: Steps 1-3 still hold, plus 4 top edges show yellow on top: `CL(x,0,z,4)=2`.
+**Invariant**: F2L preserved (Steps 1-3 still hold), plus 4 top edges show yellow on top: `CL(x,0,z,4)=2`.
 
 ### Step 5: Top Edge Alignment (PLL Edges)
 
@@ -341,9 +347,9 @@ Adjacent vs opposite: if front+right, front+left, back+right, or back+left are y
 - `CL(1,0,2,1)=5` (back edge side = buff)
 - `CL(0,0,1,3)=6` (left edge side = cyan)
 
-**Algorithm**: `RUrURUUrU` (R U R' U R U2 R' U) — swaps the front and left edges (right and back preserved). Note: also disrupts corner positions/orientations, so must be applied after Step 4 (OLL edges) but corners are handled in Steps 6-7.
+**Algorithm**: `RUrURUUrU` (R U R' U R U2 R' U) — swaps the front and left top edges (right and back preserved). Uses only R and U moves, preserves F2L. Also disrupts top corner positions/orientations, but corners are handled in Steps 6-7.
 
-**Edge side sticker cycle under U CW**: front(F0) → right(F2) → back(F1) → left(F3) → front(F0). Cycle positions: front=0, right=1, back=2, left=3.
+**Edge side sticker cycle under U CW**: front(F0) → left(F3) → back(F1) → right(F2) → front(F0). Cycle positions: front=0, left=1, back=2, right=3.
 
 **Strategy** (loop, at most 4 algorithm applications):
 a. For each r=0..3, shift the 4 side sticker colors by r positions in the cycle and count how many match their target center colors (front=4, right=3, back=5, left=6). Pick the r with the highest count.
@@ -354,7 +360,7 @@ e. Rotate U to position a matching edge at the back or right (the algorithm pres
 f. Apply algorithm (swaps front and left edges; right and back preserved)
 g. Loop back to step (a). Error out if not solved after 5 iterations.
 
-**Invariant**: Steps 1-4 still hold, plus 4 top edge side stickers match centers.
+**Invariant**: F2L preserved, plus top cross intact and 4 top edge side stickers match centers.
 
 ### Step 6: Top Corner Positioning (PLL Corners)
 
@@ -368,7 +374,7 @@ A corner is "correctly positioned" if its 3 sticker colors (as a set) match the 
 - TBR (2,0,2): `{CL(2,0,2,4), CL(2,0,2,1), CL(2,0,2,2)}` = `{2, 5, 3}` (yellow, buff, blue)
 - TBL (0,0,2): `{CL(0,0,2,4), CL(0,0,2,1), CL(0,0,2,3)}` = `{2, 5, 6}` (yellow, buff, cyan)
 
-**Algorithm**: `URulUruL` (U R U' L' U R' U' L) — cycles 3 corners CCW (TFL→TBL→TBR), keeps TFR fixed.
+**Algorithm**: `URulUruL` (U R U' L' U R' U' L) — cycles 3 corners CCW (TFL→TBL→TBR), keeps TFR fixed. Preserves F2L.
 
 **Corner position cycle under U CW**: TFR→TBR→TBL→TFL→TFR. Cycle positions: TFR=0, TFL=3, TBR=1, TBL=2.
 
@@ -381,7 +387,7 @@ e. Rotate U to place a correct corner at TFR (the algorithm keeps TFR fixed)
 f. Apply algorithm (cycles the other 3 corners)
 g. Loop back to step (a). Error out if not solved after 5 iterations.
 
-**Invariant**: Steps 1-5 still hold, plus 4 top corners in correct positions (colors match adjacent centers, any orientation).
+**Invariant**: F2L preserved, top edges aligned, plus 4 top corners in correct positions (colors match adjacent centers, any orientation).
 
 ### Step 7: Top Corner Orientation
 
@@ -426,11 +432,23 @@ Verify each step's algorithms against our engine before writing the BASIC code.
 
 ## Validation
 
+### Engine move validation (CRITICAL)
+
+Every basic face move (R, U, F, L, D, B) in the BASIC engine must be validated against a trusted reference implementation (pycuber) before any solver work proceeds. This is the foundation — if the moves are wrong, every algorithm built on them will silently produce incorrect results, and debugging at the algorithm level will be misleading.
+
+The validation tool (`tools/validate_moves.py`) applies each move in both our engine and pycuber, then compares every sticker on all 6 faces. All 6 moves must match exactly. Any mismatch indicates a bug in the engine's permutation or sticker remap logic.
+
+**History**: The original PermTop (U move) had a reversed coordinate transform, making U rotate counterclockwise instead of clockwise. Steps 1-3 were developed and passed 48/48 tests against this backwards U — the solver algorithms compensated for the bug without anyone realizing the engine was wrong. The bug was only discovered when Step 4's `F R U R' U' F'` (which combines F and U) failed to preserve F2L. Validating against pycuber immediately identified the single broken move.
+
+**Lesson**: Always validate the engine against a trusted implementation first. Never assume the engine is correct just because solver tests pass — the solver may have been tuned to work around an engine bug.
+
 ### Algorithm verification
-Before writing BASIC code for each step, verify the algorithm strings work with our engine using a Python test (like `test_rubiks_moves.py`): apply the algorithm, check that it produces the expected result.
+Before writing BASIC code for each step, verify the algorithm strings work with our engine using a Python test (like `test_rubiks_moves.py`): apply the algorithm, check that it produces the expected result against pycuber.
 
 ### Step-by-step solve verification
-After implementing each step, run it on multiple scrambles and verify the step's invariant holds (see **Invariant** at end of each step above). Each step's invariant builds on the previous — later steps must not disturb earlier work.
+After implementing each step, run it on multiple scrambles and verify the step's invariant holds (see **Invariant** at end of each step above).
+
+**All steps**: Each step's invariant builds on the previous — later steps must not disturb earlier work. Verify F2L preservation after every step (Steps 4-7 included). Exception: during Step 7 execution, bottom layers are temporarily scrambled but must restore by completion.
 
 ### Test structure
-Use `tests/unit/test_rubiks_moves.py` as a model. For each step, test with 10-20 random scrambles (marked `@pytest.mark.slow`). The test scrambles the cube, runs the solver through step N, then checks the invariant.
+Use `tests/unit/test_rubiks_moves.py` as a model. For each step, test with 10-20 random scrambles (marked `@pytest.mark.slow`). The test scrambles the cube, runs the solver through step N, then checks the full cumulative invariant (F2L + step's own goal).

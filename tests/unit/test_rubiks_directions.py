@@ -68,17 +68,22 @@ class TestStandardDirections:
 
     @pytest.mark.slow
     def test_u_cw_direction(self, basic, helpers):
-        """Standard U CW: front->right->back->left->front."""
+        """Standard U CW (viewed from above): F->L, R->F, B->R, L->B.
+
+        CW from above maps like clock: Back(12)->Right(3)->Front(6)->Left(9).
+        Pieces at Front move to Left; what appears at Front is what was at Right.
+        """
         vals = _run(basic, helpers, "U", [
             ("FTM_F0", "CL(1,0,0,0)"),   # front-top-middle front sticker
             ("LTM_F3", "CL(0,0,1,3)"),   # left-top-middle left sticker
             ("BTM_F1", "CL(1,0,2,1)"),   # back-top-middle back sticker
             ("RTM_F2", "CL(2,0,1,2)"),   # right-top-middle right sticker
         ])
-        assert vals["RTM_F2"] == "4", f"Right should have green(4) from front, got {vals['RTM_F2']}"
-        assert vals["BTM_F1"] == "3", f"Back should have red(3) from right, got {vals['BTM_F1']}"
-        assert vals["LTM_F3"] == "5", f"Left should have cyan(5) from back, got {vals['LTM_F3']}"
-        assert vals["FTM_F0"] == "6", f"Front should have blue(6) from left, got {vals['FTM_F0']}"
+        # After U CW: F shows old R(3), R shows old B(5), B shows old L(6), L shows old F(4)
+        assert vals["FTM_F0"] == "3", f"Front should have blue(3) from right, got {vals['FTM_F0']}"
+        assert vals["RTM_F2"] == "5", f"Right should have buff(5) from back, got {vals['RTM_F2']}"
+        assert vals["BTM_F1"] == "6", f"Back should have cyan(6) from left, got {vals['BTM_F1']}"
+        assert vals["LTM_F3"] == "4", f"Left should have red(4) from front, got {vals['LTM_F3']}"
 
     @pytest.mark.slow
     def test_l_cw_direction(self, basic, helpers):
