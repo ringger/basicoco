@@ -403,8 +403,8 @@ g. Loop back to step (a). Error out if not solved after 5 iterations.
 | Corner | U moves |
 |--------|---------|
 | TFR | (already there) |
-| TFL | `U` (U) |
-| TBR | `u` (U') |
+| TFL | `u` (U') |
+| TBR | `U` (U) |
 | TBL | `UU` |
 
 **Strategy** (process up to 4 corners, then final alignment):
@@ -427,7 +427,7 @@ e. Final alignment: rotate U (0-3 turns) until the top edge side stickers match 
 - ~~Step 4 (top cross)~~ DONE — 16/16 scramble tests pass. `FRUruf` (F R U R' U' F') preserves F2L — verified against pycuber and in engine tests.
 - ~~Step 5 (top edge alignment)~~ DONE — 16/16 scramble tests pass. `RUrURUUrU` (R U R' U R U2 R' U) swaps front↔left edges, preserves back+right. Optimal pre-rotation chosen by simulating all 4 options. Algorithm validated against pycuber.
 - ~~Step 6 (top corner positioning)~~ DONE — 16/16 scramble tests pass. `URulUruL` (U R U' L' U R' U' L) cycles TFL→TBL→TBR, keeps TFR fixed. Color-set sum matching (unique sums: TFR=9, TFL=12, TBL=13, TBR=10) for rotation optimization. Algorithm validated against pycuber.
-- Step 7 (top corner orientation): not yet written
+- ~~Step 7 (top corner orientation)~~ DONE — 16/16 scramble tests pass. `rdRD` (R' D' R D) applied 2 or 4 times per corner. U rotations bring each unsolved corner to TFR. Final U alignment restores top edge positions. Algorithm validated against pycuber. Bug found: plan's U rotation table for Step 7 had TFL and TBR swapped (plan said TFL→U, TBR→U'; correct is TFL→U', TBR→U).
 
 Verify each step's algorithms against our engine before writing the BASIC code.
 

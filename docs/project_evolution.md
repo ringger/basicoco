@@ -257,9 +257,41 @@ The only subtlety was the pre-rotation strategy. A greedy approach — rotate U 
 
 The implementation exposed an interpreter bug: `GOSUB Sub: IF cond THEN A=1: B=2` splits incorrectly when the line starts with a non-control keyword. The statement splitter sees GOSUB (not IF) at the start, splits on all colons, and `B=2` executes unconditionally regardless of the condition. The workaround — separate lines — was trivial, but the bug is worth noting as a reminder that the interpreter's statement splitting has a blind spot for mid-line control structures. Filed in ISSUES.md.
 
-16/16 scramble tests passing. Five of seven steps complete. Remaining:
+16/16 scramble tests passing. Five of seven steps complete.
 
-- Step 6: Top corner positioning (PLL corners)
-- Step 7: Top corner orientation
+### Step 6: Top Corner Positioning — Sum Matching
 
-The engine validation tool (`tools/validate_moves.py`) now stands as a gate: no solver work proceeds until all 6 basic moves match pycuber exactly. The algorithms are published. The engine is trustworthy. The job ahead is implementation — with a foundation that has been verified against ground truth, not just against itself.
+Step 6 positions the 4 top corners so each corner's 3 sticker colors (as a set) match its 3 adjacent center colors, regardless of orientation. The algorithm `U R U' L' U R' U' L` cycles three corners (TFL→TBL→TBR) while keeping TFR fixed.
+
+The interesting optimization: rather than checking color sets element-by-element, the solver uses color-sum matching. Each corner's 3 sticker colors add to a unique sum (TFR=9, TFL=12, TBL=13, TBR=10), so a single addition replaces a set comparison. The solver simulates all 4 possible U pre-rotations, picks the one with the most correctly positioned corners, then rotates a correct corner to TFR (the fixed point) before applying the algorithm.
+
+One more plan bug surfaced: the U CW corner cycle direction was specified incorrectly. The same cycle that was established in Step 2 and validated against pycuber applied here — but the plan had it backwards. Fixed and re-validated.
+
+16/16 scramble tests passing. Six of seven steps complete.
+
+### Step 7: Top Corner Orientation — The Finish Line
+
+The final step twists each top corner so yellow faces up, using `R' D' R D` repeated 2 or 4 times per corner. The algorithm temporarily scrambles the bottom layers — this is expected and intentional. After all corners are processed, the bottom restores, and a final U alignment completes the solve.
+
+The implementation is compact: a main loop checks if all 4 top corners show yellow, brings the first misoriented corner to TFR via U rotation, applies `R' D' R D` until TFR shows yellow, and repeats. A final subroutine rotates U until the top edge side stickers match their centers.
+
+The plan's U rotation table had TFL and TBR swapped — another instance of the recurring cycle-direction confusion. U CW moves the piece at TBR to TFR (one turn), but bringing TFL to TFR requires U' (three CW turns, or equivalently one CCW). The fix was two characters: swap `U` and `u` in the rotation dispatch. The bug manifested as an infinite loop: the solver kept bringing already-oriented corners to TFR and twisting them out of alignment, then trying again.
+
+16/16 scramble tests passing. A final end-to-end test class (`TestFullSolve`) verifies all 54 stickers against the solved state — not just cumulative invariant checks, but a complete sticker-by-sticker comparison. 16/16 passing. The solver is complete.
+
+## The Completed Solver
+
+Seven steps, 128 solver tests (16 per step plus 16 end-to-end), every scramble from single moves to 20-move sequences solved and verified. The solver runs entirely in CoCo BASIC — a language with no local scope, no structured data types, and 249-character line limits — implementing a well-known algorithm that most tutorials explain in 20 minutes but that required careful attention to coordinate systems, cycle directions, and corner handedness to get right.
+
+The pycuber validation gate held throughout: every algorithm (`F R U R' U' F'`, `R U R' U R U2 R' U`, `U R U' L' U R' U' L`, `R' D' R D`) was validated against pycuber before the BASIC code was written. The engine's 6 basic moves were validated first, and each step's algorithm was verified independently. No solver bugs survived that were rooted in engine errors — the Phase 6 lesson stuck.
+
+The recurring theme across all seven steps was cycle direction confusion. The U move's piece cycle (TFR→TFL→TBL→TBR) is a simple fact, but it's easy to reverse when reasoning about "which U rotation brings corner X to position Y." Steps 2, 6, and 7 all had plan errors related to this. The fix was always the same: stop reasoning, run the code, observe which piece actually ends up where.
+
+## By the Numbers
+
+- **140+ commits** over 6 months (September 2025 — March 2026)
+- **~1,200 tests** (unit + integration, slow tests excluded by default)
+- **128 solver tests** across 8 test classes (7 steps + end-to-end)
+- **24 BASIC programs** in the programs directory
+- **4 documentation files** (plan, reference algorithms, project evolution, bitwise operators)
+- **1 validation tool** (`tools/validate_moves.py`) — the pycuber gate
