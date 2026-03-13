@@ -299,10 +299,7 @@ class TestMiddleEdges:
 
 
 def _build_top_cross_test(scramble_moves, max_frames=80000):
-    """Build a program that scrambles, solves steps 1-4, and verifies top cross.
-
-    Does NOT check steps 1-3 after Step 4 since FRUruf disrupts F2L.
-    """
+    """Build a program that scrambles, solves steps 1-4, and verifies top cross + F2L."""
     return [
         '5 SAFETY OFF',
         '10 PMODE 4: SCREEN 1',
@@ -319,6 +316,10 @@ def _build_top_cross_test(scramble_moves, max_frames=80000):
         '75 GOSUB CheckMiddleEdges',
         '80 GOSUB SolveTopCross',
         '85 GOSUB CheckTopCross',
+        # Verify F2L preserved after Step 4
+        '86 GOSUB CheckBottomCross',
+        '87 GOSUB CheckBottomCorners',
+        '88 GOSUB CheckMiddleEdges',
         '90 PRINT "SOLVED"',
         '100 END',
     ]

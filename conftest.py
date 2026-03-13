@@ -32,25 +32,6 @@ def basic():
     # Cleanup happens automatically when the fixture goes out of scope
 
 
-@pytest.fixture
-def basic_with_program(basic):
-    """
-    Provide a CoCoBasic instance with a simple test program loaded.
-
-    Useful for tests that need a basic program structure.
-    """
-    program_lines = [
-        '10 PRINT "HELLO"',
-        '20 A = 5',
-        '30 PRINT A',
-        '40 END'
-    ]
-
-    for line in program_lines:
-        basic.process_command(line)
-
-    return basic
-
 
 @pytest.fixture
 def graphics_basic(basic):
@@ -224,18 +205,3 @@ def temp_programs_dir():
         shutil.rmtree(test_directory)
 
 
-@pytest.fixture(scope="session")
-def test_data_dir():
-    """Provide path to test data directory"""
-    return os.path.join(os.path.dirname(__file__), "tests", "data")
-
-
-# Performance fixtures
-@pytest.fixture
-def benchmark_basic(basic):
-    """
-    Provide a basic instance for performance benchmarking.
-
-    Can be used with pytest-benchmark if installed.
-    """
-    return basic

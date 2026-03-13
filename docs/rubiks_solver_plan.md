@@ -309,8 +309,6 @@ h. Check if solved; if not, retry loop handles it
 
 **Minimal invariants**: Each step preserves all prior work. Steps 4-7 do NOT need to be treated as a unit — each algorithm individually preserves F2L. Exception: Step 7's `R' D' R D` temporarily scrambles bottom layers *during* execution, but restores them after all 4 corners are processed.
 
-**Note**: The original engine had a reversed PermTop (U move rotated counterclockwise instead of clockwise). This caused `F R U R' U' F'` to appear to disrupt F2L. Fixed by correcting the coordinate transform in PermTop. See "Engine move validation" in the Validation section.
-
 ### Step 4: Top Cross (OLL Edges)
 
 **Display**: `"STEP 4: TOP CROSS"` at start. `"  DOT->L"` / `"  L->LINE"` / `"  LINE->CROSS"` before each algorithm application, describing the case being handled.
@@ -412,7 +410,7 @@ g. Loop back to step (a). Error out if not solved after 5 iterations.
 **Strategy** (process up to 4 corners, then final alignment):
 a. If all 4 top corners show `CL(x,0,z,4)=2`, go to (e)
 b. If TFR is already oriented (`CL(2,0,0,4)=2`), find the first unsolved corner (check TFL, TBR, TBL in order) and rotate U per the table above to bring it to TFR
-c. Apply `RdrD` repeatedly (checking `CL(2,0,0,4)` after each pair of applications) until `CL(2,0,0,4)=2` — takes exactly 2 or 4 repetitions. Error out if not solved after 6 repetitions.
+c. Apply `rdRD` repeatedly (checking `CL(2,0,0,4)` after each pair of applications) until `CL(2,0,0,4)=2` — takes exactly 2 or 4 repetitions. Error out if not solved after 6 repetitions.
 d. Loop back to (a). Only U moves are allowed between corners — no other face moves, no whole-cube rotations.
 e. Final alignment: rotate U (0-3 turns) until the top edge side stickers match their centers (same cycle-position method as Step 5). This completes the solve.
 
@@ -426,7 +424,8 @@ e. Final alignment: rotate U (0-3 turns) until the top edge side stickers match 
 - ~~Step 1 (bottom cross)~~ DONE — 16/16 scramble tests pass
 - ~~Step 2 (bottom corners)~~ DONE — 16/16 scramble tests pass. FindCorner, extraction, alignment, insertion all implemented. Handedness issue resolved (CW-first vs CCW-first triggers).
 - ~~Step 3 (middle edges)~~ DONE — 16/16 scramble tests pass. FindEdge, extraction, alignment, insertion all implemented. All 8 insertion algorithms verified empirically.
-- Steps 4-7 (top layer): not yet written
+- ~~Step 4 (top cross)~~ DONE — 16/16 scramble tests pass. `FRUruf` (F R U R' U' F') preserves F2L — verified against pycuber and in engine tests.
+- Steps 5-7 (top layer): not yet written
 
 Verify each step's algorithms against our engine before writing the BASIC code.
 

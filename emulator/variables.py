@@ -192,16 +192,6 @@ class VariableManager:
         except Exception as e:
             return f"Error setting array element: {str(e)}"
     
-    def get_variable(self, var_name):
-        """Get variable value with proper type handling"""
-        var_name = var_name.upper()
-        
-        if var_name in self.emulator.variables:
-            return self.emulator.variables[var_name]
-        else:
-            # Return default value based on type
-            return self._get_default_value(var_name)
-    
     def set_variable(self, var_name, value):
         """Set variable value with type validation"""
         var_name = var_name.upper()

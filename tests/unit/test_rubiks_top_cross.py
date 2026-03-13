@@ -1,9 +1,9 @@
 """
 Tests for Rubik's cube solver Step 4 — Top Cross (OLL Edges).
 
-Verifies that the wide-f algorithm f R U R' U' f' (= ZbRUruBz)
-correctly transitions:  dot -> L-shape -> line -> cross
-on the top face edge stickers, without disrupting F2L.
+Verifies that FRUruf (F R U R' U' F') correctly transitions:
+dot -> L-shape -> line -> cross on the top face edge stickers,
+without disrupting F2L.
 """
 
 import os
@@ -51,12 +51,12 @@ def _make_diagnostic_program(setup_moves):
     ]
 
 
-ALGO = "ZbDRdrBz"  # f R U R' U' f': wide-f = Z B', then R→D, U→R in rotated frame
+ALGO = "FRUruf"  # F R U R' U' F'
 
 
 @pytest.mark.slow
-class TestWideFAlgorithm:
-    """Verify f R U R' U' f' (= ZbRUruBz) algorithm behavior."""
+class TestTopCrossAlgorithm:
+    """Verify F R U R' U' F' algorithm behavior."""
 
     def test_solved_has_four_yellow(self, basic, helpers):
         """Solved cube has 4 yellow top edges."""
@@ -66,7 +66,7 @@ class TestWideFAlgorithm:
         assert any('YC= 4' in t for t in texts), f"Expected YC=4: {texts}"
 
     def test_algo_preserves_f2l(self, basic, helpers):
-        """ZbRUruBz does NOT disrupt F2L — all bottom corners and middle edges stay intact."""
+        """FRUruf preserves F2L — all bottom corners and middle edges stay intact."""
         program = [
             '5 SAFETY OFF',
             '10 PMODE 4: SCREEN 1',
@@ -97,7 +97,7 @@ class TestWideFAlgorithm:
             assert any(f'{piece} OK' in t for t in texts), f"{piece} should be intact: {texts}"
 
     def test_algo_only_affects_top_edges(self, basic, helpers):
-        """After applying ZbRUruBz to solved cube, YC should be 0 or 2 (not 1 or 3)."""
+        """After applying FRUruf to solved cube, YC should be 0 or 2 (not 1 or 3)."""
         errors, texts = _run_top_cross_program(basic, helpers,
             _make_diagnostic_program(ALGO))
         assert errors == [], f"Errors: {errors}"
@@ -110,38 +110,29 @@ class TestWideFAlgorithm:
         else:
             assert False, f"Expected YC=0/2/4 but got: {yc_line}"
 
-    def test_algo_order(self, basic, helpers):
-        """Find and verify the order of ZbRUruBz (how many applications return to identity)."""
-        # Try orders 2 through 12
-        for n in range(2, 13):
-            algo_n = ALGO * n
-            errors, texts = _run_top_cross_program(basic, helpers,
-                _make_diagnostic_program(algo_n), max_frames=30000)
-            if errors:
-                continue
-            if any('YC= 4' in t for t in texts):
-                # Verify full identity by checking all pieces
-                program = [
-                    '5 SAFETY OFF',
-                    '10 PMODE 4: SCREEN 1',
-                    '20 MERGE "lib_rubiks_engine"',
-                    '30 GOSUB InitCube',
-                    f'40 MS$="{algo_n}": GOSUB DoMoves',
-                    # Check a few representative pieces for identity
-                    '50 IF CL(1,0,0,4)=2 AND CL(1,0,0,0)=4 THEN PRINT "TF OK" ELSE PRINT "TF MOVED"',
-                    '60 IF CL(2,0,1,4)=2 AND CL(2,0,1,2)=3 THEN PRINT "TR OK" ELSE PRINT "TR MOVED"',
-                    '70 IF CL(0,0,0,4)=2 AND CL(0,0,0,0)=4 AND CL(0,0,0,3)=6 THEN PRINT "TFL OK" ELSE PRINT "TFL MOVED"',
-                    '80 PRINT "ORDER=";' + str(n),
-                    '90 END',
-                ]
-                errors2, texts2 = _run_top_cross_program(basic, helpers, program, max_frames=30000)
-                if not errors2 and all(any(f'{p} OK' in t for t in texts2) for p in ['TF', 'TR', 'TFL']):
-                    # Found the order
-                    return
-        assert False, "Could not determine algorithm order up to 12"
+    def test_algo_order_six(self, basic, helpers):
+        """FRUruf applied 6 times returns cube to identity (standard order for this OLL algorithm)."""
+        algo_6 = ALGO * 6
+        program = [
+            '5 SAFETY OFF',
+            '10 PMODE 4: SCREEN 1',
+            '20 MERGE "lib_rubiks_engine"',
+            '30 GOSUB InitCube',
+            f'40 MS$="{algo_6}": GOSUB DoMoves',
+            # Check representative pieces for identity
+            '50 IF CL(1,0,0,4)=2 AND CL(1,0,0,0)=4 THEN PRINT "TF OK" ELSE PRINT "TF MOVED"',
+            '60 IF CL(2,0,1,4)=2 AND CL(2,0,1,2)=3 THEN PRINT "TR OK" ELSE PRINT "TR MOVED"',
+            '70 IF CL(0,0,0,4)=2 AND CL(0,0,0,0)=4 AND CL(0,0,0,3)=6 THEN PRINT "TFL OK" ELSE PRINT "TFL MOVED"',
+            '80 IF CL(2,2,0,5)=7 AND CL(2,2,0,0)=4 AND CL(2,2,0,2)=3 THEN PRINT "BFR OK" ELSE PRINT "BFR MOVED"',
+            '90 END',
+        ]
+        errors, texts = _run_top_cross_program(basic, helpers, program, max_frames=50000)
+        assert errors == [], f"Errors: {errors}"
+        for piece in ['TF', 'TR', 'TFL', 'BFR']:
+            assert any(f'{piece} OK' in t for t in texts), f"{piece} should be intact: {texts}"
 
     def test_dot_to_cross_pipeline(self, basic, helpers):
-        """Full dot->L->line->cross pipeline using ZbRUruBz with correct U pre-rotations."""
+        """Full dot->L->line->cross pipeline using FRUruf with correct U pre-rotations."""
         program = [
             '5 SAFETY OFF',
             '10 PMODE 4: SCREEN 1',

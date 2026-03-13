@@ -20,281 +20,281 @@ REM SET AN=1 FOR ANIMATED MODE (DEFAULT)
 REM SET ST$/S2$ FOR STATUS TEXT OVERLAY ON GRAPHICS
 REM
 InitCube:
-LOCAL I
-H = 0.43
-SC = 28: MX = 128: MY = 96
-OC = 1: PI = 3.14159
-AG = 0.65: B = 0.45
-CA = COS(AG): SA = SIN(AG)
-CB = COS(B): SB = SIN(B)
-DIM VX(7),VY(7),VZ(7)
-DIM PX(7),PY(7),PZ(7)
-DIM FX(161,3),FY(161,3)
-DIM FD(161),FC(161),FO(161)
-DIM FV(5,3)
-DIM CL(2,2,2,5),TC(2,2,5)
-FOR I=0 TO 7: READ VX(I),VY(I),VZ(I): NEXT I
-FOR I=0 TO 5: READ FV(I,0),FV(I,1),FV(I,2),FV(I,3): NEXT I
-GOSUB InitColors
-AN = 1
-ST$ = "": S2$ = ""
-RETURN
+  LOCAL I
+  H = 0.43
+  SC = 28: MX = 128: MY = 96
+  OC = 1: PI = 3.14159
+  AG = 0.65: B = 0.45
+  CA = COS(AG): SA = SIN(AG)
+  CB = COS(B): SB = SIN(B)
+  DIM VX(7),VY(7),VZ(7)
+  DIM PX(7),PY(7),PZ(7)
+  DIM FX(161,3),FY(161,3)
+  DIM FD(161),FC(161),FO(161)
+  DIM FV(5,3)
+  DIM CL(2,2,2,5),TC(2,2,5)
+  FOR I=0 TO 7: READ VX(I),VY(I),VZ(I): NEXT I
+  FOR I=0 TO 5: READ FV(I,0),FV(I,1),FV(I,2),FV(I,3): NEXT I
+  GOSUB InitColors
+  AN = 1
+  ST$ = "": S2$ = ""
+  RETURN
 REM
 ShowCube:
-REM NO LOCAL VARS — SETS TF, DR, RA FOR DRAWCUBE
-TF=0: DR=1: RA=0
-GOSUB DrawCube
-RETURN
+  REM NO LOCAL VARS — SETS TF, DR, RA FOR DRAWCUBE
+  TF=0: DR=1: RA=0
+  GOSUB DrawCube
+  RETURN
 REM
 DoTurn:
-LOCAL RA
-IF AN=0 THEN GOSUB Permute: RETURN
-FOR RA=0 TO 90 STEP 15
-  GOSUB DrawCube
-NEXT RA
-GOSUB Permute
-RETURN
+  LOCAL RA
+  IF AN=0 THEN GOSUB Permute: RETURN
+  FOR RA=0 TO 90 STEP 15
+    GOSUB DrawCube
+  NEXT RA
+  GOSUB Permute
+  RETURN
 REM
 DrawCube:
-LOCAL I, IX, IY, IZ, F, J, NF, FN
-RD=DR*RA*PI/180: CR=COS(RD): SR=SIN(RD)
-PCLS
-NF=0
-FOR IZ=0 TO 2
-  FOR IY=0 TO 2
-    FOR IX=0 TO 2
-      OX=IX-1: OY=IY-1: OZ=IZ-1
-      FOR I=0 TO 7
-        X1=OX+VX(I)*H: Y1=OY+VY(I)*H: Z1=OZ+VZ(I)*H
-        IF TF=1 AND IX=2 THEN TW=Y1*CR-Z1*SR: Z1=Y1*SR+Z1*CR: Y1=TW
-        IF TF=4 THEN TW=Y1*CR-Z1*SR: Z1=Y1*SR+Z1*CR: Y1=TW
-        IF TF=2 AND IY=0 THEN TW=X1*CR+Z1*SR: Z1=-X1*SR+Z1*CR: X1=TW
-        IF TF=5 THEN TW=X1*CR+Z1*SR: Z1=-X1*SR+Z1*CR: X1=TW
-        IF TF=3 AND IZ=0 THEN TW=X1*CR-Y1*SR: Y1=X1*SR+Y1*CR: X1=TW
-        IF TF=6 THEN TW=X1*CR-Y1*SR: Y1=X1*SR+Y1*CR: X1=TW
-        IF TF=10 AND IZ=1 THEN TW=X1*CR-Y1*SR: Y1=X1*SR+Y1*CR: X1=TW
-        IF TF=7 AND IX=0 THEN TW=Y1*CR+Z1*SR: Z1=-Y1*SR+Z1*CR: Y1=TW
-        IF TF=8 AND IY=2 THEN TW=X1*CR-Z1*SR: Z1=X1*SR+Z1*CR: X1=TW
-        IF TF=9 AND IZ=2 THEN TW=X1*CR+Y1*SR: Y1=-X1*SR+Y1*CR: X1=TW
-        X2=X1*CA+Z1*SA: Z2=-X1*SA+Z1*CA
-        PX(I)=INT(MX+X2*SC+0.5)
-        PY(I)=INT(MY+(Y1*CB-Z2*SB)*SC+0.5)
-        PZ(I)=Y1*SB+Z2*CB
-      NEXT I
-      ZC=(PZ(0)+PZ(1)+PZ(2)+PZ(3)+PZ(4)+PZ(5)+PZ(6)+PZ(7))/8
-      FOR F=0 TO 5
-        EC=CL(IX,IY,IZ,F)
-        IF EC<0 THEN GOTO SkipCollect
-        V0=FV(F,0): V1=FV(F,1): V2=FV(F,2): V3=FV(F,3)
-        FX(NF,0)=PX(V0): FY(NF,0)=PY(V0)
-        FX(NF,1)=PX(V1): FY(NF,1)=PY(V1)
-        FX(NF,2)=PX(V2): FY(NF,2)=PY(V2)
-        FX(NF,3)=PX(V3): FY(NF,3)=PY(V3)
-        FD(NF)=ZC
-        FC(NF)=EC: NF=NF+1
-      SkipCollect:
-      NEXT F
-    NEXT IX
-  NEXT IY
-NEXT IZ
-REM SORT BY DEPTH
-FOR I=0 TO NF-1: FO(I)=I: NEXT I
-FOR I=0 TO NF-2
-  FOR J=0 TO NF-2-I
-    IF FD(FO(J))<FD(FO(J+1)) THEN T=FO(J): FO(J)=FO(J+1): FO(J+1)=T
-  NEXT J
-NEXT I
-REM RENDER FACES
-FOR I=0 TO NF-1
-  FN=FO(I)
-  CP=(FX(FN,1)-FX(FN,0))*(FY(FN,3)-FY(FN,0))-(FY(FN,1)-FY(FN,0))*(FX(FN,3)-FX(FN,0))
-  IF CP<=0 THEN GOTO SkipFace
-  LINE (FX(FN,0),FY(FN,0))-(FX(FN,1),FY(FN,1)),OC
-  LINE (FX(FN,1),FY(FN,1))-(FX(FN,2),FY(FN,2)),OC
-  LINE (FX(FN,2),FY(FN,2))-(FX(FN,3),FY(FN,3)),OC
-  LINE (FX(FN,3),FY(FN,3))-(FX(FN,0),FY(FN,0)),OC
-  GX=(FX(FN,0)+FX(FN,1)+FX(FN,2)+FX(FN,3))/4
-  GY=(FY(FN,0)+FY(FN,1)+FY(FN,2)+FY(FN,3))/4
-  PAINT(GX,GY),FC(FN),OC
-  LINE (FX(FN,0),FY(FN,0))-(FX(FN,1),FY(FN,1)),0
-  LINE (FX(FN,1),FY(FN,1))-(FX(FN,2),FY(FN,2)),0
-  LINE (FX(FN,2),FY(FN,2))-(FX(FN,3),FY(FN,3)),0
-  LINE (FX(FN,3),FY(FN,3))-(FX(FN,0),FY(FN,0)),0
-  SkipFace:
-NEXT I
-REM STATUS TEXT OVERLAY
-IF ST$<>"" THEN GPRINT(2,2),ST$
-IF S2$<>"" THEN GPRINT(2,10),S2$
-RETURN
+  LOCAL I, IX, IY, IZ, F, J, NF, FN
+  RD=DR*RA*PI/180: CR=COS(RD): SR=SIN(RD)
+  PCLS
+  NF=0
+  FOR IZ=0 TO 2
+    FOR IY=0 TO 2
+      FOR IX=0 TO 2
+        OX=IX-1: OY=IY-1: OZ=IZ-1
+        FOR I=0 TO 7
+          X1=OX+VX(I)*H: Y1=OY+VY(I)*H: Z1=OZ+VZ(I)*H
+          IF TF=1 AND IX=2 THEN TW=Y1*CR-Z1*SR: Z1=Y1*SR+Z1*CR: Y1=TW
+          IF TF=4 THEN TW=Y1*CR-Z1*SR: Z1=Y1*SR+Z1*CR: Y1=TW
+          IF TF=2 AND IY=0 THEN TW=X1*CR+Z1*SR: Z1=-X1*SR+Z1*CR: X1=TW
+          IF TF=5 THEN TW=X1*CR+Z1*SR: Z1=-X1*SR+Z1*CR: X1=TW
+          IF TF=3 AND IZ=0 THEN TW=X1*CR-Y1*SR: Y1=X1*SR+Y1*CR: X1=TW
+          IF TF=6 THEN TW=X1*CR-Y1*SR: Y1=X1*SR+Y1*CR: X1=TW
+          IF TF=10 AND IZ=1 THEN TW=X1*CR-Y1*SR: Y1=X1*SR+Y1*CR: X1=TW
+          IF TF=7 AND IX=0 THEN TW=Y1*CR+Z1*SR: Z1=-Y1*SR+Z1*CR: Y1=TW
+          IF TF=8 AND IY=2 THEN TW=X1*CR-Z1*SR: Z1=X1*SR+Z1*CR: X1=TW
+          IF TF=9 AND IZ=2 THEN TW=X1*CR+Y1*SR: Y1=-X1*SR+Y1*CR: X1=TW
+          X2=X1*CA+Z1*SA: Z2=-X1*SA+Z1*CA
+          PX(I)=INT(MX+X2*SC+0.5)
+          PY(I)=INT(MY+(Y1*CB-Z2*SB)*SC+0.5)
+          PZ(I)=Y1*SB+Z2*CB
+        NEXT I
+        ZC=(PZ(0)+PZ(1)+PZ(2)+PZ(3)+PZ(4)+PZ(5)+PZ(6)+PZ(7))/8
+        FOR F=0 TO 5
+          EC=CL(IX,IY,IZ,F)
+          IF EC<0 THEN GOTO SkipCollect
+          V0=FV(F,0): V1=FV(F,1): V2=FV(F,2): V3=FV(F,3)
+          FX(NF,0)=PX(V0): FY(NF,0)=PY(V0)
+          FX(NF,1)=PX(V1): FY(NF,1)=PY(V1)
+          FX(NF,2)=PX(V2): FY(NF,2)=PY(V2)
+          FX(NF,3)=PX(V3): FY(NF,3)=PY(V3)
+          FD(NF)=ZC
+          FC(NF)=EC: NF=NF+1
+        SkipCollect:
+        NEXT F
+      NEXT IX
+    NEXT IY
+  NEXT IZ
+  REM SORT BY DEPTH
+  FOR I=0 TO NF-1: FO(I)=I: NEXT I
+  FOR I=0 TO NF-2
+    FOR J=0 TO NF-2-I
+      IF FD(FO(J))<FD(FO(J+1)) THEN T=FO(J): FO(J)=FO(J+1): FO(J+1)=T
+    NEXT J
+  NEXT I
+  REM RENDER FACES
+  FOR I=0 TO NF-1
+    FN=FO(I)
+    CP=(FX(FN,1)-FX(FN,0))*(FY(FN,3)-FY(FN,0))-(FY(FN,1)-FY(FN,0))*(FX(FN,3)-FX(FN,0))
+    IF CP<=0 THEN GOTO SkipFace
+    LINE (FX(FN,0),FY(FN,0))-(FX(FN,1),FY(FN,1)),OC
+    LINE (FX(FN,1),FY(FN,1))-(FX(FN,2),FY(FN,2)),OC
+    LINE (FX(FN,2),FY(FN,2))-(FX(FN,3),FY(FN,3)),OC
+    LINE (FX(FN,3),FY(FN,3))-(FX(FN,0),FY(FN,0)),OC
+    GX=(FX(FN,0)+FX(FN,1)+FX(FN,2)+FX(FN,3))/4
+    GY=(FY(FN,0)+FY(FN,1)+FY(FN,2)+FY(FN,3))/4
+    PAINT(GX,GY),FC(FN),OC
+    LINE (FX(FN,0),FY(FN,0))-(FX(FN,1),FY(FN,1)),0
+    LINE (FX(FN,1),FY(FN,1))-(FX(FN,2),FY(FN,2)),0
+    LINE (FX(FN,2),FY(FN,2))-(FX(FN,3),FY(FN,3)),0
+    LINE (FX(FN,3),FY(FN,3))-(FX(FN,0),FY(FN,0)),0
+    SkipFace:
+  NEXT I
+  REM STATUS TEXT OVERLAY
+  IF ST$<>"" THEN GPRINT(2,2),ST$
+  IF S2$<>"" THEN GPRINT(2,10),S2$
+  RETURN
 REM
 InitColors:
-LOCAL IX, IY, IZ, F
-FOR IX=0 TO 2
+  LOCAL IX, IY, IZ, F
+  FOR IX=0 TO 2
+    FOR IY=0 TO 2
+      FOR IZ=0 TO 2
+        FOR F=0 TO 5
+          CL(IX,IY,IZ,F)=-1
+        NEXT F
+      NEXT IZ
+    NEXT IY
+  NEXT IX
+  FOR IX=0 TO 2
+    FOR IY=0 TO 2
+      CL(IX,IY,0,0)=4: CL(IX,IY,2,1)=5
+    NEXT IY
+  NEXT IX
   FOR IY=0 TO 2
     FOR IZ=0 TO 2
-      FOR F=0 TO 5
-        CL(IX,IY,IZ,F)=-1
-      NEXT F
+      CL(2,IY,IZ,2)=3: CL(0,IY,IZ,3)=6
     NEXT IZ
   NEXT IY
-NEXT IX
-FOR IX=0 TO 2
-  FOR IY=0 TO 2
-    CL(IX,IY,0,0)=4: CL(IX,IY,2,1)=5
-  NEXT IY
-NEXT IX
-FOR IY=0 TO 2
-  FOR IZ=0 TO 2
-    CL(2,IY,IZ,2)=3: CL(0,IY,IZ,3)=6
-  NEXT IZ
-NEXT IY
-FOR IX=0 TO 2
-  FOR IZ=0 TO 2
-    CL(IX,0,IZ,4)=2: CL(IX,2,IZ,5)=7
-  NEXT IZ
-NEXT IX
-RETURN
+  FOR IX=0 TO 2
+    FOR IZ=0 TO 2
+      CL(IX,0,IZ,4)=2: CL(IX,2,IZ,5)=7
+    NEXT IZ
+  NEXT IX
+  RETURN
 REM
 Permute:
-LOCAL PP, IX, IY, IZ, F, NX, NY, NZ, SL
-IF DR<0 THEN NP=3 ELSE NP=1
-FOR PP=1 TO NP
-  ON TF GOTO PermRight,PermTop,PermFront,PermRotX,PermRotY,PermRotZ,PermLeft,PermDown,PermBack,PermStanding
-  PermDone:
-NEXT PP
-RETURN
+  LOCAL PP, IX, IY, IZ, F, NX, NY, NZ, SL
+  IF DR<0 THEN NP=3 ELSE NP=1
+  FOR PP=1 TO NP
+    ON TF GOTO PermRight,PermTop,PermFront,PermRotX,PermRotY,PermRotZ,PermLeft,PermDown,PermBack,PermStanding
+    PermDone:
+  NEXT PP
+  RETURN
 REM
 PermRight:
-FOR IY=0 TO 2
-  FOR IZ=0 TO 2
-    NY=IZ: NZ=2-IY
-    TC(NY,NZ,0)=CL(2,IY,IZ,5)
-    TC(NY,NZ,1)=CL(2,IY,IZ,4)
-    TC(NY,NZ,2)=CL(2,IY,IZ,2)
-    TC(NY,NZ,3)=CL(2,IY,IZ,3)
-    TC(NY,NZ,4)=CL(2,IY,IZ,0)
-    TC(NY,NZ,5)=CL(2,IY,IZ,1)
-  NEXT IZ
-NEXT IY
-FOR IY=0 TO 2
-  FOR IZ=0 TO 2
-    FOR F=0 TO 5
-      CL(2,IY,IZ,F)=TC(IY,IZ,F)
-    NEXT F
-  NEXT IZ
-NEXT IY
-GOTO PermDone
-REM
-PermTop:
-FOR IX=0 TO 2
-  FOR IZ=0 TO 2
-    NX=IZ: NZ=2-IX
-    TC(NX,NZ,0)=CL(IX,0,IZ,2)
-    TC(NX,NZ,1)=CL(IX,0,IZ,3)
-    TC(NX,NZ,2)=CL(IX,0,IZ,1)
-    TC(NX,NZ,3)=CL(IX,0,IZ,0)
-    TC(NX,NZ,4)=CL(IX,0,IZ,4)
-    TC(NX,NZ,5)=CL(IX,0,IZ,5)
-  NEXT IZ
-NEXT IX
-FOR IX=0 TO 2
-  FOR IZ=0 TO 2
-    FOR F=0 TO 5
-      CL(IX,0,IZ,F)=TC(IX,IZ,F)
-    NEXT F
-  NEXT IZ
-NEXT IX
-GOTO PermDone
-REM
-PermFront:
-FOR IX=0 TO 2
-  FOR IY=0 TO 2
-    NX=2-IY: NY=IX
-    TC(NX,NY,0)=CL(IX,IY,0,0)
-    TC(NX,NY,1)=CL(IX,IY,0,1)
-    TC(NX,NY,2)=CL(IX,IY,0,4)
-    TC(NX,NY,3)=CL(IX,IY,0,5)
-    TC(NX,NY,4)=CL(IX,IY,0,3)
-    TC(NX,NY,5)=CL(IX,IY,0,2)
-  NEXT IY
-NEXT IX
-FOR IX=0 TO 2
-  FOR IY=0 TO 2
-    FOR F=0 TO 5
-      CL(IX,IY,0,F)=TC(IX,IY,F)
-    NEXT F
-  NEXT IY
-NEXT IX
-GOTO PermDone
-REM
-PermRotX:
-FOR SL=0 TO 2
   FOR IY=0 TO 2
     FOR IZ=0 TO 2
-      NY=2-IZ: NZ=IY
-      TC(NY,NZ,0)=CL(SL,IY,IZ,4)
-      TC(NY,NZ,1)=CL(SL,IY,IZ,5)
-      TC(NY,NZ,2)=CL(SL,IY,IZ,2)
-      TC(NY,NZ,3)=CL(SL,IY,IZ,3)
-      TC(NY,NZ,4)=CL(SL,IY,IZ,1)
-      TC(NY,NZ,5)=CL(SL,IY,IZ,0)
+      NY=IZ: NZ=2-IY
+      TC(NY,NZ,0)=CL(2,IY,IZ,5)
+      TC(NY,NZ,1)=CL(2,IY,IZ,4)
+      TC(NY,NZ,2)=CL(2,IY,IZ,2)
+      TC(NY,NZ,3)=CL(2,IY,IZ,3)
+      TC(NY,NZ,4)=CL(2,IY,IZ,0)
+      TC(NY,NZ,5)=CL(2,IY,IZ,1)
     NEXT IZ
   NEXT IY
   FOR IY=0 TO 2
     FOR IZ=0 TO 2
       FOR F=0 TO 5
-        CL(SL,IY,IZ,F)=TC(IY,IZ,F)
+        CL(2,IY,IZ,F)=TC(IY,IZ,F)
       NEXT F
     NEXT IZ
   NEXT IY
-NEXT SL
-GOTO PermDone
+  GOTO PermDone
 REM
-PermRotY:
-FOR SL=0 TO 2
+PermTop:
   FOR IX=0 TO 2
     FOR IZ=0 TO 2
       NX=IZ: NZ=2-IX
-      TC(NX,NZ,0)=CL(IX,SL,IZ,2)
-      TC(NX,NZ,1)=CL(IX,SL,IZ,3)
-      TC(NX,NZ,2)=CL(IX,SL,IZ,1)
-      TC(NX,NZ,3)=CL(IX,SL,IZ,0)
-      TC(NX,NZ,4)=CL(IX,SL,IZ,4)
-      TC(NX,NZ,5)=CL(IX,SL,IZ,5)
+      TC(NX,NZ,0)=CL(IX,0,IZ,2)
+      TC(NX,NZ,1)=CL(IX,0,IZ,3)
+      TC(NX,NZ,2)=CL(IX,0,IZ,1)
+      TC(NX,NZ,3)=CL(IX,0,IZ,0)
+      TC(NX,NZ,4)=CL(IX,0,IZ,4)
+      TC(NX,NZ,5)=CL(IX,0,IZ,5)
     NEXT IZ
   NEXT IX
   FOR IX=0 TO 2
     FOR IZ=0 TO 2
       FOR F=0 TO 5
-        CL(IX,SL,IZ,F)=TC(IX,IZ,F)
+        CL(IX,0,IZ,F)=TC(IX,IZ,F)
       NEXT F
     NEXT IZ
   NEXT IX
-NEXT SL
-GOTO PermDone
+  GOTO PermDone
 REM
-PermRotZ:
-FOR SL=0 TO 2
+PermFront:
   FOR IX=0 TO 2
     FOR IY=0 TO 2
       NX=2-IY: NY=IX
-      TC(NX,NY,0)=CL(IX,IY,SL,0)
-      TC(NX,NY,1)=CL(IX,IY,SL,1)
-      TC(NX,NY,2)=CL(IX,IY,SL,4)
-      TC(NX,NY,3)=CL(IX,IY,SL,5)
-      TC(NX,NY,4)=CL(IX,IY,SL,3)
-      TC(NX,NY,5)=CL(IX,IY,SL,2)
+      TC(NX,NY,0)=CL(IX,IY,0,0)
+      TC(NX,NY,1)=CL(IX,IY,0,1)
+      TC(NX,NY,2)=CL(IX,IY,0,4)
+      TC(NX,NY,3)=CL(IX,IY,0,5)
+      TC(NX,NY,4)=CL(IX,IY,0,3)
+      TC(NX,NY,5)=CL(IX,IY,0,2)
     NEXT IY
   NEXT IX
   FOR IX=0 TO 2
     FOR IY=0 TO 2
       FOR F=0 TO 5
-        CL(IX,IY,SL,F)=TC(IX,IY,F)
+        CL(IX,IY,0,F)=TC(IX,IY,F)
       NEXT F
     NEXT IY
   NEXT IX
-NEXT SL
-GOTO PermDone
+  GOTO PermDone
+REM
+PermRotX:
+  FOR SL=0 TO 2
+    FOR IY=0 TO 2
+      FOR IZ=0 TO 2
+        NY=2-IZ: NZ=IY
+        TC(NY,NZ,0)=CL(SL,IY,IZ,4)
+        TC(NY,NZ,1)=CL(SL,IY,IZ,5)
+        TC(NY,NZ,2)=CL(SL,IY,IZ,2)
+        TC(NY,NZ,3)=CL(SL,IY,IZ,3)
+        TC(NY,NZ,4)=CL(SL,IY,IZ,1)
+        TC(NY,NZ,5)=CL(SL,IY,IZ,0)
+      NEXT IZ
+    NEXT IY
+    FOR IY=0 TO 2
+      FOR IZ=0 TO 2
+        FOR F=0 TO 5
+          CL(SL,IY,IZ,F)=TC(IY,IZ,F)
+        NEXT F
+      NEXT IZ
+    NEXT IY
+  NEXT SL
+  GOTO PermDone
+REM
+PermRotY:
+  FOR SL=0 TO 2
+    FOR IX=0 TO 2
+      FOR IZ=0 TO 2
+        NX=IZ: NZ=2-IX
+        TC(NX,NZ,0)=CL(IX,SL,IZ,2)
+        TC(NX,NZ,1)=CL(IX,SL,IZ,3)
+        TC(NX,NZ,2)=CL(IX,SL,IZ,1)
+        TC(NX,NZ,3)=CL(IX,SL,IZ,0)
+        TC(NX,NZ,4)=CL(IX,SL,IZ,4)
+        TC(NX,NZ,5)=CL(IX,SL,IZ,5)
+      NEXT IZ
+    NEXT IX
+    FOR IX=0 TO 2
+      FOR IZ=0 TO 2
+        FOR F=0 TO 5
+          CL(IX,SL,IZ,F)=TC(IX,IZ,F)
+        NEXT F
+      NEXT IZ
+    NEXT IX
+  NEXT SL
+  GOTO PermDone
+REM
+PermRotZ:
+  FOR SL=0 TO 2
+    FOR IX=0 TO 2
+      FOR IY=0 TO 2
+        NX=2-IY: NY=IX
+        TC(NX,NY,0)=CL(IX,IY,SL,0)
+        TC(NX,NY,1)=CL(IX,IY,SL,1)
+        TC(NX,NY,2)=CL(IX,IY,SL,4)
+        TC(NX,NY,3)=CL(IX,IY,SL,5)
+        TC(NX,NY,4)=CL(IX,IY,SL,3)
+        TC(NX,NY,5)=CL(IX,IY,SL,2)
+      NEXT IY
+    NEXT IX
+    FOR IX=0 TO 2
+      FOR IY=0 TO 2
+        FOR F=0 TO 5
+          CL(IX,IY,SL,F)=TC(IX,IY,F)
+        NEXT F
+      NEXT IY
+    NEXT IX
+  NEXT SL
+  GOTO PermDone
 REM
 DATA -1,-1,-1, 1,-1,-1, 1,1,-1, -1,1,-1
 DATA -1,-1,1, 1,-1,1, 1,1,1, -1,1,1
@@ -302,122 +302,122 @@ DATA 0,1,2,3, 5,4,7,6, 1,5,6,2
 DATA 4,0,3,7, 4,5,1,0, 3,2,6,7
 REM
 PermLeft:
-FOR IY=0 TO 2
-  FOR IZ=0 TO 2
-    NY=2-IZ: NZ=IY
-    TC(NY,NZ,0)=CL(0,IY,IZ,4)
-    TC(NY,NZ,1)=CL(0,IY,IZ,5)
-    TC(NY,NZ,2)=CL(0,IY,IZ,2)
-    TC(NY,NZ,3)=CL(0,IY,IZ,3)
-    TC(NY,NZ,4)=CL(0,IY,IZ,1)
-    TC(NY,NZ,5)=CL(0,IY,IZ,0)
-  NEXT IZ
-NEXT IY
-FOR IY=0 TO 2
-  FOR IZ=0 TO 2
-    FOR F=0 TO 5
-      CL(0,IY,IZ,F)=TC(IY,IZ,F)
-    NEXT F
-  NEXT IZ
-NEXT IY
-GOTO PermDone
+  FOR IY=0 TO 2
+    FOR IZ=0 TO 2
+      NY=2-IZ: NZ=IY
+      TC(NY,NZ,0)=CL(0,IY,IZ,4)
+      TC(NY,NZ,1)=CL(0,IY,IZ,5)
+      TC(NY,NZ,2)=CL(0,IY,IZ,2)
+      TC(NY,NZ,3)=CL(0,IY,IZ,3)
+      TC(NY,NZ,4)=CL(0,IY,IZ,1)
+      TC(NY,NZ,5)=CL(0,IY,IZ,0)
+    NEXT IZ
+  NEXT IY
+  FOR IY=0 TO 2
+    FOR IZ=0 TO 2
+      FOR F=0 TO 5
+        CL(0,IY,IZ,F)=TC(IY,IZ,F)
+      NEXT F
+    NEXT IZ
+  NEXT IY
+  GOTO PermDone
 REM
 PermDown:
-FOR IX=0 TO 2
-  FOR IZ=0 TO 2
-    NX=2-IZ: NZ=IX
-    TC(NX,NZ,0)=CL(IX,2,IZ,3)
-    TC(NX,NZ,1)=CL(IX,2,IZ,2)
-    TC(NX,NZ,2)=CL(IX,2,IZ,0)
-    TC(NX,NZ,3)=CL(IX,2,IZ,1)
-    TC(NX,NZ,4)=CL(IX,2,IZ,4)
-    TC(NX,NZ,5)=CL(IX,2,IZ,5)
-  NEXT IZ
-NEXT IX
-FOR IX=0 TO 2
-  FOR IZ=0 TO 2
-    FOR F=0 TO 5
-      CL(IX,2,IZ,F)=TC(IX,IZ,F)
-    NEXT F
-  NEXT IZ
-NEXT IX
-GOTO PermDone
+  FOR IX=0 TO 2
+    FOR IZ=0 TO 2
+      NX=2-IZ: NZ=IX
+      TC(NX,NZ,0)=CL(IX,2,IZ,3)
+      TC(NX,NZ,1)=CL(IX,2,IZ,2)
+      TC(NX,NZ,2)=CL(IX,2,IZ,0)
+      TC(NX,NZ,3)=CL(IX,2,IZ,1)
+      TC(NX,NZ,4)=CL(IX,2,IZ,4)
+      TC(NX,NZ,5)=CL(IX,2,IZ,5)
+    NEXT IZ
+  NEXT IX
+  FOR IX=0 TO 2
+    FOR IZ=0 TO 2
+      FOR F=0 TO 5
+        CL(IX,2,IZ,F)=TC(IX,IZ,F)
+      NEXT F
+    NEXT IZ
+  NEXT IX
+  GOTO PermDone
 REM
 PermBack:
-FOR IX=0 TO 2
-  FOR IY=0 TO 2
-    NX=IY: NY=2-IX
-    TC(NX,NY,0)=CL(IX,IY,2,0)
-    TC(NX,NY,1)=CL(IX,IY,2,1)
-    TC(NX,NY,2)=CL(IX,IY,2,5)
-    TC(NX,NY,3)=CL(IX,IY,2,4)
-    TC(NX,NY,4)=CL(IX,IY,2,2)
-    TC(NX,NY,5)=CL(IX,IY,2,3)
-  NEXT IY
-NEXT IX
-FOR IX=0 TO 2
-  FOR IY=0 TO 2
-    FOR F=0 TO 5
-      CL(IX,IY,2,F)=TC(IX,IY,F)
-    NEXT F
-  NEXT IY
-NEXT IX
-GOTO PermDone
+  FOR IX=0 TO 2
+    FOR IY=0 TO 2
+      NX=IY: NY=2-IX
+      TC(NX,NY,0)=CL(IX,IY,2,0)
+      TC(NX,NY,1)=CL(IX,IY,2,1)
+      TC(NX,NY,2)=CL(IX,IY,2,5)
+      TC(NX,NY,3)=CL(IX,IY,2,4)
+      TC(NX,NY,4)=CL(IX,IY,2,2)
+      TC(NX,NY,5)=CL(IX,IY,2,3)
+    NEXT IY
+  NEXT IX
+  FOR IX=0 TO 2
+    FOR IY=0 TO 2
+      FOR F=0 TO 5
+        CL(IX,IY,2,F)=TC(IX,IY,F)
+      NEXT F
+    NEXT IY
+  NEXT IX
+  GOTO PermDone
 REM
 PermStanding:
-REM MIDDLE SLICE IN F DIRECTION (IZ=1)
-FOR IX=0 TO 2
-  FOR IY=0 TO 2
-    NX=2-IY: NY=IX
-    TC(NX,NY,0)=CL(IX,IY,1,0)
-    TC(NX,NY,1)=CL(IX,IY,1,1)
-    TC(NX,NY,2)=CL(IX,IY,1,4)
-    TC(NX,NY,3)=CL(IX,IY,1,5)
-    TC(NX,NY,4)=CL(IX,IY,1,3)
-    TC(NX,NY,5)=CL(IX,IY,1,2)
-  NEXT IY
-NEXT IX
-FOR IX=0 TO 2
-  FOR IY=0 TO 2
-    FOR F=0 TO 5
-      CL(IX,IY,1,F)=TC(IX,IY,F)
-    NEXT F
-  NEXT IY
-NEXT IX
-GOTO PermDone
+  REM MIDDLE SLICE IN F DIRECTION (IZ=1)
+  FOR IX=0 TO 2
+    FOR IY=0 TO 2
+      NX=2-IY: NY=IX
+      TC(NX,NY,0)=CL(IX,IY,1,0)
+      TC(NX,NY,1)=CL(IX,IY,1,1)
+      TC(NX,NY,2)=CL(IX,IY,1,4)
+      TC(NX,NY,3)=CL(IX,IY,1,5)
+      TC(NX,NY,4)=CL(IX,IY,1,3)
+      TC(NX,NY,5)=CL(IX,IY,1,2)
+    NEXT IY
+  NEXT IX
+  FOR IX=0 TO 2
+    FOR IY=0 TO 2
+      FOR F=0 TO 5
+        CL(IX,IY,1,F)=TC(IX,IY,F)
+      NEXT F
+    NEXT IY
+  NEXT IX
+  GOTO PermDone
 REM
 DoMoves:
-REM EXECUTE MOVE STRING MS$
-REM UPPERCASE=CW LOWERCASE=CCW
-LOCAL MI, MC$, UC$
-FOR MI=1 TO LEN(MS$)
-  MC$=MID$(MS$,MI,1)
-  IF MC$>="a" THEN DR=-1 ELSE DR=1
-  UC$=CHR$(ASC(MC$) AND 223)
-  IF UC$="R" THEN TF=1
-  IF UC$="U" THEN TF=2
-  IF UC$="F" THEN TF=3
-  IF UC$="L" THEN TF=7
-  IF UC$="D" THEN TF=8
-  IF UC$="B" THEN TF=9
-  IF UC$="X" THEN TF=4
-  IF UC$="Y" THEN TF=5
-  IF UC$="Z" THEN TF=6
-  IF UC$="S" THEN TF=10
-  GOSUB DoTurn
-NEXT MI
-RETURN
+  REM EXECUTE MOVE STRING MS$
+  REM UPPERCASE=CW LOWERCASE=CCW
+  LOCAL MI, MC$, UC$
+  FOR MI=1 TO LEN(MS$)
+    MC$=MID$(MS$,MI,1)
+    IF MC$>="a" THEN DR=-1 ELSE DR=1
+    UC$=CHR$(ASC(MC$) AND 223)
+    IF UC$="R" THEN TF=1
+    IF UC$="U" THEN TF=2
+    IF UC$="F" THEN TF=3
+    IF UC$="L" THEN TF=7
+    IF UC$="D" THEN TF=8
+    IF UC$="B" THEN TF=9
+    IF UC$="X" THEN TF=4
+    IF UC$="Y" THEN TF=5
+    IF UC$="Z" THEN TF=6
+    IF UC$="S" THEN TF=10
+    GOSUB DoTurn
+  NEXT MI
+  RETURN
 REM
 Scramble:
-REM APPLY NM RANDOM FACE TURNS
-LOCAL MV, LT, LD
-LT=0: LD=0
-FOR MV=1 TO NM
-  ScramblePick:
-  TF=RND(6)
-  IF RND(2)=1 THEN DR=1 ELSE DR=-1
-  IF TF=LT AND DR=-LD THEN GOTO ScramblePick
-  LT=TF: LD=DR
-  GOSUB DoTurn
-NEXT MV
-RETURN
+  REM APPLY NM RANDOM FACE TURNS
+  LOCAL MV, LT, LD
+  LT=0: LD=0
+  FOR MV=1 TO NM
+    ScramblePick:
+    TF=RND(6)
+    IF RND(2)=1 THEN DR=1 ELSE DR=-1
+    IF TF=LT AND DR=-LD THEN GOTO ScramblePick
+    LT=TF: LD=DR
+    GOSUB DoTurn
+  NEXT MV
+  RETURN
