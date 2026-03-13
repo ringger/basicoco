@@ -99,6 +99,25 @@ class TestSplitOnDelimiter:
         result = StatementSplitter.split_on_delimiter('PRINT "X":')
         assert result == ['PRINT "X"']
 
+    def test_rem_with_colon_not_split(self):
+        """REM comments consume the rest of the line, colons included."""
+        result = StatementSplitter.split_on_delimiter('REM U CW CYCLE: TFR(0)')
+        assert result == ['REM U CW CYCLE: TFR(0)']
+
+    def test_inline_rem_with_colon_not_split(self):
+        """Inline REM after code preserves colons within the comment."""
+        result = StatementSplitter.split_on_delimiter('A=1: REM U CW CYCLE: TFR(0)')
+        assert result == ['A=1', 'REM U CW CYCLE: TFR(0)']
+
+    def test_rem_after_multiple_statements(self):
+        result = StatementSplitter.split_on_delimiter('A=1: B=2: REM comment: with: colons')
+        assert result == ['A=1', 'B=2', 'REM comment: with: colons']
+
+    def test_remember_variable_not_treated_as_rem(self):
+        """REMEMBER starts with REM but is a variable, not a comment."""
+        result = StatementSplitter.split_on_delimiter('REMEMBER=5: A=1')
+        assert result == ['REMEMBER=5', 'A=1']
+
 
 class TestSplitOnDelimiterParenAware:
     """Test StatementSplitter.split_on_delimiter_paren_aware"""
@@ -247,6 +266,17 @@ class TestCoreExpandLineToSublines:
         # AST converter may expand this into multiple sublines, but they should
         # be semantically correct (not naively split on colons)
         assert len(sublines) >= 1
+
+    def test_inline_rem_with_colon_not_split(self, basic):
+        """Code followed by REM with colons: REM consumes rest of line"""
+        basic.process_command('10 A=1: REM U CW CYCLE: TFR(0)')
+        sublines = sorted([(k, v) for k, v in basic.expanded_program.items() if k[0] == 10])
+        # Should be exactly 2 sublines: A=1 and the REM comment (not 3)
+        assert len(sublines) == 2
+        # REM should not cause runtime errors
+        result = basic.process_command('RUN')
+        errors = [r for r in (result or []) if isinstance(r, dict) and r.get('type') == 'error']
+        assert errors == []
 
     def test_single_statement_stored(self, basic):
         """Single statements should produce exactly one subline"""

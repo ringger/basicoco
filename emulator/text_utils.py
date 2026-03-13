@@ -27,15 +27,26 @@ class StatementSplitter:
 
     @staticmethod
     def split_on_delimiter(text: str, delimiter: str = ':') -> list:
-        """Split text on delimiter, respecting quoted strings. Strips parts."""
+        """Split text on delimiter, respecting quoted strings and REM comments.
+
+        When splitting on colons, a REM segment consumes the rest of the line
+        (colons inside REM comments are not delimiters).
+        """
         parts = []
         current = ""
         in_quotes = False
-        for char in text:
+        for pos, char in enumerate(text):
             if char == '"':
                 in_quotes = not in_quotes
                 current += char
             elif char == delimiter and not in_quotes:
+                # If current segment is REM, it consumes everything to end of line
+                stripped_upper = current.strip().upper()
+                if (delimiter == ':'
+                        and (stripped_upper == 'REM'
+                             or stripped_upper.startswith('REM '))):
+                    parts.append((current + text[pos:]).strip())
+                    return parts
                 if current.strip():
                     parts.append(current.strip())
                 current = ""
