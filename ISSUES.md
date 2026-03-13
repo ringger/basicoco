@@ -25,6 +25,10 @@ Areas that work but haven't been stress-tested with adversarial or exotic inputs
 - [ ] **Exotic control flow combinations** — ON ERROR inside nested GOSUB with LOCAL variables, CHAIN with ALL preserving complex state (arrays, open files, error handlers), GOTO/GOSUB from inside deeply nested IF/FOR/WHILE blocks
 - [ ] **String expression edge cases** — very long strings, empty strings in concatenation/MID$/INSTR, string comparisons with trailing spaces
 
+## Known Bugs
+
+- [ ] **GOSUB + IF THEN on same line splits incorrectly** — `GOSUB Sub: IF cond THEN A=1: B=2` splits into 3 sublines: `GOSUB Sub`, `IF cond THEN A=1`, `B=2`. Since the line starts with GOSUB (not a control keyword), `expand_line_to_sublines()` doesn't recognize the IF/THEN body spans the colon. `B=2` executes unconditionally. Workaround: put the GOSUB and IF on separate lines. The fix would require `expand_line_to_sublines()` to detect mid-line IF/THEN when splitting non-control-keyword lines.
+
 ## Known Behavioral Limitations
 
 - **GOTO out of multi-line IF** leaves a stale `if_stack` entry (cleared on next RUN). This matches real CoCo behavior where GOTO from structured blocks is undefined. Note: RETURN out of IF blocks inside GOSUB is handled correctly — GOSUB saves if_stack/for_stack depth and RETURN restores it.

@@ -247,9 +247,18 @@ The directive that captures all three lessons: **Don't reason about the puzzle. 
 
 ## What's Next
 
-After the engine fix, Steps 1–3 were re-verified against pycuber, their algorithms re-derived, and all 48 tests pass again. Step 4 (top cross) also passes 16/16 scramble tests. Four of seven steps complete. Remaining:
+After the engine fix, Steps 1–3 were re-verified against pycuber, their algorithms re-derived, and all 48 tests pass again. Step 4 (top cross) also passes 16/16 scramble tests.
 
-- Step 5: Top edge alignment (PLL edges)
+### Step 5: Top Edge Alignment — The Fastest Step
+
+Step 5 was the cleanest implementation yet. The algorithm `R U R' U R U2 R' U` swaps the front and left top edge side stickers while preserving back and right. Validated against pycuber in one shot, no surprises.
+
+The only subtlety was the pre-rotation strategy. A greedy approach — rotate U for the best alignment, then apply the algorithm — oscillates for certain permutations (e.g., back↔left swapped). The fix: simulate all 4 possible pre-rotations combined with the algorithm, pick the one that yields the best post-algorithm alignment. This guarantees monotonic progress toward the solution.
+
+The implementation exposed an interpreter bug: `GOSUB Sub: IF cond THEN A=1: B=2` splits incorrectly when the line starts with a non-control keyword. The statement splitter sees GOSUB (not IF) at the start, splits on all colons, and `B=2` executes unconditionally regardless of the condition. The workaround — separate lines — was trivial, but the bug is worth noting as a reminder that the interpreter's statement splitting has a blind spot for mid-line control structures. Filed in ISSUES.md.
+
+16/16 scramble tests passing. Five of seven steps complete. Remaining:
+
 - Step 6: Top corner positioning (PLL corners)
 - Step 7: Top corner orientation
 

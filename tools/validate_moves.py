@@ -195,3 +195,11 @@ class TestValidateMoves:
         c = pycuber.Cube(); c("F R U R' U' F'")
         diffs = compare_faces(eng, pycuber_faces(c), "F R U R' U' F'")
         assert diffs == [], f"FRUruf mismatch"
+
+    def test_RUrURUUrU(self, basic, helpers):
+        """Step 5 algorithm: R U R' U R U2 R' U (edge swap)."""
+        texts = self._run(basic, helpers, _dump_all_stickers_program("RUrURUUrU"))
+        eng = parse_engine_output(texts)
+        c = pycuber.Cube(); c("R U R' U R U2 R' U")
+        diffs = compare_faces(eng, pycuber_faces(c), "R U R' U R U2 R' U")
+        assert diffs == [], f"RUrURUUrU mismatch"

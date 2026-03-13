@@ -1,10 +1,10 @@
 """
-Tests for Rubik's cube solver — Steps 1-4.
+Tests for Rubik's cube solver — Steps 1-5.
 
 Scrambles the cube with known move sequences, runs the solver,
 and verifies each step's invariant holds. Steps 1-3 check
-incrementally (each step preserves previous). Step 4+ only checks
-its own goal (top cross) since FRUruf disrupts F2L.
+incrementally (each step preserves previous). Steps 4-5 check
+F2L preservation plus their own goals.
 """
 
 import os
@@ -389,3 +389,99 @@ class TestTopCross:
 
     def test_twenty_moves(self, basic, helpers):
         _run_top_cross_test(basic, helpers, "RUFBLDrufbldRUFBLDru")
+
+
+def _build_top_edge_align_test(scramble_moves, max_frames=100000):
+    """Build a program that scrambles, solves steps 1-5, and verifies."""
+    return [
+        '5 SAFETY OFF',
+        '10 PMODE 4: SCREEN 1',
+        '20 MERGE "lib_rubiks_engine"',
+        '25 MERGE "lib_rubiks_solver"',
+        '30 GOSUB InitCube',
+        '35 AN=0',
+        f'40 MS$="{scramble_moves}": GOSUB DoMoves',
+        '50 GOSUB SolveBottomCross',
+        '55 GOSUB CheckBottomCross',
+        '60 GOSUB SolveBottomCorners',
+        '65 GOSUB CheckBottomCorners',
+        '70 GOSUB SolveMiddleEdges',
+        '75 GOSUB CheckMiddleEdges',
+        '80 GOSUB SolveTopCross',
+        '85 GOSUB CheckTopCross',
+        '90 GOSUB SolveTopEdgeAlign',
+        '95 GOSUB CheckTopEdgeAlign',
+        # Verify F2L preserved after Step 5
+        '96 GOSUB CheckBottomCross',
+        '97 GOSUB CheckBottomCorners',
+        '98 GOSUB CheckMiddleEdges',
+        '99 GOSUB CheckTopCross',
+        '100 PRINT "SOLVED"',
+        '110 END',
+    ]
+
+
+def _run_top_edge_align_test(basic, helpers, scramble_moves, max_frames=100000):
+    """Scramble, solve steps 1-5, verify."""
+    program = _build_top_edge_align_test(scramble_moves, max_frames)
+    helpers.load_program(basic, program)
+    results = helpers.run_to_completion(basic, max_frames=max_frames)
+    errors = helpers.get_error_messages(results)
+    assert errors == [], f"Errors after scramble '{scramble_moves}': {errors}"
+    texts = helpers.get_text_output(results)
+    assert any('TOP EDGES OK' in t for t in texts), \
+        f"Top edges not aligned after scramble '{scramble_moves}'. Output: {texts}"
+
+
+@pytest.mark.slow
+class TestTopEdgeAlign:
+    """Test top edge alignment solver on various scrambles."""
+
+    def test_already_solved(self, basic, helpers):
+        """Solved cube — solver should do nothing."""
+        _run_top_edge_align_test(basic, helpers, "")
+
+    def test_single_move_R(self, basic, helpers):
+        _run_top_edge_align_test(basic, helpers, "R")
+
+    def test_single_move_F(self, basic, helpers):
+        _run_top_edge_align_test(basic, helpers, "F")
+
+    def test_single_move_U(self, basic, helpers):
+        _run_top_edge_align_test(basic, helpers, "U")
+
+    def test_single_move_L(self, basic, helpers):
+        _run_top_edge_align_test(basic, helpers, "L")
+
+    def test_single_move_D(self, basic, helpers):
+        _run_top_edge_align_test(basic, helpers, "D")
+
+    def test_single_move_B(self, basic, helpers):
+        _run_top_edge_align_test(basic, helpers, "B")
+
+    def test_two_moves_RF(self, basic, helpers):
+        _run_top_edge_align_test(basic, helpers, "RF")
+
+    def test_sexy_move(self, basic, helpers):
+        _run_top_edge_align_test(basic, helpers, "RUru")
+
+    def test_triple_sexy(self, basic, helpers):
+        _run_top_edge_align_test(basic, helpers, "RUruRUruRUru")
+
+    def test_all_faces(self, basic, helpers):
+        _run_top_edge_align_test(basic, helpers, "RUFBLD")
+
+    def test_deeper_scramble(self, basic, helpers):
+        _run_top_edge_align_test(basic, helpers, "RUFBLDru")
+
+    def test_ten_move_scramble(self, basic, helpers):
+        _run_top_edge_align_test(basic, helpers, "RUFRUFrufl")
+
+    def test_counter_clockwise(self, basic, helpers):
+        _run_top_edge_align_test(basic, helpers, "rufldb")
+
+    def test_fifteen_moves(self, basic, helpers):
+        _run_top_edge_align_test(basic, helpers, "RUFBLDrufbldRUF")
+
+    def test_twenty_moves(self, basic, helpers):
+        _run_top_edge_align_test(basic, helpers, "RUFBLDrufbldRUFBLDru")

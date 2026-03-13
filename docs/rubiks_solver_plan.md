@@ -425,7 +425,8 @@ e. Final alignment: rotate U (0-3 turns) until the top edge side stickers match 
 - ~~Step 2 (bottom corners)~~ DONE — 16/16 scramble tests pass. FindCorner, extraction, alignment, insertion all implemented. Handedness issue resolved (CW-first vs CCW-first triggers).
 - ~~Step 3 (middle edges)~~ DONE — 16/16 scramble tests pass. FindEdge, extraction, alignment, insertion all implemented. All 8 insertion algorithms verified empirically.
 - ~~Step 4 (top cross)~~ DONE — 16/16 scramble tests pass. `FRUruf` (F R U R' U' F') preserves F2L — verified against pycuber and in engine tests.
-- Steps 5-7 (top layer): not yet written
+- ~~Step 5 (top edge alignment)~~ DONE — 16/16 scramble tests pass. `RUrURUUrU` (R U R' U R U2 R' U) swaps front↔left edges, preserves back+right. Optimal pre-rotation chosen by simulating all 4 options. Algorithm validated against pycuber.
+- Steps 6-7 (top corners): not yet written
 
 Verify each step's algorithms against our engine before writing the BASIC code.
 
