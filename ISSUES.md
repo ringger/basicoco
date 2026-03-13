@@ -27,7 +27,7 @@ Areas that work but haven't been stress-tested with adversarial or exotic inputs
 
 ## Known Bugs
 
-*(No known bugs at this time.)*
+- [ ] **REM lines with colons are split by statement splitter** — `expand_line_to_sublines()` splits on colons inside REM comments, causing text after the colon to be executed as code. Example: `REM U CW CYCLE: TFR(0)` splits into `REM U CW CYCLE` + `TFR(0)` which triggers a syntax error. Workaround: avoid colons in REM comments. Fix would be to check for REM before splitting on colons in `expand_line_to_sublines()`.
 
 ## Known Behavioral Limitations
 

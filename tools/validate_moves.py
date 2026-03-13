@@ -203,3 +203,11 @@ class TestValidateMoves:
         c = pycuber.Cube(); c("R U R' U R U2 R' U")
         diffs = compare_faces(eng, pycuber_faces(c), "R U R' U R U2 R' U")
         assert diffs == [], f"RUrURUUrU mismatch"
+
+    def test_URulUruL(self, basic, helpers):
+        """Step 6 algorithm: U R U' L' U R' U' L (corner 3-cycle)."""
+        texts = self._run(basic, helpers, _dump_all_stickers_program("URulUruL"))
+        eng = parse_engine_output(texts)
+        c = pycuber.Cube(); c("U R U' L' U R' U' L")
+        diffs = compare_faces(eng, pycuber_faces(c), "U R U' L' U R' U' L")
+        assert diffs == [], f"URulUruL mismatch"

@@ -485,3 +485,102 @@ class TestTopEdgeAlign:
 
     def test_twenty_moves(self, basic, helpers):
         _run_top_edge_align_test(basic, helpers, "RUFBLDrufbldRUFBLDru")
+
+
+def _build_top_corner_pos_test(scramble_moves, max_frames=120000):
+    """Build a program that scrambles, solves steps 1-6, and verifies."""
+    return [
+        '5 SAFETY OFF',
+        '10 PMODE 4: SCREEN 1',
+        '20 MERGE "lib_rubiks_engine"',
+        '25 MERGE "lib_rubiks_solver"',
+        '30 GOSUB InitCube',
+        '35 AN=0',
+        f'40 MS$="{scramble_moves}": GOSUB DoMoves',
+        '50 GOSUB SolveBottomCross',
+        '55 GOSUB CheckBottomCross',
+        '60 GOSUB SolveBottomCorners',
+        '65 GOSUB CheckBottomCorners',
+        '70 GOSUB SolveMiddleEdges',
+        '75 GOSUB CheckMiddleEdges',
+        '80 GOSUB SolveTopCross',
+        '85 GOSUB CheckTopCross',
+        '90 GOSUB SolveTopEdgeAlign',
+        '95 GOSUB CheckTopEdgeAlign',
+        '100 GOSUB SolveTopCornerPos',
+        '105 GOSUB CheckTopCornerPos',
+        # Verify F2L + edges preserved after Step 6
+        '106 GOSUB CheckBottomCross',
+        '107 GOSUB CheckBottomCorners',
+        '108 GOSUB CheckMiddleEdges',
+        '109 GOSUB CheckTopCross',
+        '110 GOSUB CheckTopEdgeAlign',
+        '120 PRINT "SOLVED"',
+        '130 END',
+    ]
+
+
+def _run_top_corner_pos_test(basic, helpers, scramble_moves, max_frames=120000):
+    """Scramble, solve steps 1-6, verify."""
+    program = _build_top_corner_pos_test(scramble_moves, max_frames)
+    helpers.load_program(basic, program)
+    results = helpers.run_to_completion(basic, max_frames=max_frames)
+    errors = helpers.get_error_messages(results)
+    assert errors == [], f"Errors after scramble '{scramble_moves}': {errors}"
+    texts = helpers.get_text_output(results)
+    assert any('TOP CORNERS POS OK' in t for t in texts), \
+        f"Top corners not positioned after scramble '{scramble_moves}'. Output: {texts}"
+
+
+@pytest.mark.slow
+class TestTopCornerPos:
+    """Test top corner positioning solver on various scrambles."""
+
+    def test_already_solved(self, basic, helpers):
+        """Solved cube — solver should do nothing."""
+        _run_top_corner_pos_test(basic, helpers, "")
+
+    def test_single_move_R(self, basic, helpers):
+        _run_top_corner_pos_test(basic, helpers, "R")
+
+    def test_single_move_F(self, basic, helpers):
+        _run_top_corner_pos_test(basic, helpers, "F")
+
+    def test_single_move_U(self, basic, helpers):
+        _run_top_corner_pos_test(basic, helpers, "U")
+
+    def test_single_move_L(self, basic, helpers):
+        _run_top_corner_pos_test(basic, helpers, "L")
+
+    def test_single_move_D(self, basic, helpers):
+        _run_top_corner_pos_test(basic, helpers, "D")
+
+    def test_single_move_B(self, basic, helpers):
+        _run_top_corner_pos_test(basic, helpers, "B")
+
+    def test_two_moves_RF(self, basic, helpers):
+        _run_top_corner_pos_test(basic, helpers, "RF")
+
+    def test_sexy_move(self, basic, helpers):
+        _run_top_corner_pos_test(basic, helpers, "RUru")
+
+    def test_triple_sexy(self, basic, helpers):
+        _run_top_corner_pos_test(basic, helpers, "RUruRUruRUru")
+
+    def test_all_faces(self, basic, helpers):
+        _run_top_corner_pos_test(basic, helpers, "RUFBLD")
+
+    def test_deeper_scramble(self, basic, helpers):
+        _run_top_corner_pos_test(basic, helpers, "RUFBLDru")
+
+    def test_ten_move_scramble(self, basic, helpers):
+        _run_top_corner_pos_test(basic, helpers, "RUFRUFrufl")
+
+    def test_counter_clockwise(self, basic, helpers):
+        _run_top_corner_pos_test(basic, helpers, "rufldb")
+
+    def test_fifteen_moves(self, basic, helpers):
+        _run_top_corner_pos_test(basic, helpers, "RUFBLDrufbldRUF")
+
+    def test_twenty_moves(self, basic, helpers):
+        _run_top_corner_pos_test(basic, helpers, "RUFBLDrufbldRUFBLDru")

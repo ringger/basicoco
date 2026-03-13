@@ -374,7 +374,7 @@ A corner is "correctly positioned" if its 3 sticker colors (as a set) match the 
 
 **Algorithm**: `URulUruL` (U R U' L' U R' U' L) — cycles 3 corners CCW (TFL→TBL→TBR), keeps TFR fixed. Preserves F2L.
 
-**Corner position cycle under U CW**: TFR→TBR→TBL→TFL→TFR. Cycle positions: TFR=0, TFL=3, TBR=1, TBL=2.
+**Corner position cycle under U CW**: TFR→TFL→TBL→TBR→TFR. Cycle positions: TFR=0, TFL=1, TBL=2, TBR=3.
 
 **Strategy** (loop, at most 4 algorithm applications):
 a. For each r=0..3, shift the 4 corner color sets by r positions in the cycle and count how many match their target color sets (TFR={2,4,3}, TFL={2,4,6}, TBR={2,5,3}, TBL={2,5,6}). Pick the r with the highest count.
@@ -426,7 +426,8 @@ e. Final alignment: rotate U (0-3 turns) until the top edge side stickers match 
 - ~~Step 3 (middle edges)~~ DONE — 16/16 scramble tests pass. FindEdge, extraction, alignment, insertion all implemented. All 8 insertion algorithms verified empirically.
 - ~~Step 4 (top cross)~~ DONE — 16/16 scramble tests pass. `FRUruf` (F R U R' U' F') preserves F2L — verified against pycuber and in engine tests.
 - ~~Step 5 (top edge alignment)~~ DONE — 16/16 scramble tests pass. `RUrURUUrU` (R U R' U R U2 R' U) swaps front↔left edges, preserves back+right. Optimal pre-rotation chosen by simulating all 4 options. Algorithm validated against pycuber.
-- Steps 6-7 (top corners): not yet written
+- ~~Step 6 (top corner positioning)~~ DONE — 16/16 scramble tests pass. `URulUruL` (U R U' L' U R' U' L) cycles TFL→TBL→TBR, keeps TFR fixed. Color-set sum matching (unique sums: TFR=9, TFL=12, TBL=13, TBR=10) for rotation optimization. Algorithm validated against pycuber.
+- Step 7 (top corner orientation): not yet written
 
 Verify each step's algorithms against our engine before writing the BASIC code.
 
