@@ -21,47 +21,40 @@ class FileIOManager:
         self.emulator = emulator
         self.open_files = {}  # file_number -> {'filename': str, 'mode': str, 'handle': file_obj}
 
+    def _syntax_error(self, message, suggestions):
+        return error_response(self.emulator.error_context.syntax_error(
+            message, self.emulator.current_line, suggestions=suggestions))
+
+    def _runtime_error(self, message, suggestions):
+        return error_response(self.emulator.error_context.runtime_error(
+            message, self.emulator.current_line, suggestions=suggestions))
+
     # ── Validation helpers ────────────────────────────────────────────
 
     def _validate_file_number(self, n):
         """Validate file number is in range 1-15. Returns error response or None."""
         if not isinstance(n, int) or n < 1 or n > self.MAX_FILE_NUMBER:
-            error = self.emulator.error_context.runtime_error(
+            return self._runtime_error(
                 f"FILE NUMBER ERROR: file number must be 1-{self.MAX_FILE_NUMBER}, got {n}",
-                self.emulator.current_line,
-                suggestions=[
-                    f"Use a file number between 1 and {self.MAX_FILE_NUMBER}",
-                    'Example: OPEN "O", #1, "DATA.DAT"'
-                ]
-            )
-            return error_response(error)
+                [f"Use a file number between 1 and {self.MAX_FILE_NUMBER}",
+                 'Example: OPEN "O", #1, "DATA.DAT"'])
         return None
 
     def _require_open(self, n, required_mode=None):
         """Check file is open (and optionally in the right mode). Returns error response or None."""
         if n not in self.open_files:
-            error = self.emulator.error_context.runtime_error(
+            return self._runtime_error(
                 f"FILE NOT OPEN: #{n}",
-                self.emulator.current_line,
-                suggestions=[
-                    f'Open the file first: OPEN "I", #{n}, "filename"',
-                    "Check that CLOSE has not already been called"
-                ]
-            )
-            return error_response(error)
+                [f'Open the file first: OPEN "I", #{n}, "filename"',
+                 "Check that CLOSE has not already been called"])
         if required_mode and self.open_files[n]['mode'] not in (required_mode if isinstance(required_mode, (list, tuple)) else [required_mode]):
             actual = self.open_files[n]['mode']
-            error = self.emulator.error_context.runtime_error(
+            return self._runtime_error(
                 f"FILE MODE ERROR: #{n} is open for {'INPUT' if actual == 'I' else 'OUTPUT' if actual == 'O' else 'APPEND'}, "
                 f"cannot {'write to' if required_mode == 'I' else 'read from'} it",
-                self.emulator.current_line,
-                suggestions=[
-                    "Close the file and reopen in the correct mode",
-                    'Input mode: OPEN "I", #n, "file"',
-                    'Output mode: OPEN "O", #n, "file"'
-                ]
-            )
-            return error_response(error)
+                ["Close the file and reopen in the correct mode",
+                 'Input mode: OPEN "I", #n, "file"',
+                 'Output mode: OPEN "O", #n, "file"'])
         return None
 
     def _parse_file_number(self, file_num_str):
@@ -74,15 +67,10 @@ class FileIOManager:
         try:
             file_num = self.emulator.eval_int(file_num_str)
         except (ValueError, TypeError):
-            error = self.emulator.error_context.runtime_error(
+            return None, self._runtime_error(
                 f"FILE NUMBER ERROR: invalid file number '{file_num_str}'",
-                self.emulator.current_line,
-                suggestions=[
-                    f"File number must be 1-{self.MAX_FILE_NUMBER}",
-                    'Example: OPEN "O", #1, "DATA.DAT"'
-                ]
-            )
-            return None, error_response(error)
+                [f"File number must be 1-{self.MAX_FILE_NUMBER}",
+                 'Example: OPEN "O", #1, "DATA.DAT"'])
         err = self._validate_file_number(file_num)
         if err:
             return None, err
@@ -104,16 +92,11 @@ class FileIOManager:
         """OPEN mode, #n, filename"""
         parts = StatementSplitter.split_args(args)
         if len(parts) < 3:
-            error = self.emulator.error_context.syntax_error(
+            return self._syntax_error(
                 "OPEN requires mode, file number, and filename",
-                self.emulator.current_line,
-                suggestions=[
-                    'Syntax: OPEN "mode", #n, "filename"',
-                    'Modes: "I" (input), "O" (output), "A" (append)',
-                    'Example: OPEN "O", #1, "DATA.DAT"'
-                ]
-            )
-            return error_response(error)
+                ['Syntax: OPEN "mode", #n, "filename"',
+                 'Modes: "I" (input), "O" (output), "A" (append)',
+                 'Example: OPEN "O", #1, "DATA.DAT"'])
 
         # Parse mode — evaluate as expression (supports string variables)
         mode_raw = parts[0].strip()
@@ -122,14 +105,9 @@ class FileIOManager:
         except Exception:
             mode_str = mode_raw.strip('"').strip("'").upper()
         if mode_str not in ('I', 'O', 'A'):
-            error = self.emulator.error_context.runtime_error(
+            return self._runtime_error(
                 f"FILE MODE ERROR: invalid mode '{mode_str}'",
-                self.emulator.current_line,
-                suggestions=[
-                    '"I" = input (read)', '"O" = output (write)', '"A" = append'
-                ]
-            )
-            return error_response(error)
+                ['"I" = input (read)', '"O" = output (write)', '"A" = append'])
 
         # Parse file number
         file_num, err = self._parse_file_number(parts[1])
@@ -137,15 +115,10 @@ class FileIOManager:
             return err
 
         if file_num in self.open_files:
-            error = self.emulator.error_context.runtime_error(
+            return self._runtime_error(
                 f"FILE ALREADY OPEN: #{file_num}",
-                self.emulator.current_line,
-                suggestions=[
-                    f"Close file #{file_num} first: CLOSE #{file_num}",
-                    "Each file number can only be used for one open file"
-                ]
-            )
-            return error_response(error)
+                [f"Close file #{file_num} first: CLOSE #{file_num}",
+                 "Each file number can only be used for one open file"])
 
         # Parse filename — evaluate as expression (supports string variables)
         filename_expr = ','.join(parts[2:]).strip()
@@ -166,23 +139,15 @@ class FileIOManager:
                 os.makedirs(os.path.dirname(filepath) if os.path.dirname(filepath) else '.', exist_ok=True)
                 handle = open(filepath, 'a')
         except FileNotFoundError:
-            error = self.emulator.error_context.runtime_error(
+            return self._runtime_error(
                 f"FILE NOT FOUND: {os.path.basename(filepath)}",
-                self.emulator.current_line,
-                suggestions=[
-                    "Check that the file exists",
-                    "Use mode \"O\" to create a new file",
-                    'Example: OPEN "O", #1, "NEWFILE.DAT"'
-                ]
-            )
-            return error_response(error)
+                ["Check that the file exists",
+                 'Use mode "O" to create a new file',
+                 'Example: OPEN "O", #1, "NEWFILE.DAT"'])
         except PermissionError:
-            error = self.emulator.error_context.runtime_error(
+            return self._runtime_error(
                 f"PERMISSION DENIED: {os.path.basename(filepath)}",
-                self.emulator.current_line,
-                suggestions=["Check file permissions"]
-            )
-            return error_response(error)
+                ["Check file permissions"])
 
         self.open_files[file_num] = {
             'filename': filepath,
@@ -279,12 +244,9 @@ class FileIOManager:
                     else:
                         output_parts.append(str(value))
                 except Exception as e:
-                    error = self.emulator.error_context.runtime_error(
+                    return self._runtime_error(
                         f"Error evaluating PRINT# expression: {e}",
-                        self.emulator.current_line,
-                        suggestions=["Check expression syntax", "Example: PRINT #1, X, Y"]
-                    )
-                    return error_response(error)
+                        ["Check expression syntax", "Example: PRINT #1, X, Y"])
 
         text = ''.join(output_parts)
         if trailing_separator is None:
@@ -347,12 +309,9 @@ class FileIOManager:
         """
         comma_pos = args.find(',')
         if comma_pos == -1:
-            error = self.emulator.error_context.syntax_error(
+            return self._syntax_error(
                 "INPUT# requires file number and at least one variable",
-                self.emulator.current_line,
-                suggestions=["Example: INPUT #1, A$", "Example: INPUT #1, X, Y"]
-            )
-            return error_response(error)
+                ["Example: INPUT #1, A$", "Example: INPUT #1, X, Y"])
 
         file_num_str = args[:comma_pos].strip()
         var_part = args[comma_pos + 1:]
@@ -369,12 +328,9 @@ class FileIOManager:
         # Parse variable names
         var_names = StatementSplitter.split_args(var_part)
         if not var_names:
-            error = self.emulator.error_context.syntax_error(
+            return self._syntax_error(
                 "INPUT# requires at least one variable",
-                self.emulator.current_line,
-                suggestions=["Example: INPUT #1, A$"]
-            )
-            return error_response(error)
+                ["Example: INPUT #1, A$"])
 
         # Read values from file — values are separated by commas and/or newlines
         for var_str in var_names:
@@ -387,15 +343,10 @@ class FileIOManager:
 
             value = self._read_next_value(handle, file_num)
             if value is None:
-                error = self.emulator.error_context.runtime_error(
+                return self._runtime_error(
                     f"INPUT PAST END OF FILE: #{file_num}",
-                    self.emulator.current_line,
-                    suggestions=[
-                        "Check EOF(n) before reading",
-                        "Example: IF EOF(1) THEN GOTO 100"
-                    ]
-                )
-                return error_response(error)
+                    ["Check EOF(n) before reading",
+                     "Example: IF EOF(1) THEN GOTO 100"])
 
             self.emulator.store_input_value(var_desc, value)
 
@@ -484,12 +435,9 @@ class FileIOManager:
         """LINE INPUT #n, var$"""
         comma_pos = args.find(',')
         if comma_pos == -1:
-            error = self.emulator.error_context.syntax_error(
+            return self._syntax_error(
                 "LINE INPUT# requires file number and variable",
-                self.emulator.current_line,
-                suggestions=["Example: LINE INPUT #1, A$"]
-            )
-            return error_response(error)
+                ["Example: LINE INPUT #1, A$"])
 
         file_num_str = args[:comma_pos].strip()
         var_str = args[comma_pos + 1:].strip()
@@ -504,12 +452,9 @@ class FileIOManager:
         handle = self.open_files[file_num]['handle']
         line = handle.readline()
         if not line:
-            error = self.emulator.error_context.runtime_error(
+            return self._runtime_error(
                 f"INPUT PAST END OF FILE: #{file_num}",
-                self.emulator.current_line,
-                suggestions=["Check EOF(n) before reading"]
-            )
-            return error_response(error)
+                ["Check EOF(n) before reading"])
 
         value = line.rstrip('\n').rstrip('\r')
         var_desc = self._parse_var_descriptor(var_str)
@@ -535,15 +480,10 @@ class FileIOManager:
 
         var_str = var_str.strip()
         if not var_str:
-            error = self.emulator.error_context.syntax_error(
+            return self._syntax_error(
                 "LINE INPUT requires a variable name",
-                self.emulator.current_line,
-                suggestions=[
-                    "Example: LINE INPUT A$",
-                    'Example: LINE INPUT "Enter name"; N$'
-                ]
-            )
-            return error_response(error)
+                ["Example: LINE INPUT A$",
+                 'Example: LINE INPUT "Enter name"; N$'])
 
         var_name = var_str.upper()
 

@@ -27,7 +27,7 @@ Areas that work but haven't been stress-tested with adversarial or exotic inputs
 
 ## Known Bugs
 
-- [ ] **GOSUB + IF THEN on same line splits incorrectly** — `GOSUB Sub: IF cond THEN A=1: B=2` splits into 3 sublines: `GOSUB Sub`, `IF cond THEN A=1`, `B=2`. Since the line starts with GOSUB (not a control keyword), `expand_line_to_sublines()` doesn't recognize the IF/THEN body spans the colon. `B=2` executes unconditionally. Workaround: put the GOSUB and IF on separate lines. The fix would require `expand_line_to_sublines()` to detect mid-line IF/THEN when splitting non-control-keyword lines.
+*(No known bugs at this time.)*
 
 ## Known Behavioral Limitations
 
@@ -35,4 +35,4 @@ Areas that work but haven't been stress-tested with adversarial or exotic inputs
 
 ## Refactoring Opportunities
 
-- [ ] **Error wrapper base class for command modules** *(low priority)* — `error_context.syntax_error()` → `error_response()` two-step pattern across 5 modules (51 sites). Graphics.py already has local helpers. A base class would save ~1 line per call but requires changing 5+ class hierarchies. Consider if more modules accumulate error helpers.
+*(No pending refactoring opportunities at this time.)*

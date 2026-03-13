@@ -140,6 +140,37 @@ class BasicGraphics:
         remainder = args[coords_end + 1:].strip()
         return (x, y, remainder)
 
+    def _parse_point(self, args, command_name):
+        """Parse (x,y) or x,y coordinates with optional trailing args.
+        Returns (x, y, extra_parts) or error list.
+        extra_parts is a list of comma-separated strings after the coordinates."""
+        if args.startswith('(') and ')' in args:
+            result = self._parse_coord_pair(args, command_name)
+            if isinstance(result, list):
+                return result
+            x, y, remainder = result
+            extra_parts = []
+            if remainder.startswith(','):
+                extra_parts = _split_args(remainder[1:])
+            return (x, y, extra_parts)
+        else:
+            parts = _split_args(args)
+            if len(parts) < 2:
+                return self._syntax_error(
+                    f"{command_name} requires X and Y coordinates",
+                    [f'Correct syntax: {command_name}(x,y) or {command_name} x,y',
+                     f'Example: {command_name}(100,50)',
+                     'Specify both X and Y coordinates'])
+            x = self.emulator.eval_int(parts[0])
+            y = self.emulator.eval_int(parts[1])
+            return (x, y, parts[2:])
+
+    def _parse_optional_int(self, parts, index):
+        """Parse an optional integer from parts[index]. Returns int or None."""
+        if len(parts) > index and parts[index].strip():
+            return self.emulator.eval_int(parts[index])
+        return None
+
     def _find_matching_parenthesis(self, text, start):
         """Find the matching closing parenthesis for the opening one at start"""
         if start >= len(text) or text[start] != '(':
@@ -209,57 +240,24 @@ class BasicGraphics:
     @_graphics_command('PSET', require_graphics=True)
     def execute_pset(self, args):
         """Execute PSET command to set a pixel"""
-
-        if args.startswith('(') and ')' in args:
-            result = self._parse_coord_pair(args, 'PSET')
-            if isinstance(result, list):
-                return result
-            x, y, remainder = result
-            color = None
-            if remainder.startswith(','):
-                color_str = remainder[1:].strip()
-                if color_str:
-                    color = self.emulator.eval_int(color_str)
-            effective_color = color if color is not None else self.emulator.current_draw_color
-            self.pixel_buffer[(x, y)] = effective_color
-            return [{'type': 'pset', 'x': x, 'y': y, 'color': color}]
-        else:
-            parts = _split_args(args)
-            if len(parts) < 2:
-                return self._syntax_error("PSET requires X and Y coordinates",
-                    ['Correct syntax: PSET x,y or PSET x,y,color',
-                     'Example: PSET 100,50',
-                     'Specify both X and Y coordinates'])
-            x = self.emulator.eval_int(parts[0])
-            y = self.emulator.eval_int(parts[1])
-            color = None
-            if len(parts) > 2 and parts[2].strip():
-                color = self.emulator.eval_int(parts[2])
-            effective_color = color if color is not None else self.emulator.current_draw_color
-            self.pixel_buffer[(x, y)] = effective_color
-            return [{'type': 'pset', 'x': x, 'y': y, 'color': color}]
+        result = self._parse_point(args, 'PSET')
+        if isinstance(result, list):
+            return result
+        x, y, extra = result
+        color = self._parse_optional_int(extra, 0)
+        effective_color = color if color is not None else self.emulator.current_draw_color
+        self.pixel_buffer[(x, y)] = effective_color
+        return [{'type': 'pset', 'x': x, 'y': y, 'color': color}]
     
     @_graphics_command('PRESET', require_graphics=True)
     def execute_preset(self, args):
         """Execute PRESET command to reset a pixel to background color"""
-
-        if args.startswith('(') and ')' in args:
-            result = self._parse_coord_pair(args, 'PRESET')
-            if isinstance(result, list):
-                return result
-            x, y, _ = result
-            self.pixel_buffer[(x, y)] = 0
-            return [{'type': 'preset', 'x': x, 'y': y}]
-        else:
-            parts = _split_args(args)
-            if len(parts) != 2:
-                return self._syntax_error("PRESET requires exactly two coordinates",
-                    ['Correct syntax: PRESET x,y', 'Example: PRESET 100,50',
-                     'Specify both X and Y coordinates'])
-            x = self.emulator.eval_int(parts[0])
-            y = self.emulator.eval_int(parts[1])
-            self.pixel_buffer[(x, y)] = 0
-            return [{'type': 'preset', 'x': x, 'y': y}]
+        result = self._parse_point(args, 'PRESET')
+        if isinstance(result, list):
+            return result
+        x, y, _ = result
+        self.pixel_buffer[(x, y)] = 0
+        return [{'type': 'preset', 'x': x, 'y': y}]
     
     @_graphics_command('LINE', require_graphics=True)
     def execute_line_graphics(self, args):
@@ -317,77 +315,49 @@ class BasicGraphics:
     @_graphics_command('CIRCLE', require_graphics=True)
     def execute_circle(self, args):
         """Execute CIRCLE command to draw a circle"""
-
         # Parse CIRCLE (x,y),radius[,color] or CIRCLE x,y,radius[,color]
-        if args.startswith('(') and ')' in args:
-            result = self._parse_coord_pair(args, 'CIRCLE')
-            if isinstance(result, list):
-                return result
-            x, y, remainder = result
-
-            if remainder.startswith(','):
-                remainder = remainder[1:].strip()
-            parts = _split_args(remainder)
-            radius = self.emulator.eval_int(parts[0])
-
-            color = None
-            if len(parts) > 1 and parts[1]:
-                color = self.emulator.eval_int(parts[1])
-
-            return [{'type': 'circle', 'x': x, 'y': y, 'radius': radius, 'color': color}]
-        else:
-            # Space-separated syntax: CIRCLE x,y,radius[,color]
-            parts = _split_args(args)
-            if len(parts) < 3:
-                return self._syntax_error("CIRCLE requires center coordinates and radius", ['Correct syntax: CIRCLE x,y,radius or CIRCLE x,y,radius,color',
-                        'Example: CIRCLE 100,50,25',
-                        'Specify center X, Y coordinates and radius'])
-
-            x = self.emulator.eval_int(parts[0].strip())
-            y = self.emulator.eval_int(parts[1].strip())
-            radius = self.emulator.eval_int(parts[2].strip())
-
-            color = None
-            if len(parts) > 3 and parts[3].strip():
-                color = self.emulator.eval_int(parts[3].strip())
-
-            return [{'type': 'circle', 'x': x, 'y': y, 'radius': radius, 'color': color}]
+        result = self._parse_point(args, 'CIRCLE')
+        if isinstance(result, list):
+            return result
+        x, y, extra = result
+        if not extra:
+            return self._syntax_error("CIRCLE requires radius",
+                ['Correct syntax: CIRCLE(x,y),radius or CIRCLE x,y,radius',
+                 'Example: CIRCLE 100,50,25'])
+        radius = self.emulator.eval_int(extra[0])
+        color = self._parse_optional_int(extra, 1)
+        return [{'type': 'circle', 'x': x, 'y': y, 'radius': radius, 'color': color}]
     
     @_graphics_command('PAINT', require_graphics=True)
     def execute_paint(self, args):
         """Execute PAINT command for flood fill"""
-
-        if args.startswith('(') and ')' in args:
-            result = self._parse_coord_pair(args, 'PAINT')
-            if isinstance(result, list):
-                return result
-            x, y, remainder = result
-
-            paint_color = 1  # Default paint color
-            border_color = None
-
-            if remainder.startswith(','):
-                parts = _split_args(remainder[1:])
-                if not parts or not parts[0]:
-                    return self._syntax_error("PAINT requires color parameter",
-                        ['Correct syntax: PAINT(x,y),color',
-                         'Example: PAINT(100,50),1',
-                         'Specify the fill color after coordinates'])
-                paint_color = self.emulator.eval_int(parts[0])
-                if len(parts) > 1 and parts[1]:
-                    border_color = self.emulator.eval_int(parts[1])
-            elif remainder == '':
-                return self._syntax_error("PAINT requires color parameter",
-                    ['Correct syntax: PAINT(x,y),color',
-                     'Example: PAINT(100,50),1',
-                     'Specify the fill color after coordinates'])
-
-            return [{'type': 'paint', 'x': x, 'y': y, 'fill_color': paint_color, 'boundary_color': border_color}]
-        else:
+        if not (args.startswith('(') and ')' in args):
             return self._syntax_error("Invalid PAINT syntax",
                 ['Correct syntax: PAINT(x,y),color or PAINT(x,y),color,boundary',
                  'Example: PAINT(100,50),1',
                  'Coordinates must be enclosed in parentheses'])
+
+        result = self._parse_coord_pair(args, 'PAINT')
+        if isinstance(result, list):
+            return result
+        x, y, remainder = result
+
+        if not remainder.startswith(','):
+            return self._syntax_error("PAINT requires color parameter",
+                ['Correct syntax: PAINT(x,y),color',
+                 'Example: PAINT(100,50),1',
+                 'Specify the fill color after coordinates'])
+
+        parts = _split_args(remainder[1:])
+        if not parts or not parts[0]:
+            return self._syntax_error("PAINT requires color parameter",
+                ['Correct syntax: PAINT(x,y),color',
+                 'Example: PAINT(100,50),1',
+                 'Specify the fill color after coordinates'])
+
+        paint_color = self.emulator.eval_int(parts[0])
+        border_color = self._parse_optional_int(parts, 1)
+        return [{'type': 'paint', 'x': x, 'y': y, 'fill_color': paint_color, 'boundary_color': border_color}]
     
     @_graphics_command('GPRINT', require_graphics=True)
     def execute_gprint(self, args):
@@ -415,9 +385,9 @@ class BasicGraphics:
         if not isinstance(text, str):
             text = str(text)
 
-        color = 1  # Default to green (OC)
-        if len(parts) > 1 and parts[1].strip():
-            color = self.emulator.eval_int(parts[1])
+        color = self._parse_optional_int(parts, 1)
+        if color is None:
+            color = 1  # Default to green (OC)
 
         return [{'type': 'gtext', 'x': x, 'y': y, 'text': text, 'color': color}]
 

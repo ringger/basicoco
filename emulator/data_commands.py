@@ -14,6 +14,16 @@ class DataCommands:
     def __init__(self, emulator):
         self.emulator = emulator
 
+    def _syntax_error(self, message, suggestions):
+        em = self.emulator
+        return error_response(em.error_context.syntax_error(
+            message, em.current_line, suggestions=suggestions))
+
+    def _runtime_error(self, message, suggestions):
+        em = self.emulator
+        return error_response(em.error_context.runtime_error(
+            message, em.current_line, suggestions=suggestions))
+
     def register_commands(self, registry):
         """Register data commands with the command registry."""
         registry.register('DATA', self.execute_data,
@@ -73,31 +83,21 @@ class DataCommands:
         """READ command - read data into variables."""
         em = self.emulator
         if not args:
-            error = em.error_context.syntax_error(
-                "READ requires variable names",
-                em.current_line,
-                suggestions=[
-                    "Specify variables to read data into",
-                    "Example: READ A, B$, C",
-                    "Variables must match DATA statement types"
-                ]
-            )
-            return error_response(error)
+            return self._syntax_error("READ requires variable names", [
+                "Specify variables to read data into",
+                "Example: READ A, B$, C",
+                "Variables must match DATA statement types"
+            ])
 
         var_names = StatementSplitter.split_args(args)
 
         for var_name in var_names:
             if em.data_pointer >= len(em.data_statements):
-                error = em.error_context.runtime_error(
-                    "OUT OF DATA",
-                    em.current_line,
-                    suggestions=[
-                        "Add more DATA statements to your program",
-                        "Use RESTORE to reset data pointer to beginning",
-                        "Check that READ statements match available DATA"
-                    ]
-                )
-                return error_response(error)
+                return self._runtime_error("OUT OF DATA", [
+                    "Add more DATA statements to your program",
+                    "Use RESTORE to reset data pointer to beginning",
+                    "Check that READ statements match available DATA"
+                ])
 
             line_num, data_value = em.data_statements[em.data_pointer]
             em.data_pointer += 1
@@ -116,16 +116,11 @@ class DataCommands:
         em = self.emulator
         paren_pos = var_name.find('(')
         if paren_pos == -1 or not var_name.rstrip().endswith(')'):
-            error = em.error_context.syntax_error(
-                "Invalid array syntax in DATA statement",
-                em.current_line,
-                suggestions=[
-                    'Array syntax: A(1,2) or B$(5)',
-                    'Check array name and index format',
-                    'Ensure parentheses are properly matched'
-                ]
-            )
-            return error_response(error)
+            return self._syntax_error("Invalid array syntax in DATA statement", [
+                'Array syntax: A(1,2) or B$(5)',
+                'Check array name and index format',
+                'Ensure parentheses are properly matched'
+            ])
 
         array_name = var_name[:paren_pos]
         indices_str = var_name[paren_pos + 1:-1]
@@ -135,34 +130,24 @@ class DataCommands:
 
             err_msg = em.variable_manager.set_array_element(array_name.upper(), indices, value)
             if err_msg:
-                error = em.error_context.runtime_error(
-                    err_msg, em.current_line,
-                    suggestions=["Check array dimensions with DIM",
-                                 "Array indices must be within bounds"])
-                return error_response(error)
+                return self._runtime_error(err_msg, [
+                    "Check array dimensions with DIM",
+                    "Array indices must be within bounds"
+                ])
             return None
 
         except ValueError:
-            error = em.error_context.syntax_error(
-                "Invalid line number format",
-                em.current_line,
-                suggestions=[
-                    'Line numbers must be integers',
-                    'Example: 10, 20, 100',
-                    'Check that the line number is valid'
-                ]
-            )
-            return error_response(error)
+            return self._syntax_error("Invalid line number format", [
+                'Line numbers must be integers',
+                'Example: 10, 20, 100',
+                'Check that the line number is valid'
+            ])
         except (IndexError, TypeError, KeyError):
-            error = em.error_context.runtime_error(
-                "Array index out of bounds",
-                suggestions=[
-                    'Check that array indices are within valid range',
-                    'Arrays are 0-indexed: DIM A(10) creates indices 0-10',
-                    'Use valid positive integer indices'
-                ]
-            )
-            return error_response(error)
+            return self._runtime_error("Array index out of bounds", [
+                'Check that array indices are within valid range',
+                'Arrays are 0-indexed: DIM A(10) creates indices 0-10',
+                'Use valid positive integer indices'
+            ])
 
     def execute_restore(self, args):
         """RESTORE [line | label] - reset data pointer.
@@ -183,15 +168,10 @@ class DataCommands:
             try:
                 target_line = em.eval_int(args, em.current_line)
             except (ValueError, TypeError):
-                error = em.error_context.syntax_error(
-                    f"Invalid RESTORE target: {args}",
-                    em.current_line,
-                    suggestions=[
-                        "Use RESTORE, RESTORE line_number, or RESTORE label",
-                        "Example: RESTORE 1000 or RESTORE MyData"
-                    ]
-                )
-                return error_response(error)
+                return self._syntax_error(f"Invalid RESTORE target: {args}", [
+                    "Use RESTORE, RESTORE line_number, or RESTORE label",
+                    "Example: RESTORE 1000 or RESTORE MyData"
+                ])
 
         # Find first data entry at or after target line
         for i, (line_num, value) in enumerate(em.data_statements):

@@ -18,6 +18,16 @@ class ControlFlowCommands:
     def __init__(self, emulator):
         self.emulator = emulator
 
+    def _syntax_error(self, message, suggestions):
+        em = self.emulator
+        return error_response(em.error_context.syntax_error(
+            message, em.current_line, suggestions=suggestions))
+
+    def _runtime_error(self, message, suggestions):
+        em = self.emulator
+        return error_response(em.error_context.runtime_error(
+            message, em.current_line, suggestions=suggestions))
+
     def register_commands(self, registry):
         """Register control-flow commands with the command registry."""
         em = self.emulator
@@ -79,16 +89,11 @@ class ControlFlowCommands:
     def execute_next(self, args):
         em = self.emulator
         if not em.for_stack:
-            error = em.error_context.runtime_error(
-                "NEXT WITHOUT FOR",
-                em.current_line,
-                suggestions=[
-                    "NEXT must be preceded by a FOR statement",
-                    "Example: FOR I = 1 TO 10: ... : NEXT I",
-                    "Check that FOR and NEXT statements are properly paired"
-                ]
-            )
-            return error_response(error)
+            return self._runtime_error("NEXT WITHOUT FOR", [
+                "NEXT must be preceded by a FOR statement",
+                "Example: FOR I = 1 TO 10: ... : NEXT I",
+                "Check that FOR and NEXT statements are properly paired"
+            ])
 
         for_info = em.for_stack[-1]
         var_name = for_info['var']
@@ -218,28 +223,18 @@ class ControlFlowCommands:
         """
         em = self.emulator
         if not em.local_stack:
-            error = em.error_context.runtime_error(
-                "LOCAL WITHOUT GOSUB",
-                em.current_line,
-                suggestions=[
-                    "LOCAL can only be used inside a subroutine called with GOSUB",
-                    "Example: GOSUB MySub: ... : MySub: LOCAL I, J",
-                    "LOCAL saves variables so RETURN restores them"
-                ]
-            )
-            return error_response(error)
+            return self._runtime_error("LOCAL WITHOUT GOSUB", [
+                "LOCAL can only be used inside a subroutine called with GOSUB",
+                "Example: GOSUB MySub: ... : MySub: LOCAL I, J",
+                "LOCAL saves variables so RETURN restores them"
+            ])
 
         if not args:
-            error = em.error_context.syntax_error(
-                "LOCAL requires variable names",
-                em.current_line,
-                suggestions=[
-                    "Correct syntax: LOCAL var1, var2, ...",
-                    "Example: LOCAL IX, IY, N$",
-                    "Variables are saved and restored on RETURN"
-                ]
-            )
-            return error_response(error)
+            return self._syntax_error("LOCAL requires variable names", [
+                "Correct syntax: LOCAL var1, var2, ...",
+                "Example: LOCAL IX, IY, N$",
+                "Variables are saved and restored on RETURN"
+            ])
 
         from .text_utils import StatementSplitter
         var_names = StatementSplitter.split_args(args)
@@ -263,11 +258,10 @@ class ControlFlowCommands:
         """RESUME [NEXT | line] - resume after ON ERROR GOTO handler."""
         em = self.emulator
         if not em.in_error_handler:
-            error = em.error_context.runtime_error(
-                "RESUME WITHOUT ERROR",
-                suggestions=["RESUME can only be used inside an ON ERROR GOTO handler",
-                             "Use ON ERROR GOTO line to set up an error handler first"])
-            return error_response(error)
+            return self._runtime_error("RESUME WITHOUT ERROR", [
+                "RESUME can only be used inside an ON ERROR GOTO handler",
+                "Use ON ERROR GOTO line to set up an error handler first"
+            ])
         em.in_error_handler = False
         args = args.strip().upper()
         if args == '' or args == '0':
@@ -278,9 +272,6 @@ class ControlFlowCommands:
             try:
                 line = em.eval_int(args, em.current_line)
             except (ValueError, TypeError):
-                error = em.error_context.syntax_error(
-                    f"Invalid RESUME target: {args}",
-                    em.current_line,
-                    suggestions=["Use RESUME, RESUME NEXT, or RESUME line"])
-                return error_response(error)
+                return self._syntax_error(f"Invalid RESUME target: {args}",
+                    ["Use RESUME, RESUME NEXT, or RESUME line"])
             return [{'type': 'jump', 'line': line}]

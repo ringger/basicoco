@@ -12,10 +12,18 @@ from .error_context import error_response
 
 class VariableManager:
     """Handler for BASIC variable and array operations"""
-    
+
     def __init__(self, emulator):
         """Initialize variable manager with reference to main emulator"""
         self.emulator = emulator
+
+    def _syntax_error(self, message, suggestions):
+        return error_response(self.emulator.error_context.syntax_error(
+            message, self.emulator.current_line, suggestions=suggestions))
+
+    def _runtime_error(self, message, suggestions):
+        return error_response(self.emulator.error_context.runtime_error(
+            message, suggestions=suggestions))
     
     def register_commands(self, registry):
         """Register variable and array commands with the command registry"""
@@ -27,16 +35,11 @@ class VariableManager:
         try:
             # DIM A(10), B$(5,10), C(20) - Parse comma-separated array declarations, respecting parentheses
             if not args:
-                error = self.emulator.error_context.syntax_error(
-                    "DIM command requires array declarations",
-                    self.emulator.current_line,
-                    suggestions=[
-                        'Correct syntax: DIM array_name(size)',
-                        'Example: DIM A(10), B$(5,10)',
-                        'Specify at least one array to dimension'
-                    ]
-                )
-                return error_response(error)
+                return self._syntax_error("DIM command requires array declarations", [
+                    'Correct syntax: DIM array_name(size)',
+                    'Example: DIM A(10), B$(5,10)',
+                    'Specify at least one array to dimension'
+                ])
             
             # Parse comma-separated array declarations, respecting parentheses
             array_defs = StatementSplitter.split_on_delimiter_paren_aware(args, delimiter=',')
@@ -47,31 +50,21 @@ class VariableManager:
                 # Parse array_name(dimensions), handling nested parentheses
                 paren_pos = array_def.find('(')
                 if paren_pos == -1 or not array_def.rstrip().endswith(')'):
-                    error = self.emulator.error_context.syntax_error(
-                        f"Invalid array declaration syntax: {array_def}",
-                        self.emulator.current_line,
-                        suggestions=[
-                            'Correct syntax: array_name(dimensions)',
-                            'Example: DIM A(10), B$(5,10)',
-                            'Array name must be followed by parentheses with dimensions'
-                        ]
-                    )
-                    return error_response(error)
+                    return self._syntax_error(f"Invalid array declaration syntax: {array_def}", [
+                        'Correct syntax: array_name(dimensions)',
+                        'Example: DIM A(10), B$(5,10)',
+                        'Array name must be followed by parentheses with dimensions'
+                    ])
 
                 array_name = array_def[:paren_pos].strip().upper()
                 dimensions_str = array_def[paren_pos + 1:-1].strip()
 
                 if not array_name or not dimensions_str:
-                    error = self.emulator.error_context.syntax_error(
-                        f"Invalid array declaration syntax: {array_def}",
-                        self.emulator.current_line,
-                        suggestions=[
-                            'Correct syntax: array_name(dimensions)',
-                            'Example: DIM A(10), B$(5,10)',
-                            'Array name and dimensions are required'
-                        ]
-                    )
-                    return error_response(error)
+                    return self._syntax_error(f"Invalid array declaration syntax: {array_def}", [
+                        'Correct syntax: array_name(dimensions)',
+                        'Example: DIM A(10), B$(5,10)',
+                        'Array name and dimensions are required'
+                    ])
 
                 # Check if array name conflicts with reserved function names
                 err = self.emulator.check_reserved_name(array_name)
@@ -84,29 +77,20 @@ class VariableManager:
                     for dim_str in StatementSplitter.split_args(dimensions_str):
                         dim_value = self.emulator.eval_int(dim_str)
                         if dim_value <= 0:
-                            error = self.emulator.error_context.syntax_error(
-                                f"Array dimension must be positive: {dim_value}",
-                                self.emulator.current_line,
-                                suggestions=[
-                                    'Array dimensions must be greater than 0',
-                                    'Example: DIM A(10) not DIM A(0)',
-                                    'Use positive integers for array sizes'
-                                ]
-                            )
-                            return error_response(error)
+                            return self._syntax_error(f"Array dimension must be positive: {dim_value}", [
+                                'Array dimensions must be greater than 0',
+                                'Example: DIM A(10) not DIM A(0)',
+                                'Use positive integers for array sizes'
+                            ])
                         dimensions.append(dim_value)
                     
                     # Check if array is already dimensioned (after syntax validation)
                     if array_name in self.emulator.arrays:
-                        error = self.emulator.error_context.runtime_error(
-                            f"Array {array_name} is already dimensioned",
-                            suggestions=[
-                                'Arrays can only be dimensioned once',
-                                'Use NEW to clear existing arrays',
-                                'Choose a different array name'
-                            ]
-                        )
-                        return error_response(error)
+                        return self._runtime_error(f"Array {array_name} is already dimensioned", [
+                            'Arrays can only be dimensioned once',
+                            'Use NEW to clear existing arrays',
+                            'Choose a different array name'
+                        ])
                     
                     # Create multi-dimensional array initialized to 0 or ""
                     # Note: Color Computer BASIC arrays - DIM A(10) creates indices 0-10 (11 elements)
@@ -119,28 +103,19 @@ class VariableManager:
                         self.emulator.arrays[array_name] = self._create_multidim_array(dimensions, 0)
                         
                 except ValueError as e:
-                    error = self.emulator.error_context.syntax_error(
-                        f"Invalid array dimension expression: {str(e)}",
-                        self.emulator.current_line,
-                        suggestions=[
-                            'Array dimensions must evaluate to positive integers',
-                            'Example: DIM A(N), B(X*2)',
-                            'Check that all variables in dimensions are defined'
-                        ]
-                    )
-                    return error_response(error)
+                    return self._syntax_error(f"Invalid array dimension expression: {str(e)}", [
+                        'Array dimensions must evaluate to positive integers',
+                        'Example: DIM A(N), B(X*2)',
+                        'Check that all variables in dimensions are defined'
+                    ])
             
             return []  # DIM doesn't produce output
         except Exception as e:
-            error = self.emulator.error_context.runtime_error(
-                f"Unexpected error in DIM command: {str(e)}",
-                suggestions=[
-                    'Check DIM syntax and array declarations',
-                    'Example: DIM A(10), B$(5,10)',
-                    'Ensure all expressions are valid'
-                ]
-            )
-            return error_response(error)
+            return self._runtime_error(f"Unexpected error in DIM command: {str(e)}", [
+                'Check DIM syntax and array declarations',
+                'Example: DIM A(10), B$(5,10)',
+                'Ensure all expressions are valid'
+            ])
     
     def get_array_element(self, array_name, indices):
         """Get value from array element using nested array structure"""

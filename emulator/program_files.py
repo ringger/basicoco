@@ -23,6 +23,14 @@ class FileManager:
     def __init__(self, emulator):
         self.emulator = emulator
 
+    def _syntax_error(self, message, suggestions):
+        return error_response(self.emulator.error_context.syntax_error(
+            message, self.emulator.current_line, suggestions=suggestions))
+
+    def _runtime_error(self, message, suggestions):
+        return error_response(self.emulator.error_context.runtime_error(
+            message, suggestions=suggestions))
+
     @staticmethod
     def _strip_quotes(s):
         """Strip surrounding single or double quotes from a string."""
@@ -34,16 +42,11 @@ class FileManager:
     def _require_filename(self, filename, verb, example):
         """Return error response if filename is empty, else None."""
         if not filename:
-            error = self.emulator.error_context.syntax_error(
-                "Filename required",
-                self.emulator.current_line,
-                suggestions=[
-                    f"Provide a filename to {verb}",
-                    f'Example: {example}',
-                    'File extension .bas will be added automatically'
-                ]
-            )
-            return error_response(error)
+            return self._syntax_error("Filename required", [
+                f"Provide a filename to {verb}",
+                f'Example: {example}',
+                'File extension .bas will be added automatically'
+            ])
         return None
 
     @staticmethod
@@ -142,15 +145,11 @@ class FileManager:
             return err
 
         if not emu.program:
-            error = emu.error_context.runtime_error(
-                "NO PROGRAM TO SAVE",
-                suggestions=[
-                    "Enter a program first using line numbers",
-                    'Example: 10 PRINT "HELLO"',
-                    'Use LIST command to see current program'
-                ]
-            )
-            return error_response(error)
+            return self._runtime_error("NO PROGRAM TO SAVE", [
+                "Enter a program first using line numbers",
+                'Example: 10 PRINT "HELLO"',
+                'Use LIST command to see current program'
+            ])
 
         filename = self._ensure_bas_extension(filename)
 
@@ -356,16 +355,11 @@ class FileManager:
         emu = self.emulator
 
         if not args or not args.strip():
-            error = emu.error_context.syntax_error(
-                "Filename required",
-                emu.current_line,
-                suggestions=[
-                    'Provide a filename to chain',
-                    'Example: CHAIN "UTILS"',
-                    'Use CHAIN "file", ALL to keep variables'
-                ]
-            )
-            return error_response(error)
+            return self._syntax_error("Filename required", [
+                'Provide a filename to chain',
+                'Example: CHAIN "UTILS"',
+                'Use CHAIN "file", ALL to keep variables'
+            ])
 
         # Parse arguments: "filename" [, ALL] [, line_number]
         from .text_utils import StatementSplitter
@@ -388,16 +382,11 @@ class FileManager:
                     if re.match(r'^[A-Za-z_][A-Za-z0-9_]*$', stripped):
                         start_label = stripped.upper()
                     else:
-                        error = emu.error_context.syntax_error(
-                            f"Invalid CHAIN argument: {stripped}",
-                            emu.current_line,
-                            suggestions=[
-                                'Use ALL to preserve variables',
-                                'Use a line number or label to start at a specific point',
-                                'Example: CHAIN "GAME", ALL, 1000'
-                            ]
-                        )
-                        return error_response(error)
+                        return self._syntax_error(f"Invalid CHAIN argument: {stripped}", [
+                            'Use ALL to preserve variables',
+                            'Use a line number or label to start at a specific point',
+                            'Example: CHAIN "GAME", ALL, 1000'
+                        ])
 
         filename = self._ensure_bas_extension(filename)
 

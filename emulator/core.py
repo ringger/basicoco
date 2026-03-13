@@ -316,6 +316,41 @@ class CoCoBasic:
         # Use StatementSplitter for normal statements, routing through
         # _store_subline so registry commands get pre-compiled
         sublines = StatementSplitter.split_on_delimiter(code)
+
+        # Check for mid-line IF/THEN: e.g. "GOSUB Sub: IF cond THEN A=1: B=2"
+        # Rejoin the IF and everything after it, then route through AST conversion
+        if_index = None
+        for idx, sub in enumerate(sublines):
+            if sub.upper().strip().startswith('IF '):
+                if_index = idx
+                break
+
+        if if_index is not None and if_index > 0:
+            # Store pre-IF sublines normally
+            sub_idx = 0
+            for i in range(if_index):
+                self._store_subline(line_num, sub_idx, sublines[i])
+                sub_idx += 1
+            # Rejoin the IF portion and route through AST conversion
+            if_code = ': '.join(sublines[if_index:])
+            try:
+                from .ast_converter import parse_and_convert_single_line
+                converted = parse_and_convert_single_line(if_code, self.ast_parser)
+                if converted:
+                    for statement in converted:
+                        stmt = statement.strip()
+                        if stmt:
+                            self._store_subline(line_num, sub_idx, stmt)
+                            sub_idx += 1
+                    return
+            except (ValueError, IndexError, KeyError, AttributeError):
+                pass
+            # Fall through: store remaining sublines normally if conversion failed
+            for i in range(if_index, len(sublines)):
+                self._store_subline(line_num, sub_idx, sublines[i])
+                sub_idx += 1
+            return
+
         for i, subline in enumerate(sublines):
             self._store_subline(line_num, i, subline)
 

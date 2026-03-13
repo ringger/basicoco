@@ -260,17 +260,9 @@ class ASTEvaluator(ASTVisitor):
             # THEN with number = GOTO
             if isinstance(result, (int, float)) and not isinstance(result, bool):
                 line_num = int(result)
-                if line_num <= 0:
-                    error = self.emulator.error_context.runtime_error(
-                        f"Invalid line number {line_num}",
-                        self.emulator.current_line,
-                        suggestions=[
-                            "Line numbers must be positive integers",
-                            "Example: IF X > 5 THEN 100",
-                            "Check with LIST command to see available lines"
-                        ]
-                    )
-                    return error_response(error)
+                err = self._validate_line_number(line_num)
+                if err:
+                    return err
                 return [{'type': 'jump', 'line': line_num}]
             # None means visitor couldn't handle it — fall back to registry
             if result is None:
@@ -512,22 +504,25 @@ class ASTEvaluator(ASTVisitor):
         value = self.visit(node)
         return int(value)
 
-    def visit_goto_statement(self, node: GotoStatementNode) -> Any:
-        """Visit GOTO statement"""
-        try:
-            line_num = self._resolve_target_line(node.target_line)
-        except (ValueError, TypeError) as e:
-            error = self.emulator.error_context.syntax_error(
-                "Invalid GOTO target",
-                self.emulator.current_line,
-                suggestions=[
-                    "Correct syntax: GOTO line_number",
-                    "Example: GOTO 100 or GOTO L where L is a numeric variable",
-                    "Line number must be a positive integer"
-                ]
-            )
-            return error_response(error)
+    def _resolve_target_with_error(self, node, command_name, suggestions):
+        """Resolve a target line, returning (line_num, None) or (None, error_response).
 
+        Wraps _resolve_target_line with standard error handling used by
+        GOTO, GOSUB, ON...GOTO/GOSUB, and ON ERROR GOTO.
+        """
+        try:
+            line_num = self._resolve_target_line(node)
+        except (ValueError, TypeError):
+            error = self.emulator.error_context.syntax_error(
+                f"Invalid {command_name} target",
+                self.emulator.current_line,
+                suggestions=suggestions
+            )
+            return None, error_response(error)
+        return line_num, None
+
+    def _validate_line_number(self, line_num):
+        """Return error_response if line_num <= 0, else None."""
         if line_num <= 0:
             error = self.emulator.error_context.runtime_error(
                 f"Invalid line number {line_num}",
@@ -539,41 +534,46 @@ class ASTEvaluator(ASTVisitor):
                 ]
             )
             return error_response(error)
+        return None
+
+    def _push_gosub_frame(self):
+        """Push GOSUB return frame onto call_stack and empty LOCAL frame onto local_stack."""
+        self.emulator.call_stack.append((
+            self.emulator.current_line, self.emulator.current_sub_line,
+            len(self.emulator.if_stack), len(self.emulator.for_stack)))
+        self.emulator.local_stack.append([])
+
+    def visit_goto_statement(self, node: GotoStatementNode) -> Any:
+        """Visit GOTO statement"""
+        line_num, err = self._resolve_target_with_error(node.target_line, "GOTO", [
+            "Correct syntax: GOTO line_number",
+            "Example: GOTO 100 or GOTO L where L is a numeric variable",
+            "Line number must be a positive integer"
+        ])
+        if err:
+            return err
+
+        err = self._validate_line_number(line_num)
+        if err:
+            return err
 
         return [{'type': 'jump', 'line': line_num}]
 
     def visit_gosub_statement(self, node: GosubStatementNode) -> Any:
         """Visit GOSUB statement"""
-        try:
-            line_num = self._resolve_target_line(node.target_line)
-        except (ValueError, TypeError) as e:
-            error = self.emulator.error_context.syntax_error(
-                "Invalid GOSUB target",
-                self.emulator.current_line,
-                suggestions=[
-                    "Correct syntax: GOSUB line_number",
-                    "Example: GOSUB 1000 or GOSUB SUB_LINE where SUB_LINE is a variable",
-                    "Make sure target line contains a subroutine that ends with RETURN"
-                ]
-            )
-            return error_response(error)
+        line_num, err = self._resolve_target_with_error(node.target_line, "GOSUB", [
+            "Correct syntax: GOSUB line_number",
+            "Example: GOSUB 1000 or GOSUB SUB_LINE where SUB_LINE is a variable",
+            "Make sure target line contains a subroutine that ends with RETURN"
+        ])
+        if err:
+            return err
 
-        if line_num <= 0:
-            error = self.emulator.error_context.runtime_error(
-                f"Invalid subroutine line number {line_num}",
-                self.emulator.current_line,
-                suggestions=[
-                    "Line numbers must be positive integers",
-                    "Use line numbers that exist in your program",
-                    "Subroutine should end with RETURN statement"
-                ]
-            )
-            return error_response(error)
+        err = self._validate_line_number(line_num)
+        if err:
+            return err
 
-        self.emulator.call_stack.append((
-            self.emulator.current_line, self.emulator.current_sub_line,
-            len(self.emulator.if_stack), len(self.emulator.for_stack)))
-        self.emulator.local_stack.append([])
+        self._push_gosub_frame()
         return [{'type': 'jump', 'line': line_num}]
 
     def visit_on_branch_statement(self, node: OnBranchStatementNode) -> Any:
@@ -593,35 +593,27 @@ class ASTEvaluator(ASTVisitor):
             return []
 
         # Evaluate the selected target line number (may be a label)
-        try:
-            target_line = self._resolve_target_line(node.targets[index - 1])
-        except (ValueError, TypeError) as e:
-            error = self.emulator.error_context.syntax_error(
-                f"Invalid line number in ON statement: {str(e)}",
-                self.emulator.current_line,
-                suggestions=["Use comma-separated line numbers or expressions",
-                             "Example: ON X GOTO 100,200,300"])
-            return error_response(error)
+        target_line, err = self._resolve_target_with_error(
+            node.targets[index - 1], "ON", [
+                "Use comma-separated line numbers or expressions",
+                "Example: ON X GOTO 100,200,300"
+            ])
+        if err:
+            return err
 
         if node.branch_type == 'GOSUB':
-            self.emulator.call_stack.append((
-                self.emulator.current_line, self.emulator.current_sub_line,
-                len(self.emulator.if_stack), len(self.emulator.for_stack)))
-            self.emulator.local_stack.append([])
+            self._push_gosub_frame()
 
         return [{'type': 'jump', 'line': target_line}]
 
     def visit_on_error_goto(self, node: OnErrorGotoNode) -> Any:
         """Visit ON ERROR GOTO statement"""
-        try:
-            target = self._resolve_target_line(node.target_line)
-        except (ValueError, TypeError):
-            error = self.emulator.error_context.syntax_error(
-                "Expected ON ERROR GOTO line",
-                self.emulator.current_line,
-                suggestions=["Use ON ERROR GOTO 100",
-                             "Use ON ERROR GOTO 0 to disable handler"])
-            return error_response(error)
+        target, err = self._resolve_target_with_error(node.target_line, "ON ERROR GOTO", [
+            "Use ON ERROR GOTO 100",
+            "Use ON ERROR GOTO 0 to disable handler"
+        ])
+        if err:
+            return err
 
         if target == 0:
             self.emulator.on_error_goto_line = None

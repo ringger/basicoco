@@ -360,6 +360,12 @@ class ASTParser:
         token = self._current_token()
         return token is not None and token['value'] == value
 
+    def _match_punctuation(self, *values: str) -> bool:
+        """Check if current token is PUNCTUATION with one of the given values."""
+        token = self._current_token()
+        return (token is not None and token['type'] == 'PUNCTUATION'
+                and token['value'] in values)
+
     def _consume(self, token_type: str, message: str = "") -> Dict[str, Any]:
         """Consume a token of the expected type or raise an error"""
         token = self._current_token()
@@ -594,13 +600,13 @@ class ASTParser:
 
             # Function call (also handles array access — distinguished at evaluation
             # time in visit_function_call)
-            if self._match('PUNCTUATION') and self._current_token()['value'] == '(':
+            if self._match_punctuation('('):
                 self._advance()  # consume '('
                 args = []
 
-                if not (self._match('PUNCTUATION') and self._current_token()['value'] == ')'):
+                if not self._match_punctuation(')'):
                     args.append(self._parse_or_expression())
-                    while self._match('PUNCTUATION') and self._current_token()['value'] == ',':
+                    while self._match_punctuation(','):
                         self._advance()  # consume ','
                         args.append(self._parse_or_expression())
 
@@ -707,6 +713,28 @@ class ASTParser:
 
         return token is not None and token['type'] == 'OPERATOR' and token['value'] == '='
 
+    def _parse_variable_or_array(self, name_token) -> ASTNode:
+        """Parse a variable or array access from a name token already consumed.
+        If '(' follows, parse as array subscript; otherwise return VariableNode."""
+        location = self._make_location(name_token)
+
+        if self._match_punctuation('('):
+            self._advance()  # consume '('
+            indices = []
+            if not self._match_punctuation(')'):
+                indices.append(self._parse_or_expression())
+                while self._match_punctuation(','):
+                    self._advance()  # consume ','
+                    indices.append(self._parse_or_expression())
+            self._consume('PUNCTUATION', "Expected ')' after array indices")
+            return ArrayAccessNode(
+                array_name=name_token['value'],
+                indices=indices,
+                location=location
+            )
+
+        return VariableNode(name=name_token['value'], location=location)
+
     def _parse_assignment(self) -> AssignmentNode:
         """Parse assignment statement"""
         # Skip LET if present
@@ -715,32 +743,7 @@ class ASTParser:
 
         # Parse target (variable or array element)
         name_token = self._consume('IDENTIFIER', "Expected variable name")
-        target_location = self._make_location(name_token)
-
-        if self._match('PUNCTUATION') and self._current_token()['value'] == '(':
-            # Array assignment
-            self._advance()  # consume '('
-            indices = []
-
-            if not (self._match('PUNCTUATION') and self._current_token()['value'] == ')'):
-                indices.append(self._parse_or_expression())
-                while self._match('PUNCTUATION') and self._current_token()['value'] == ',':
-                    self._advance()  # consume ','
-                    indices.append(self._parse_or_expression())
-
-            self._consume('PUNCTUATION', "Expected ')' after array indices")
-
-            target = ArrayAccessNode(
-                array_name=name_token['value'],
-                indices=indices,
-                location=target_location
-            )
-        else:
-            # Simple variable assignment
-            target = VariableNode(
-                name=name_token['value'],
-                location=target_location
-            )
+        target = self._parse_variable_or_array(name_token)
 
         self._consume('OPERATOR', "Expected '=' in assignment")
         value = self._parse_or_expression()
@@ -748,7 +751,7 @@ class ASTParser:
         return AssignmentNode(
             target=target,
             value=value,
-            location=target_location
+            location=target.location
         )
 
     def _parse_if_statement(self) -> IfStatementNode:
@@ -796,7 +799,7 @@ class ASTParser:
         body_statements = []
 
         # Check if there's a colon indicating body statements
-        if self._match('PUNCTUATION') and self._current_token()['value'] == ':':
+        if self._match_punctuation(':'):
             self._advance()  # consume ':'
 
             # Parse statements until we hit NEXT or end of tokens
@@ -949,7 +952,7 @@ class ASTParser:
         # Parse expressions and separators
         expressions.append(self._parse_or_expression())
 
-        while self._match('PUNCTUATION') and self._current_token()['value'] in [';', ',']:
+        while self._match_punctuation(';', ','):
             sep_token = self._advance()
             separators.append(sep_token['value'])
 
@@ -996,7 +999,7 @@ class ASTParser:
             )
 
             # Expect semicolon or comma after prompt
-            if self._match('PUNCTUATION') and self._current_token()['value'] in [';', ',']:
+            if self._match_punctuation(';', ','):
                 self._advance()  # consume separator
             else:
                 error = self.error_context.syntax_error(
@@ -1028,7 +1031,7 @@ class ASTParser:
         variables.append(var_node)
 
         # Parse additional variables separated by commas
-        while self._match('PUNCTUATION') and self._current_token()['value'] == ',':
+        while self._match_punctuation(','):
             self._advance()  # consume ','
 
             if not self._match('IDENTIFIER'):
@@ -1054,25 +1057,7 @@ class ASTParser:
     def _parse_input_variable(self):
         """Parse a variable target for INPUT (simple variable or array element)."""
         var_token = self._advance()
-        var_location = self._make_location(var_token)
-
-        # Check for array subscript: L$(I)
-        if self._match('PUNCTUATION') and self._current_token()['value'] == '(':
-            self._advance()  # consume '('
-            indices = []
-            if not (self._match('PUNCTUATION') and self._current_token()['value'] == ')'):
-                indices.append(self._parse_or_expression())
-                while self._match('PUNCTUATION') and self._current_token()['value'] == ',':
-                    self._advance()  # consume ','
-                    indices.append(self._parse_or_expression())
-            self._consume('PUNCTUATION', "Expected ')' after array indices")
-            return ArrayAccessNode(
-                array_name=var_token['value'],
-                indices=indices,
-                location=var_location
-            )
-
-        return VariableNode(name=var_token['value'], location=var_location)
+        return self._parse_variable_or_array(var_token)
 
     def _parse_on_statement(self) -> ASTNode:
         """Parse ON ERROR GOTO or ON expr GOTO/GOSUB"""
