@@ -774,3 +774,149 @@ class TestFullSolve:
 
     def test_twenty_moves(self, basic, helpers):
         _run_full_solve_test(basic, helpers, "RUFBLDrufbldRUFBLDru")
+
+
+# ------------------------------------------------------------------
+# Engine state preservation tests
+# ------------------------------------------------------------------
+
+def _build_engine_state_test(scramble_moves, max_frames=120000):
+    """Build a program that solves, then prints engine variable values."""
+    return [
+        '5 SAFETY OFF',
+        '10 PMODE 4: SCREEN 1',
+        '20 MERGE "lib_rubiks_engine"',
+        '25 MERGE "lib_rubiks_solver"',
+        '30 GOSUB InitCube',
+        '35 AN=0',
+        f'40 MS$="{scramble_moves}": GOSUB DoMoves',
+        '50 GOSUB SolveBottomCross',
+        '60 GOSUB SolveBottomCorners',
+        '70 GOSUB SolveMiddleEdges',
+        '80 GOSUB SolveTopCross',
+        '90 GOSUB SolveTopEdgeAlign',
+        '100 GOSUB SolveTopCornerPos',
+        '110 GOSUB SolveTopCornerOrient',
+        '120 GOSUB CheckFullSolve',
+        # Verify engine variables preserved after solver
+        # AN was set to 0 (fast mode) at line 35, solver must not change it
+        '130 PRINT "AN=";AN',
+        '140 PRINT "SC=";SC',
+        '150 PRINT "MX=";MX',
+        '160 PRINT "MY=";MY',
+        '170 PRINT "OC=";OC',
+        '180 PRINT "H=";H',
+        '190 PRINT "VARS OK"',
+        '200 END',
+    ]
+
+
+def _run_engine_state_test(basic, helpers, scramble_moves, max_frames=120000):
+    """Solve and verify engine variables are preserved."""
+    program = _build_engine_state_test(scramble_moves, max_frames)
+    helpers.load_program(basic, program)
+    results = helpers.run_to_completion(basic, max_frames=max_frames)
+    errors = helpers.get_error_messages(results)
+    assert errors == [], f"Errors after scramble '{scramble_moves}': {errors}"
+    texts = helpers.get_text_output(results)
+    text_str = '\n'.join(texts)
+    assert 'FULL SOLVE OK' in text_str, \
+        f"Solve failed for '{scramble_moves}'. Output: {texts}"
+    # Check engine variables
+    assert 'AN= 0' in text_str or 'AN=0' in text_str, \
+        f"AN clobbered after '{scramble_moves}'. Output: {texts}"
+    assert 'SC= 28' in text_str or 'SC=28' in text_str, \
+        f"SC clobbered after '{scramble_moves}'. Output: {texts}"
+    assert 'MX= 128' in text_str or 'MX=128' in text_str, \
+        f"MX clobbered after '{scramble_moves}'. Output: {texts}"
+    assert 'MY= 96' in text_str or 'MY=96' in text_str, \
+        f"MY clobbered after '{scramble_moves}'. Output: {texts}"
+    assert 'OC= 1' in text_str or 'OC=1' in text_str, \
+        f"OC clobbered after '{scramble_moves}'. Output: {texts}"
+
+
+@pytest.mark.slow
+class TestEngineStatePreservation:
+    """Verify solver steps don't clobber engine state variables."""
+
+    def test_single_move(self, basic, helpers):
+        _run_engine_state_test(basic, helpers, "R")
+
+    def test_all_faces(self, basic, helpers):
+        _run_engine_state_test(basic, helpers, "RUFBLD")
+
+    def test_deep_scramble(self, basic, helpers):
+        """Deep scramble exercises more solver code paths."""
+        _run_engine_state_test(basic, helpers, "RUFBLDrufbldRUF")
+
+    def test_twenty_moves(self, basic, helpers):
+        _run_engine_state_test(basic, helpers, "RUFBLDrufbldRUFBLDru")
+
+
+# ------------------------------------------------------------------
+# Cube color count integrity tests
+# ------------------------------------------------------------------
+
+def _build_integrity_test(scramble_moves, max_frames=120000):
+    """Build a program that checks color counts after scramble and each step."""
+    return [
+        '5 SAFETY OFF',
+        '10 PMODE 4: SCREEN 1',
+        '20 MERGE "lib_rubiks_engine"',
+        '25 MERGE "lib_rubiks_solver"',
+        '30 GOSUB InitCube',
+        '35 AN=0',
+        f'40 MS$="{scramble_moves}": GOSUB DoMoves',
+        '45 PRINT "AFTER SCRAMBLE": GOSUB CheckCubeIntegrity',
+        '50 GOSUB SolveBottomCross',
+        '55 PRINT "AFTER STEP 1": GOSUB CheckCubeIntegrity',
+        '60 GOSUB SolveBottomCorners',
+        '65 PRINT "AFTER STEP 2": GOSUB CheckCubeIntegrity',
+        '70 GOSUB SolveMiddleEdges',
+        '75 PRINT "AFTER STEP 3": GOSUB CheckCubeIntegrity',
+        '80 GOSUB SolveTopCross',
+        '85 PRINT "AFTER STEP 4": GOSUB CheckCubeIntegrity',
+        '90 GOSUB SolveTopEdgeAlign',
+        '95 PRINT "AFTER STEP 5": GOSUB CheckCubeIntegrity',
+        '100 GOSUB SolveTopCornerPos',
+        '105 PRINT "AFTER STEP 6": GOSUB CheckCubeIntegrity',
+        '110 GOSUB SolveTopCornerOrient',
+        '115 PRINT "AFTER STEP 7": GOSUB CheckCubeIntegrity',
+        '120 GOSUB CheckFullSolve',
+        '130 PRINT "ALL INTEGRITY CHECKS PASSED"',
+        '140 END',
+    ]
+
+
+def _run_integrity_test(basic, helpers, scramble_moves, max_frames=120000):
+    """Solve with integrity checks after every step."""
+    program = _build_integrity_test(scramble_moves, max_frames)
+    helpers.load_program(basic, program)
+    results = helpers.run_to_completion(basic, max_frames=max_frames)
+    errors = helpers.get_error_messages(results)
+    assert errors == [], f"Errors after scramble '{scramble_moves}': {errors}"
+    texts = helpers.get_text_output(results)
+    text_str = '\n'.join(texts)
+    # Should have 8 integrity checks (after scramble + 7 steps)
+    integrity_count = text_str.count('INTEGRITY OK')
+    assert integrity_count == 8, \
+        f"Expected 8 integrity checks, got {integrity_count} for '{scramble_moves}'. Output: {texts}"
+    assert 'ALL INTEGRITY CHECKS PASSED' in text_str, \
+        f"Integrity test failed for '{scramble_moves}'. Output: {texts}"
+
+
+@pytest.mark.slow
+class TestCubeIntegrity:
+    """Verify cube color counts are preserved through solving."""
+
+    def test_single_move(self, basic, helpers):
+        _run_integrity_test(basic, helpers, "R")
+
+    def test_all_faces(self, basic, helpers):
+        _run_integrity_test(basic, helpers, "RUFBLD")
+
+    def test_deep_scramble(self, basic, helpers):
+        _run_integrity_test(basic, helpers, "RUFBLDrufbldRUF")
+
+    def test_twenty_moves(self, basic, helpers):
+        _run_integrity_test(basic, helpers, "RUFBLDrufbldRUFBLDru")

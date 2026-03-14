@@ -20,7 +20,7 @@ REM SET AN=1 FOR ANIMATED MODE (DEFAULT)
 REM SET ST$/S2$ FOR STATUS TEXT OVERLAY ON GRAPHICS
 REM
 InitCube:
-  LOCAL I
+  PRIVATE I
   H = 0.43
   SC = 28: MX = 128: MY = 96
   OC = 1: PI = 3.14159
@@ -41,13 +41,13 @@ InitCube:
   RETURN
 REM
 ShowCube:
-  REM NO LOCAL VARS — SETS TF, DR, RA FOR DRAWCUBE
+  REM NO PRIVATE VARS — SETS TF, DR, RA FOR DRAWCUBE
   TF=0: DR=1: RA=0
   GOSUB DrawCube
   RETURN
 REM
 DoTurn:
-  LOCAL RA
+  PRIVATE RA
   IF AN=0 THEN GOSUB Permute: RETURN
   FOR RA=0 TO 90 STEP 15
     GOSUB DrawCube
@@ -56,7 +56,7 @@ DoTurn:
   RETURN
 REM
 DrawCube:
-  LOCAL I, IX, IY, IZ, F, J, NF, FN
+  PRIVATE I, IX, IY, IZ, F, J, NF, FN
   RD=DR*RA*PI/180: CR=COS(RD): SR=SIN(RD)
   PCLS
   NF=0
@@ -128,7 +128,7 @@ DrawCube:
   RETURN
 REM
 InitColors:
-  LOCAL IX, IY, IZ, F
+  PRIVATE IX, IY, IZ, F
   FOR IX=0 TO 2
     FOR IY=0 TO 2
       FOR IZ=0 TO 2
@@ -156,7 +156,7 @@ InitColors:
   RETURN
 REM
 Permute:
-  LOCAL PP, IX, IY, IZ, F, NX, NY, NZ, SL
+  PRIVATE PP, IX, IY, IZ, F, NX, NY, NZ, SL
   IF DR<0 THEN NP=3 ELSE NP=1
   FOR PP=1 TO NP
     ON TF GOTO PermRight,PermTop,PermFront,PermRotX,PermRotY,PermRotZ,PermLeft,PermDown,PermBack,PermStanding
@@ -389,7 +389,7 @@ REM
 DoMoves:
   REM EXECUTE MOVE STRING MS$
   REM UPPERCASE=CW LOWERCASE=CCW
-  LOCAL MI, MC$, UC$
+  PRIVATE MI, MC$, UC$
   FOR MI=1 TO LEN(MS$)
     MC$=MID$(MS$,MI,1)
     IF MC$>="a" THEN DR=-1 ELSE DR=1
@@ -410,7 +410,7 @@ DoMoves:
 REM
 Scramble:
   REM APPLY NM RANDOM FACE TURNS
-  LOCAL MV, LT, LD
+  PRIVATE MV, LT, LD
   LT=0: LD=0
   FOR MV=1 TO NM
     ScramblePick:

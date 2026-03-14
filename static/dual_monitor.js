@@ -921,17 +921,17 @@ class GraphicsDisplay {
     
     drawLine(x1, y1, x2, y2, color = null) {
         if (this.graphicsMode === 0) return;
-        
+
         const res = this.pmodeResolutions[this.graphicsMode];
         const lineColor = color !== null ? this.colors[color % this.colors.length] : this.currentColor;
-        
+
         // Bresenham's line algorithm for pixel-perfect lines
         const dx = Math.abs(x2 - x1);
         const dy = Math.abs(y2 - y1);
         const sx = x1 < x2 ? 1 : -1;
         const sy = y1 < y2 ? 1 : -1;
         let err = dx - dy;
-        
+
         while (true) {
             this.ctx.fillStyle = lineColor;
             this.ctx.fillRect(
@@ -940,9 +940,9 @@ class GraphicsDisplay {
                 res.pixelWidth,
                 res.pixelHeight
             );
-            
+
             if (x1 === x2 && y1 === y2) break;
-            
+
             const e2 = 2 * err;
             if (e2 > -dy) {
                 err -= dy;

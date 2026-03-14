@@ -22,7 +22,7 @@ REM   DL = DELAY PER TILE (0 FOR INSTANT)
 REM
 DrawFront:
   REM === FRONT FACE ===
-  LOCAL ROW, COL, X1, Y1, X2, Y2
+  PRIVATE ROW, COL, X1, Y1, X2, Y2
   FOR ROW = 0 TO 2
     FOR COL = 0 TO 2
       X1 = AX + COL * S
@@ -38,7 +38,7 @@ DrawFront:
 REM
 DrawRight:
   REM === RIGHT FACE ===
-  LOCAL ROW, COL, X1, Y1, X2, Y2, X3, Y3, X4, Y4
+  PRIVATE ROW, COL, X1, Y1, X2, Y2, X3, Y3, X4, Y4
   FOR ROW = 0 TO 2
     FOR COL = 0 TO 2
       X1 = BX + COL * RX
@@ -61,7 +61,7 @@ DrawRight:
 REM
 DrawTop:
   REM === TOP FACE ===
-  LOCAL ROW, COL, X1, Y1, X2, Y2, X3, Y3, X4, Y4
+  PRIVATE ROW, COL, X1, Y1, X2, Y2, X3, Y3, X4, Y4
   FOR ROW = 0 TO 2
     FOR COL = 0 TO 2
       X1 = TX + COL * S + ROW * RX

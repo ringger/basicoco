@@ -29,7 +29,7 @@ AST visitors push; registry closing commands pop:
 |-------|-----------|-----------|
 | `for_stack` | `visit_for_statement` | `execute_next` (control_flow.py) |
 | `call_stack` | `visit_gosub_statement` (4-tuple: line, sub_line, if_depth, for_depth) | `visit_return_statement` (also restores if_stack/for_stack depth) |
-| `local_stack` | `visit_gosub_statement` (empty frame) | `visit_return_statement` (restores variables) |
+| `local_stack` | `visit_gosub_statement` (empty frame) | `visit_return_statement` (restores variables); LOCAL/PRIVATE append entries |
 | `while_stack` | `visit_while_statement` | `execute_wend` (control_flow.py) |
 | `do_stack` | `visit_do_statement` | `execute_loop` (control_flow.py) |
 | `if_stack` | `visit_if_statement` / multi-line IF handler | `execute_else`, `execute_endif` (control_flow.py) |
@@ -52,15 +52,18 @@ State fields on `CoCoBasic`: `on_error_goto_line`, `error_number` (ERR), `error_
 
 `RESUME` / `RESUME NEXT` / `RESUME <line>` return `resume` / `resume_next` / `jump` directives handled by `_handle_flow_control()`. ERR and ERL are read-only pseudo-variables exposed in `visit_variable()`.
 
-## LOCAL Variables
+## LOCAL and PRIVATE Variables
 
 `LOCAL var1, var2, ...` inside a GOSUB subroutine saves the listed variables' current values. On RETURN, saved values are restored. This prevents subroutine variable collisions — the main pain point when all variables are global.
 
-- GOSUB pushes an empty frame onto `local_stack`; LOCAL appends (name, saved_value) entries to the current frame
-- RETURN pops the frame and restores variables in reverse order; variables that didn't exist before LOCAL are removed
-- LOCAL outside GOSUB is a runtime error
+`PRIVATE var1, var2, ...` works like LOCAL but additionally initializes each variable to 0 (numeric) or "" (string). This creates clean scratch space — variables start fresh and don't leak after RETURN.
+
+- GOSUB pushes an empty frame onto `local_stack`; LOCAL/PRIVATE append (name, saved_value) entries to the current frame
+- PRIVATE also sets each variable to its default value (0 or "") after saving
+- RETURN pops the frame and restores variables in reverse order; variables that didn't exist before LOCAL/PRIVATE are removed
+- LOCAL/PRIVATE outside GOSUB is a runtime error
 - `local_stack` is managed alongside `call_stack` in `clear_all_stacks()`, `save_execution_state()`, `restore_execution_state()`
-- `execute_local` lives in `control_flow.py` (registry command)
+- `execute_local` and `execute_private` live in `control_flow.py` (registry commands)
 
 ## INPUT Protocol
 

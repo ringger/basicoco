@@ -27,11 +27,19 @@ Areas that work but haven't been stress-tested with adversarial or exotic inputs
 
 ## Known Bugs
 
-*(No known bugs at this time.)*
+- [ ] **Rubik's cube z-sorting artifacts** — DrawCube in `lib_rubiks_engine.bas` uses a painter's algorithm with per-subcube depth sorting. This produces visible artifacts:
+  - **Static render**: at boundaries between the three visible faces (front, right, top), stickers from back subcubes bleed through — e.g., yellow on the front face, blue on the top face in the "CUBE SOLVED!" view.
+  - **Animation**: during face rotation, rotating subcubes' corners get occluded by static faces, and stickers appear to change colors mid-turn.
+  - **Root cause**: per-subcube average depth doesn't correctly resolve overlap ordering between faces from adjacent subcubes that extend in different directions. The cross-product cull alone isn't sufficient. Fixed iteration order (back→front) was tried but made animation worse.
+  - **Possible approaches**: (1) Only paint the three camera-visible face orientations (front/right/top) for non-rotating subcubes, with special handling during rotation when back/left/bottom faces can rotate into view. (2) Render static and rotating layers separately with different strategies. (3) Rethink depth metric — e.g., per-face depth for the rotating layer only. The internal 4D CL array is verified correct by sticker-stability tests against pycuber.
 
 ## Known Behavioral Limitations
 
 - **GOTO out of multi-line IF** leaves a stale `if_stack` entry (cleared on next RUN). This matches real CoCo behavior where GOTO from structured blocks is undefined. Note: RETURN out of IF blocks inside GOSUB is handled correctly — GOSUB saves if_stack/for_stack depth and RETURN restores it.
+
+## Language Extension Ideas
+
+*(No pending language extension ideas at this time.)*
 
 ## Refactoring Opportunities
 

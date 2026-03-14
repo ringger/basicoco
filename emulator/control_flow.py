@@ -68,6 +68,12 @@ class ControlFlowCommands:
                          syntax="LOCAL var1, var2, ...",
                          examples=["LOCAL IX, IY", "LOCAL N$, I"])
 
+        registry.register('PRIVATE', self.execute_private,
+                         category='control',
+                         description="Create subroutine-scoped scratch variables",
+                         syntax="PRIVATE var1, var2, ...",
+                         examples=["PRIVATE C0, C1, C2", "PRIVATE TMP$, I"])
+
         registry.register('STOP', self.execute_stop,
                          category='control',
                          description="Stop program execution",
@@ -245,6 +251,43 @@ class ControlFlowCommands:
                 continue
             saved_value = em.variables.get(name, None)
             frame.append((name, saved_value))
+        return []
+
+    def execute_private(self, args):
+        """PRIVATE var1, var2, ... — create subroutine-scoped scratch variables.
+
+        Like LOCAL, saves current values for restoration on RETURN.
+        Additionally initializes each variable to 0 (numeric) or "" (string).
+        """
+        em = self.emulator
+        if not em.local_stack:
+            return self._runtime_error("PRIVATE WITHOUT GOSUB", [
+                "PRIVATE can only be used inside a subroutine called with GOSUB",
+                "Example: GOSUB MySub: ... : MySub: PRIVATE I, J",
+                "PRIVATE saves variables, initializes them, and restores on RETURN"
+            ])
+
+        if not args:
+            return self._syntax_error("PRIVATE requires variable names", [
+                "Correct syntax: PRIVATE var1, var2, ...",
+                "Example: PRIVATE IX, IY, N$",
+                "Variables are initialized to 0 or \"\" and restored on RETURN"
+            ])
+
+        from .text_utils import StatementSplitter
+        var_names = StatementSplitter.split_args(args)
+        frame = em.local_stack[-1]
+        for var_name in var_names:
+            name = var_name.strip().upper()
+            if not name:
+                continue
+            saved_value = em.variables.get(name, None)
+            frame.append((name, saved_value))
+            # Initialize to clean default
+            if name.endswith('$'):
+                em.variables[name] = ""
+            else:
+                em.variables[name] = 0
         return []
 
     def execute_stop(self, args):
