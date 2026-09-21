@@ -19,7 +19,7 @@ from .ast_nodes import basic_truthy
 from .ast_converter import (expand_statements, starts_control_structure, command_words,
                             find_keyword)
 from .function_registry import FunctionRegistry
-from .functions import register_all_functions, basic_number_prefix
+from .functions import register_all_functions, basic_number_prefix, unsupported_error
 from .ast_parser import ASTParser
 from .ast_evaluator import ASTEvaluator
 from .error_context import (ErrorContextManager, error_response, text_response, text_message,
@@ -915,6 +915,10 @@ class CoCoBasic:
         self.trace_mode = False
         return []
 
+    def _unsupported_statement(self, word):
+        """POKE/EXEC: the same error as the PEEK/USR functions."""
+        return lambda args: error_response(unsupported_error(self, word))
+
     def _register_all_commands(self):
         """Register all BASIC commands by delegating to each module."""
         self.graphics.register_commands(self.command_registry)
@@ -922,6 +926,13 @@ class CoCoBasic:
         self.file_io.register_commands(self.command_registry)
         self.control_flow.register_commands(self.command_registry)
         self.data_commands.register_commands(self.command_registry)
+
+        # Machine-language statements: say they're unsupported (#87)
+        for word in ('POKE', 'EXEC'):
+            self.command_registry.register(word, self._unsupported_statement(word),
+                                         category='system',
+                                         description=f"{word} (not supported: BasiCoCo has no 6809 memory)",
+                                         syntax=word, examples=[])
 
         self.command_registry.register('TRON', lambda args: self._execute_tron(),
                                      category='system',

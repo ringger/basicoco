@@ -40,9 +40,6 @@ match the session task list, where every entry here is mirrored.
 
 Rarely needed, or hard to emulate meaningfully.
 
-- [ ] **Unsupported machine-language words fail misleadingly: PEEK, POKE, VARPTR, EXEC, USR** [#87]
-  Because unknown names with parentheses auto-dimension as arrays, `X=VARPTR(A)` and `X=USR(1)` silently return 0, `PEEK(100)` says BAD SUBSCRIPT, and `EXEC 100` says "Unrecognized command".
-  **Done when:** each gives a clear "not supported in BasiCoCo" error with suggestions (they become reserved names, so they can't be used as arrays), with tests. Real PEEK/POKE (a simulated memory map) would be a separate task.
 - [ ] **Random-access files: FIELD, GET/PUT (file)** [#88] — **Done when:** OPEN "R", FIELD, LSET/RSET, GET#/PUT# and LOC/LOF work with tests.
 - [ ] **Optimal solver for short scrambles (bidirectional BFS)** [#62] (after #56)
   **Done when:** any ≤8-move scramble is solved optimally, checked against a Python BFS for seeded scrambles.

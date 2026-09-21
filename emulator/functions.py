@@ -463,6 +463,31 @@ def register_all_functions(registry):
     registry.register('MEM', fn_mem)
     registry.register('FRE', fn_fre)
 
+    # Machine-language words: reserved, and say they're unsupported (rather
+    # than acting as arrays)
+    for word in ('PEEK', 'VARPTR', 'USR'):
+        registry.register(word, unsupported_word(word))
+    for n in range(10):
+        registry.register(f'USR{n}', unsupported_word('USR'))
+
+
+def unsupported_error(evaluator, word):
+    """The error for a Color BASIC word BasiCoCo can't emulate (it has no
+    6809 memory or machine code): ILLEGAL FUNCTION CALL (ERR 5), saying so.
+    The POKE and EXEC commands return it too."""
+    return evaluator.error_context.runtime_error(
+        f"ILLEGAL FUNCTION CALL: {word} is not supported in BasiCoCo",
+        evaluator.current_line,
+        suggestions=["BasiCoCo has no 6809 memory or machine code to reach",
+                     "Use arrays for data and DATA/READ for tables"])
+
+
+def unsupported_word(word):
+    """A function handler (PEEK, VARPTR, USR) raising unsupported_error."""
+    def handler(evaluator, args):
+        raise ValueError(unsupported_error(evaluator, word).format_detailed())
+    return handler
+
 
 # ============================================================================
 # Additional String Functions
