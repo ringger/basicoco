@@ -10,6 +10,35 @@ eval_int, check_reserved_name, and clear_interpreter_state.
 import pytest
 
 
+class TestRunArguments:
+    """#123: RUN used to ignore its argument and always start at the top."""
+
+    PROGRAM = ['10 X=1: PRINT "TEN"', '20 PRINT "TWENTY";X', '30 Tail:', '40 PRINT "FORTY"']
+
+    def test_run_from_a_line_clears_variables(self, basic, helpers):
+        helpers.load_program(basic, self.PROGRAM)
+        basic.process_command('X=9')
+        assert helpers.get_text_output(basic.process_command('RUN 20')) == ['TWENTY 0 ', 'FORTY']
+
+    def test_run_from_a_label(self, basic, helpers):
+        helpers.load_program(basic, self.PROGRAM)
+        assert helpers.get_text_output(basic.process_command('RUN Tail')) == ['FORTY']
+
+    def test_run_loads_and_runs_a_file(self, basic, helpers, temp_programs_dir):
+        helpers.load_program(basic, ['10 PRINT "FROM FILE"'])
+        basic.process_command('SAVE "OTHER"')
+        helpers.load_program(basic, ['10 PRINT "OLD"'])
+        result = basic.process_command('RUN "OTHER"')
+        assert helpers.get_text_output(result)[-1] == 'FROM FILE'
+        assert basic.program == {10: 'PRINT "FROM FILE"'}
+
+    def test_run_a_missing_file(self, basic, helpers, temp_programs_dir):
+        helpers.load_program(basic, ['10 PRINT "OLD"'])
+        errors = helpers.get_error_messages(basic.process_command('RUN "NOPE"'))
+        assert errors and 'NOPE' in errors[0]
+        assert basic.program == {10: 'PRINT "OLD"'}
+
+
 class TestExecuteStop:
     """Test STOP command"""
 

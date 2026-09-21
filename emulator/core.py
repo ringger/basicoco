@@ -269,6 +269,30 @@ class CoCoBasic:
         # Silent inside a running program; acknowledged at the prompt
         return [] if self.running else self._system_ok()
     
+    def execute_run(self, args):
+        """RUN [line | label | "file"]: run the program from the top or from
+        a line (variables cleared either way), or load a program file and
+        run it, as Disk BASIC's RUN "NAME" does."""
+        args = args.strip()
+        if not args:
+            return self.run_program()
+        line = self.resolve_label(args)
+        if line is None:
+            try:
+                target = self.evaluate_expression(args)
+            except ValueError as e:
+                return error_response(self.error_context.wrapped_error(
+                    "Invalid RUN target: ", e, self.current_line,
+                    suggestions=['RUN takes a line number, a label or a filename',
+                                 'Example: RUN 100 or RUN "GAME"']))
+            if isinstance(target, str):
+                loaded = self.load_program(args)
+                if any(item.get('type') == 'error' for item in loaded):
+                    return loaded
+                return self.run_program()
+            line = int(target)
+        return self.executor.run_program(start_line=line)
+
     # File operations — delegated to FileManager
     def load_program(self, filename):
         return self.file_manager.load_program(filename)
@@ -949,11 +973,11 @@ class CoCoBasic:
                                      syntax="LIST",
                                      examples=["LIST"])
         
-        self.command_registry.register('RUN', lambda args: self.run_program(),
+        self.command_registry.register('RUN', self.execute_run,
                                      category='system',
-                                     description="Execute the program",
-                                     syntax="RUN",
-                                     examples=["RUN"])
+                                     description="Execute the program (from the top, from a line, or a program file)",
+                                     syntax='RUN [line | label | "file"]',
+                                     examples=["RUN", "RUN 100", 'RUN "GAME"'])
         
         self.command_registry.register('CLEAR', self.clear_variables,
                                      category='system',

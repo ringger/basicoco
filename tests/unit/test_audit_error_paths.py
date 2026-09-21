@@ -161,7 +161,6 @@ class TestFileErrors:
         assert helpers.get_text_output(result) == []
 
 
-@pytest.mark.xfail(reason='#123: RUN ignores its line number', strict=True)
 def test_run_to_a_missing_line(basic, helpers):
     """#116: RUN n clears ON ERROR first, so this always stops."""
     helpers.load_program(basic, ['10 ON ERROR GOTO 20', '20 PRINT "H"'])
