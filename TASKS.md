@@ -44,9 +44,6 @@ match the session task list, where every entry here is mirrored.
 - [ ] **math_plotter.bas: the DRAW star isn't where its comments say** [#104]
   Menu option 6 does `PSET (128, 40)` to "position" the star, but PSET doesn't move the DRAW pen, so the star starts wherever the pen was (now the screen centre). The path isn't a five-pointed star, and `PAINT (128, 80), 1` may not be inside a closed region.
   **Done when:** the routine positions with `BM`, draws a closed star, paints its inside, and a browser test checks the painted area stays inside the star.
-- [ ] **A jump to a missing line isn't trapped by ON ERROR** [#105]
-  `ON ERROR GOTO 100: GOTO 999` stops with UNDEFINED LINE 999 instead of running the handler with ERR=8. The executor checks jump targets in its flow control, after the ON ERROR intercept; the same goes for RESUME to a missing line.
-  **Done when:** UNDEFINED LINE from GOTO, GOSUB, ON…GOTO, THEN/ELSE and RESUME targets goes through ON ERROR like other runtime errors, and the xfail in `test_robustness.py` passes.
 
 ## Low priority — not implemented from Extended Color BASIC
 

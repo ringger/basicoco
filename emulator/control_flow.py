@@ -356,6 +356,12 @@ class ControlFlowCommands:
                     return self._syntax_error(f"Invalid RESUME target: {args}",
                         ["Use RESUME, RESUME NEXT, RESUME line or RESUME label",
                          "Example: RESUME 100"])
+            if line not in em.program:
+                # Checked here, still in the handler: an UNDEFINED LINE
+                # after leaving it would be trapped by the same handler
+                return self._runtime_error(f"UNDEFINED LINE {line}", [
+                    "RESUME line must name a line in the program",
+                    "RESUME NEXT continues after the statement that failed"])
             directive = {'type': 'jump', 'line': line}
         # Leave the handler only once RESUME itself has succeeded
         em.in_error_handler = False

@@ -101,6 +101,15 @@ def test_resume_next_continues_on_the_same_line(basic, helpers):
     assert errors == [] and texts == [' 1  3 ']
 
 
+def test_resume_to_a_missing_line_stops_instead_of_looping(basic, helpers):
+    """#105: RESUME checks its line before leaving the handler, so its
+    UNDEFINED LINE isn't trapped by that same handler over and over."""
+    texts, errors = run(basic, helpers, [
+        '10 ON ERROR GOTO 100', '20 X=1/0', '30 END', '100 PRINT "H": RESUME 999'])
+    assert texts == ['H']
+    assert len(errors) == 1 and 'UNDEFINED LINE 999' in errors[0]
+
+
 def test_an_error_inside_the_handler_stops_the_program(basic, helpers):
     texts, errors = run(basic, helpers, [
         '10 ON ERROR GOTO 100', '20 X=1/0', '30 END',
@@ -111,8 +120,8 @@ def test_an_error_inside_the_handler_stops_the_program(basic, helpers):
 
 @pytest.mark.parametrize('failing, code', [
     ('X=1/0', 11), ('READ A', 4), ('A$=1', 13), ('RETURN', 3),
-    pytest.param('GOTO 999', 8, marks=pytest.mark.xfail(
-        reason='#105: a jump to a missing line is not trapped by ON ERROR', strict=True)),
+    # #105: jumps to a missing line weren't trapped at all
+    ('GOTO 999', 8), ('GOSUB 999', 8), ('ON 1 GOTO 999', 8), ('IF 1 THEN 999', 8),
 ])
 def test_err_uses_microsoft_numbering(basic, helpers, failing, code):
     """#102: ERR numbering was a mix of schemes (division by zero was 99)."""

@@ -225,6 +225,29 @@ class ProgramExecutor:
     # Flow control dispatcher
     # ------------------------------------------------------------------
 
+    def _runtime_error(self, item, current_pos_index, all_positions, output):
+        """A runtime error at the current position: jump to the ON ERROR
+        handler if one is set (and we're not already in it), otherwise
+        stop with the error. Returns (index, action) like the dispatcher."""
+        emu = self.emulator
+        if emu.on_error_goto_line is not None and not emu.in_error_handler:
+            handler_idx = self._find_line_position(emu.on_error_goto_line, all_positions)
+            if handler_idx is not None:
+                line_num, sub_index = all_positions[current_pos_index]
+                emu.error_line = line_num
+                emu.error_number = _classify_error(item.get('message', ''))
+                emu.error_resume_position = (line_num, sub_index)
+                emu.in_error_handler = True
+                return handler_idx, 'jumped'
+        # No handler or handler line not found. The error is program output
+        # (the caller shows it), so only debug-log it
+        logger.debug('Runtime error at line %d: %s',
+                     all_positions[current_pos_index][0], item.get('message', '(unknown)'))
+        output.append(item)
+        emu.running = False
+        emu.clear_all_stacks()
+        return current_pos_index, 'stop'
+
     def _handle_flow_control(self, result, current_pos_index, all_positions, output):
         """Process flow-control items from a statement result.
 
@@ -259,8 +282,9 @@ class ProgramExecutor:
                 idx = self._find_line_position(item['line'], all_positions)
                 if idx is not None:
                     return idx, 'jumped'
-                output.append(error_message(f"UNDEFINED LINE {item['line']}"))
-                return current_pos_index, 'stop'
+                # A runtime error like any other: ON ERROR can trap it
+                return self._runtime_error(error_message(f"UNDEFINED LINE {item['line']}"),
+                                           current_pos_index, all_positions, output)
 
             elif item_type == 'jump_after_for':
                 for_pos = (item['for_line'], item.get('for_sub_line', 0))
@@ -359,28 +383,7 @@ class ProgramExecutor:
 
             elif item_type != 'input_request':
                 if item.get('type') == 'error':
-                    # ON ERROR GOTO handler intercept — suppress error output
-                    if (emu.on_error_goto_line is not None
-                            and not emu.in_error_handler):
-                        handler_idx = self._find_line_position(
-                            emu.on_error_goto_line, all_positions)
-                        if handler_idx is not None:
-                            line_num, sub_index = all_positions[current_pos_index]
-                            emu.error_line = line_num
-                            emu.error_number = _classify_error(
-                                item.get('message', ''))
-                            emu.error_resume_position = (line_num, sub_index)
-                            emu.in_error_handler = True
-                            return handler_idx, 'jumped'
-                    # No handler or handler line not found. The error is
-                    # program output (the caller shows it), so only debug-log it
-                    logger.debug('Runtime error at line %d: %s',
-                                   all_positions[current_pos_index][0],
-                                   item.get('message', '(unknown)'))
-                    output.append(item)
-                    emu.running = False
-                    emu.clear_all_stacks()
-                    return current_pos_index, 'stop'
+                    return self._runtime_error(item, current_pos_index, all_positions, output)
                 # Regular output -- filter system OK messages
                 if not item.get('source') == 'system':
                     output.append(item)
