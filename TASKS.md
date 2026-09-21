@@ -4,7 +4,7 @@ The project backlog. Every entry is a task that can be finished, with a
 **Done when** line. Standing rules and known behaviour live in
 [CLAUDE.md](CLAUDE.md); past decisions and their rationale in
 [docs/audit_decisions.md](docs/audit_decisions.md). Numbers like `[#82]`
-match the session task list, where every high-priority task is mirrored.
+match the session task list, where every entry here is mirrored.
 
 ## High priority
 
@@ -38,16 +38,16 @@ match the session task list, where every high-priority task is mirrored.
 - [ ] **Ring (circle-graph) view with synchronized animation** [#61] (after #55, #58)
   9 loops of 12 stickers, one per layer; precompute node positions in Python. Teaching value.
   **Done when:** a program animates the ring view in sync with moves, and a test checks node colors against pycuber.
-- [ ] **CIRCLE ratio and arc arguments**
+- [ ] **CIRCLE ratio and arc arguments** [#84]
   `CIRCLE(x,y),r,c,ratio,start,end` — the ratio, start and end arguments are parsed but ignored (`CIRCLE(100,100),20,1,.5` still draws a full round circle).
   **Done when:** server pixel tracking and the client draw ellipses and arcs the same way (shared algorithm, as for circles), with server tests, a harness check and a browser check.
-- [ ] **PPOINT sees PAINT fills and GPRINT text**
+- [ ] **PPOINT sees PAINT fills and GPRINT text** [#85]
   The server tracks LINE/CIRCLE/DRAW/PSET pixels but not PAINT or GPRINT, so `PPOINT` inside a painted area or on GPRINT text returns 0.
   **Done when:** the server records PAINT fills (same flood-fill rules as the client) and GPRINT glyph pixels, and tests check PPOINT inside a painted box and on a GPRINT stroke.
-- [ ] **Stop round-tripping tab state on every tab switch**
+- [ ] **Stop round-tripping tab state on every tab switch** [#83]
   The server keeps a separate interpreter per tab, yet the client fetches each tab's program and variables (`get_state`) when leaving it and pushes them back (`set_state`) when returning. That is redundant, and because `get_state` answers asynchronously, a quick switch can push back a stale copy and overwrite newer work (e.g. lines typed just before switching). Tabs restored after a reload already skip the push (`stateFetched`).
   **Done when:** tab switches no longer send `set_state` (and `get_state` is dropped if nothing else needs it), with a browser test that types a line, switches away and back immediately, and still LISTs it.
-- [ ] **Robustness test sweep**
+- [ ] **Robustness test sweep** [#86]
   These areas work but haven't been tested with awkward inputs. Write the tests; any bug found becomes its own task.
   - File I/O: several files open at once; EOF exactly at the last record; a file of thousands of lines; closing a file mid-read.
   - ON ERROR / RESUME: handler inside a nested GOSUB using LOCAL; RESUME NEXT across sublines; an error raised inside the handler.
@@ -61,9 +61,9 @@ match the session task list, where every high-priority task is mirrored.
 
 Rarely needed, or hard to emulate meaningfully.
 
-- [ ] **Unsupported machine-language words fail misleadingly: PEEK, POKE, VARPTR, EXEC, USR**
+- [ ] **Unsupported machine-language words fail misleadingly: PEEK, POKE, VARPTR, EXEC, USR** [#87]
   Because unknown names with parentheses auto-dimension as arrays, `X=VARPTR(A)` and `X=USR(1)` silently return 0, `PEEK(100)` says BAD SUBSCRIPT, and `EXEC 100` says "Unrecognized command".
   **Done when:** each gives a clear "not supported in BasiCoCo" error with suggestions (they become reserved names, so they can't be used as arrays), with tests. Real PEEK/POKE (a simulated memory map) would be a separate task.
-- [ ] **Random-access files: FIELD, GET/PUT (file)** — **Done when:** OPEN "R", FIELD, LSET/RSET, GET#/PUT# and LOC/LOF work with tests.
+- [ ] **Random-access files: FIELD, GET/PUT (file)** [#88] — **Done when:** OPEN "R", FIELD, LSET/RSET, GET#/PUT# and LOC/LOF work with tests.
 - [ ] **Optimal solver for short scrambles (bidirectional BFS)** [#62] (after #56)
   **Done when:** any ≤8-move scramble is solved optimally, checked against a Python BFS for seeded scrambles.
