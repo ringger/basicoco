@@ -8,6 +8,10 @@ const GPRINT_FONT = {
     32: [0,0,0,0,0,0],             // space
     33: [4,4,4,0,4,0],             // !
     34: [10,10,0,0,0,0],           // "
+    35: [10,15,10,15,10,0],        // #
+    36: [4,7,12,6,3,14],           // $
+    37: [12,13,2,4,11,3],          // %
+    38: [4,10,4,10,5,0],           // &
     39: [4,4,0,0,0,0],             // '
     40: [2,4,4,4,2,0],             // (
     41: [8,4,4,4,8,0],             // )
@@ -28,7 +32,12 @@ const GPRINT_FONT = {
     56: [6,9,6,9,6,0],             // 8
     57: [6,9,7,1,6,0],             // 9
     58: [0,4,0,4,0,0],             // :
+    59: [0,4,0,4,4,8],             // ;
+    60: [2,4,8,4,2,0],             // <
+    61: [0,15,0,15,0,0],           // =
+    62: [8,4,2,4,8,0],             // >
     63: [6,9,2,0,2,0],             // ?
+    64: [6,9,11,11,8,7],           // @
     65: [6,9,15,9,9,0],            // A
     66: [14,9,14,9,14,0],          // B
     67: [6,9,8,9,6,0],             // C
@@ -55,6 +64,11 @@ const GPRINT_FONT = {
     88: [9,9,6,9,9,0],             // X
     89: [9,9,6,4,4,0],             // Y
     90: [15,1,6,8,15,0],           // Z
+    91: [6,4,4,4,6,0],             // [
+    92: [8,4,2,1,0,0],             // backslash
+    93: [6,2,2,2,6,0],             // ]
+    94: [4,10,0,0,0,0],            // ^
+    95: [0,0,0,0,15,0],            // _
 };
 
 // Display Manager - Coordinates both text and graphics displays
@@ -189,6 +203,7 @@ class TextDisplay {
         this.commandCursorPos = 0; // Position within current command for editing
         this.promptRow = 0;
         this.promptCol = 0;
+        this.promptBufIdx = 0;  // lineBuffer index of the prompt line
         this.waitingForInput = false;
         this.inputPrompt = '';
 
@@ -414,22 +429,31 @@ class TextDisplay {
         // Show command prompt
         if (!this.waitingForInput) {
             this.printText('> ');
-            this.promptRow = this.currentRow;
-            this.promptCol = this.currentCol;
+            this.markPrompt();
         }
     }
-    
+
     showInputPrompt(prompt) {
         // Show input prompt (for INPUT statements)
         this.waitingForInput = true;
         this.inputPrompt = prompt;
         this.printText(prompt);
+        this.markPrompt();
+    }
+
+    markPrompt() {
+        // Where the command being typed starts: screen position and buffer line
         this.promptRow = this.currentRow;
         this.promptCol = this.currentCol;
+        this.promptBufIdx = this.lineBuffer.length - 1;
     }
     
     handleKeyInput(key, callback) {
         if (key === 'Enter') {
+            // Finish on the command's last row, even if the cursor was
+            // mid-line; done first so nothing the callback prints is redrawn over
+            this.commandCursorPos = this.currentCommand.length;
+            this.redrawCurrentCommand();
             if (this.waitingForInput) {
                 // Submit input response
                 callback('input', this.currentCommand);
@@ -630,8 +654,9 @@ class TextDisplay {
     }
     
     updateCursorPosition() {
-        this.currentCol = this.promptCol + this.commandCursorPos;
-        this.drawCursor();
+        // Redraw (not just move) so the old cursor block is erased and the
+        // cursor lands on the right row of a wrapped command
+        this.redrawCurrentCommand();
     }
     
     // Text editing
@@ -669,24 +694,29 @@ class TextDisplay {
     }
     
     redrawCurrentCommand() {
-        // Clear the current command line
-        const lineY = this.currentRow * this.charHeight;
-        const clearWidth = this.canvas.width - (this.promptCol * this.charWidth);
-        this.ctx.fillStyle = this.backgroundColor;
-        this.ctx.fillRect(this.promptCol * this.charWidth, lineY, clearWidth, this.charHeight);
-        
-        // Redraw the command character by character for precise positioning
-        if (this.currentCommand) {
-            this.ctx.fillStyle = this.textColor;
-            for (let i = 0; i < this.currentCommand.length; i++) {
-                const x = (this.promptCol + i) * this.charWidth;
-                this.ctx.fillText(this.currentCommand[i], x, lineY);
-            }
+        // The command being edited lives in lineBuffer, starting after the
+        // prompt and wrapping every this.cols characters, so it survives
+        // scrollback and tab switches. Redrawing from the buffer also
+        // erases the old cursor block.
+        const prompt = (this.lineBuffer[this.promptBufIdx] || '').substring(0, this.promptCol);
+        const full = prompt + this.currentCommand;
+        const chunks = [];
+        for (let i = 0; i < full.length; i += this.cols) {
+            chunks.push(full.substring(i, i + this.cols));
         }
-        
-        // Update cursor position to be after the text
-        this.currentCol = this.promptCol + this.commandCursorPos;
-        this.drawCursor();
+        const cursorAt = this.promptCol + this.commandCursorPos;
+        const cursorLine = Math.floor(cursorAt / this.cols);
+        while (chunks.length <= cursorLine) chunks.push('');
+        this.lineBuffer.splice(this.promptBufIdx, this.lineBuffer.length - this.promptBufIdx, ...chunks);
+
+        // Screen row of a buffer line: the screen shows the last this.rows
+        // lines, so a wrapped command near the bottom scrolls the screen up
+        const firstShown = Math.max(0, this.lineBuffer.length - this.rows);
+        this.promptRow = this.promptBufIdx - firstShown;
+        this.currentRow = this.promptRow + cursorLine;
+        this.currentCol = cursorAt % this.cols;
+        this.scrollOffset = 0;
+        this.renderFromBuffer();
     }
     
     // Emacs/readline key bindings
@@ -791,20 +821,10 @@ class TextDisplay {
     }
     
     clearCommand() {
-        // Clear current command and reset to prompt
+        // Clear current command (all of its wrapped rows) and reset to prompt
         this.currentCommand = '';
-        this.currentRow = this.promptRow;
-        this.currentCol = this.promptCol;
-        this.drawCursor();
-        
-        // Clear line after prompt
-        this.ctx.fillStyle = this.backgroundColor;
-        this.ctx.fillRect(
-            this.promptCol * this.charWidth,
-            this.promptRow * this.charHeight,
-            (this.cols - this.promptCol) * this.charWidth,
-            this.charHeight
-        );
+        this.commandCursorPos = 0;
+        this.redrawCurrentCommand();
     }
     
     saveState() {
@@ -812,10 +832,17 @@ class TextDisplay {
         return {
             imageData: this.ctx.getImageData(0, 0, this.canvas.width, this.canvas.height),
             currentRow: this.currentRow,
-            currentCol: this.currentCol
+            currentCol: this.currentCol,
+            // Per-tab text history (scrollback) and the command being typed
+            lineBuffer: this.lineBuffer.slice(),
+            promptRow: this.promptRow,
+            promptCol: this.promptCol,
+            promptBufIdx: this.promptBufIdx,
+            currentCommand: this.currentCommand,
+            commandCursorPos: this.commandCursorPos
         };
     }
-    
+
     restoreState(state) {
         // Restore the canvas content and cursor position
         if (state.imageData) {
@@ -823,6 +850,15 @@ class TextDisplay {
         }
         this.currentRow = state.currentRow || 0;
         this.currentCol = state.currentCol || 0;
+        if (state.lineBuffer) {
+            this.lineBuffer = state.lineBuffer.slice();
+            this.promptRow = state.promptRow;
+            this.promptCol = state.promptCol;
+            this.promptBufIdx = state.promptBufIdx;
+            this.currentCommand = state.currentCommand;
+            this.commandCursorPos = state.commandCursorPos;
+        }
+        this.scrollOffset = 0;
         this.drawCursor();
     }
 }
@@ -987,19 +1023,28 @@ class GraphicsDisplay {
         if (this.graphicsMode === 0) return;
 
         const res = this.pmodeResolutions[this.graphicsMode];
-        const circleColor = color !== null ? this.colors[color % this.colors.length] : this.currentColor;
-        
-        this.ctx.strokeStyle = circleColor;
-        this.ctx.lineWidth = res.pixelWidth;
-        this.ctx.beginPath();
-        this.ctx.arc(
-            x * res.pixelWidth + res.pixelWidth/2, 
-            y * res.pixelHeight + res.pixelHeight/2, 
-            radius * res.pixelWidth, 
-            0, 
-            2 * Math.PI
-        );
-        this.ctx.stroke();
+        this.ctx.fillStyle = color !== null ? this.colors[color % this.colors.length] : this.currentColor;
+
+        // Midpoint circle in whole BASIC pixels -- the same algorithm the
+        // server uses to track pixels (graphics.py _record_circle), so PPOINT
+        // and PAINT see exactly what is drawn. (An antialiased ctx.arc left
+        // blended edge blocks that PAINT could leak through.)
+        const plot = (px, py) => this.ctx.fillRect(
+            px * res.pixelWidth, py * res.pixelHeight, res.pixelWidth, res.pixelHeight);
+        let dx = radius, dy = 0, err = 1 - radius;
+        while (dx >= dy) {
+            for (const [ox, oy] of [[dx, dy], [dy, dx], [-dy, dx], [-dx, dy],
+                                    [-dx, -dy], [-dy, -dx], [dy, -dx], [dx, -dy]]) {
+                plot(x + ox, y + oy);
+            }
+            dy++;
+            if (err < 0) {
+                err += 2 * dy + 1;
+            } else {
+                dx--;
+                err += 2 * (dy - dx) + 1;
+            }
+        }
     }
     
     paint(x, y, paintColor, borderColor) {
@@ -1122,6 +1167,8 @@ class GraphicsDisplay {
 
         this.ctx.fillStyle = textColor;
 
+        // No lowercase glyphs (the server uppercases GPRINT text as well)
+        text = text.toUpperCase();
         for (let ci = 0; ci < text.length; ci++) {
             const ch = text.charCodeAt(ci);
             const glyph = GPRINT_FONT[ch] || GPRINT_FONT[63]; // '?' fallback
@@ -1159,17 +1206,36 @@ class GraphicsDisplay {
         const res = this.pmodeResolutions[this.graphicsMode];
         const sprite = this.spriteStorage[arrayName];
         
-        if (sprite) {
-            // Apply the sprite with the specified action
-            if (action.toLowerCase() === 'pset') {
-                this.ctx.putImageData(sprite, x * res.pixelWidth, y * res.pixelHeight);
-            } else {
-                // For other actions (OR, AND, XOR), we'd need pixel manipulation
-                // For now, just use PSET
-                this.ctx.putImageData(sprite, x * res.pixelWidth, y * res.pixelHeight);
-            }
-            console.log(`PUT array ${arrayName} at (${x},${y}) with action ${action}`);
+        if (!sprite) return;
+        const left = x * res.pixelWidth, top = y * res.pixelHeight;
+        const op = action.toUpperCase();
+        if (op === 'PSET') {
+            this.ctx.putImageData(sprite, left, top);
+            return;
         }
+
+        // Combine the stored block with the screen, pixel by pixel. A pixel is
+        // "on" when it isn't the background color; ON pixels written by
+        // PRESET/NOT use the current foreground color.
+        const screen = this.ctx.getImageData(left, top, sprite.width, sprite.height);
+        const bg = this.hexToRgb(this.backgroundColor);
+        const fg = this.hexToRgb(this.currentColor);
+        const src = sprite.data, dst = screen.data;
+        const isOn = (d, i) => d[i] !== bg.r || d[i + 1] !== bg.g || d[i + 2] !== bg.b;
+        const put = (i, rgb) => { dst[i] = rgb.r; dst[i + 1] = rgb.g; dst[i + 2] = rgb.b; dst[i + 3] = 255; };
+        for (let i = 0; i < dst.length; i += 4) {
+            const spriteOn = isOn(src, i), screenOn = isOn(dst, i);
+            if (op === 'PRESET') {          // inverse of the stored block
+                put(i, spriteOn ? bg : fg);
+            } else if (op === 'AND') {      // on only where both are on
+                if (!(spriteOn && screenOn)) put(i, bg);
+            } else if (op === 'OR') {       // stored block's on pixels over the screen
+                if (spriteOn) put(i, { r: src[i], g: src[i + 1], b: src[i + 2] });
+            } else if (op === 'NOT') {      // invert the screen area
+                put(i, screenOn ? bg : fg);
+            }
+        }
+        this.ctx.putImageData(screen, left, top);
     }
     
     saveState() {
@@ -1181,31 +1247,39 @@ class GraphicsDisplay {
             graphicsMode: this.graphicsMode,
             screenMode: this.screenMode,
             currentColor: this.currentColor,
+            currentDrawColor: this.currentDrawColor,
+            backgroundColor: this.backgroundColor,
+            spriteStorage: this.spriteStorage,
             drawX: this.drawX,
             drawY: this.drawY
         };
     }
-    
+
     restoreState(state) {
         if (!state) {
-            // Clear canvas and reset to defaults for new tab
-            this.ctx.fillStyle = '#000000';
-            this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+            // New tab: the same defaults as a fresh display
             this.graphicsMode = 0;
-            this.screenMode = 0;
-            this.currentColor = 1;
+            this.screenMode = 1;
+            this.currentDrawColor = 1;
+            this.currentColor = this.colors[1];
+            this.backgroundColor = this.colors[0];
+            this.spriteStorage = {};
             this.drawX = 128;
             this.drawY = 96;
+            this.clearGraphics();
             return;
         }
-        
+
         // Restore canvas content
         this.ctx.putImageData(state.imageData, 0, 0);
-        
+
         // Restore graphics state
         this.graphicsMode = state.graphicsMode;
         this.screenMode = state.screenMode;
         this.currentColor = state.currentColor;
+        this.currentDrawColor = state.currentDrawColor;
+        this.backgroundColor = state.backgroundColor;
+        this.spriteStorage = state.spriteStorage;
         this.drawX = state.drawX;
         this.drawY = state.drawY;
     }
