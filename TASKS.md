@@ -38,9 +38,9 @@ match the session task list, where every entry here is mirrored.
 - [ ] **CIRCLE ratio and arc arguments** [#84]
   `CIRCLE(x,y),r,c,ratio,start,end` — the ratio, start and end arguments are parsed but ignored (`CIRCLE(100,100),20,1,.5` still draws a full round circle).
   **Done when:** server pixel tracking and the client draw ellipses and arcs the same way (shared algorithm, as for circles), with server tests, a harness check and a browser check.
-- [ ] **PPOINT sees PAINT fills and GPRINT text** [#85]
-  The server tracks LINE/CIRCLE/DRAW/PSET pixels but not PAINT or GPRINT, so `PPOINT` inside a painted area or on GPRINT text returns 0.
-  **Done when:** the server records PAINT fills (same flood-fill rules as the client) and GPRINT glyph pixels, and tests check PPOINT inside a painted box and on a GPRINT stroke.
+- [ ] **PPOINT doesn't see what PUT draws** [#106]
+  The server records LINE, CIRCLE, DRAW, PSET, PAINT and GPRINT pixels for PPOINT, but not GET/PUT: PUT's block lives only in the client's canvas.
+  **Done when:** GET stores the block's pixels on the server and PUT (PSET/PRESET/AND/OR/NOT) records its result, with server tests and a harness check that client and server agree.
 - [ ] **math_plotter.bas: the DRAW star isn't where its comments say** [#104]
   Menu option 6 does `PSET (128, 40)` to "position" the star, but PSET doesn't move the DRAW pen, so the star starts wherever the pen was (now the screen centre). The path isn't a five-pointed star, and `PAINT (128, 80), 1` may not be inside a closed region.
   **Done when:** the routine positions with `BM`, draws a closed star, paints its inside, and a browser test checks the painted area stays inside the star.

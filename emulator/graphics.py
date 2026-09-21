@@ -5,6 +5,10 @@ Graphics commands: PMODE, SCREEN, PSET, PRESET, LINE, CIRCLE, PAINT,
 GET, PUT, DRAW, COLOR, PCLEAR, PCLS, and GPRINT.
 """
 
+import functools
+import os
+import re
+
 from .text_utils import StatementSplitter
 from .error_context import error_response
 from .ast_nodes import format_basic_number
@@ -13,6 +17,24 @@ _split_args = StatementSplitter.split_args  # Shared comma-split helper
 
 # How PUT combines the stored block with the screen
 _PUT_ACTIONS = frozenset({'PSET', 'PRESET', 'AND', 'OR', 'NOT'})
+
+# The client renders; these mirror what it needs for PPOINT to agree with
+# the screen. PALETTE_SIZE is the length of GraphicsDisplay.colors in
+# dual_monitor.js (a colour index is taken modulo it).
+PALETTE_SIZE = 9
+_CLIENT_JS = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                          'static', 'dual_monitor.js')
+
+
+@functools.lru_cache(maxsize=1)
+def gprint_font():
+    """GPRINT glyphs {char code: [6 rows of 4-bit masks]}, read from the
+    client's GPRINT_FONT so the font has one source."""
+    with open(_CLIENT_JS, encoding='utf-8') as f:
+        source = f.read()
+    block = re.search(r'const GPRINT_FONT = \{(.*?)\n\};', source, re.S).group(1)
+    return {int(code): [int(v) for v in rows.split(',')]
+            for code, rows in re.findall(r'^\s*(\d+):\s*\[([\d,\s]+)\]', block, re.M)}
 
 
 def _graphics_command(command_name, require_graphics=False):
@@ -144,6 +166,54 @@ class BasicGraphics:
     def _plot(self, x, y, color):
         if 0 <= x < self.SCREEN_WIDTH and 0 <= y < self.SCREEN_HEIGHT:
             self.pixel_buffer[self._snap(x, y)] = color
+
+    def _record_paint(self, x, y, fill, border):
+        """Record a PAINT with the client's rules (GraphicsDisplay.paint):
+        a 4-connected flood fill of mode pixels. With a border colour it
+        fills up to that colour; without one, the region of the start
+        pixel's colour. Colours compare as palette entries."""
+        if self.emulator.graphics_mode is None:
+            return
+        if not (0 <= x < self.SCREEN_WIDTH and 0 <= y < self.SCREEN_HEIGHT):
+            return
+        gx, gy = self._MODE_PIXEL[self.emulator.graphics_mode]
+
+        def colour(p):
+            return self.pixel_buffer.get(p, self.clear_color) % PALETTE_SIZE
+
+        start = self._snap(x, y)
+        start_colour = colour(start)
+        fill_colour = fill % PALETTE_SIZE
+        border_colour = None if border is None else border % PALETTE_SIZE
+        stack, filled = [start], set()
+        while stack:
+            p = stack.pop()
+            px, py = p
+            if p in filled or not (0 <= px < self.SCREEN_WIDTH and 0 <= py < self.SCREEN_HEIGHT):
+                continue
+            c = colour(p)
+            if border_colour is not None:
+                if c in (border_colour, fill_colour):
+                    continue
+            elif c != start_colour:
+                continue
+            self.pixel_buffer[p] = fill
+            filled.add(p)
+            stack.extend(((px + gx, py), (px - gx, py), (px, py + gy), (px, py - gy)))
+
+    def _record_text(self, x, y, text, color):
+        """Record GPRINT's pixels as the client's drawText plots them: one
+        mode pixel per font pixel, 5-pixel character cells."""
+        if self.emulator.graphics_mode is None:
+            return
+        gx, gy = self._MODE_PIXEL[self.emulator.graphics_mode]
+        font = gprint_font()
+        for ci, ch in enumerate(text):
+            glyph = font.get(ord(ch), font[ord('?')])
+            for row, bits in enumerate(glyph):
+                for col in range(4):
+                    if bits & (1 << (3 - col)):
+                        self._plot(x + (ci * 5 + col) * gx, y + row * gy, color)
 
     def _record_line(self, x1, y1, x2, y2, color):
         """Record a line's pixels (Bresenham, as the client draws it)."""
@@ -498,6 +568,7 @@ class BasicGraphics:
 
         paint_color = self.emulator.eval_int(parts[0])
         border_color = self._parse_optional_int(parts, 1)
+        self._record_paint(x, y, paint_color, border_color)
         return [{'type': 'paint', 'x': x, 'y': y, 'fill_color': paint_color, 'boundary_color': border_color}]
     
     @_graphics_command('GPRINT', require_graphics=True)
@@ -531,6 +602,7 @@ class BasicGraphics:
         if color is None:
             color = 1  # Default to green (OC)
 
+        self._record_text(x, y, text, color)
         return [{'type': 'gtext', 'x': x, 'y': y, 'text': text, 'color': color}]
 
     @_graphics_command('GET', require_graphics=True)

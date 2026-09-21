@@ -111,6 +111,20 @@ check('PAINT inside a CIRCLE does not leak', () => {
     }
     assert.strictEqual(px(g, 0, 0), g.colors[0]);
 });
+const sameSet = (drawn, expected) =>
+    assert.deepStrictEqual([...drawn].sort(), expected.map(([x, y]) => `${x},${y}`).sort());
+check('PAINT fills exactly the pixels the server recorded (#85)', () => {
+    const g = gd();
+    g.drawCircle(server.cx, server.cy, server.r, 1);
+    g.paint(server.cx, server.cy, 4, 1);
+    sameSet(lit(g, g.colors[4]), server.painted);
+});
+check('GPRINT draws exactly the pixels the server recorded (#85)', () => {
+    const g = gd();
+    const t = server.gprint;
+    g.drawText(t.x, t.y, t.text, t.color);
+    sameSet(lit(g, g.colors[t.color]), t.pixels);
+});
 check('PAINT flows through a one-pixel corridor and nowhere else (#86)', () => {
     const g = gd();
     const wall = (x1, y1, x2, y2) => g.drawLine(x1, y1, x2, y2, 1);

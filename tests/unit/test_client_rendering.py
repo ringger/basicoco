@@ -25,9 +25,18 @@ def test_client_rendering_harness(basic, tmp_path):
     basic.process_command('PMODE 4,1')
     basic.process_command('SCREEN 1,1')
     basic.process_command('CIRCLE(100,90),23,1')
-    circle = {'cx': 100, 'cy': 90, 'r': 23,
-              'pixels': [list(p) for p, c in basic.graphics.pixel_buffer.items() if c == 1]}
+    def pixels(color):
+        return [list(p) for p, c in basic.graphics.pixel_buffer.items() if c == color]
+
+    circle = {'cx': 100, 'cy': 90, 'r': 23, 'pixels': pixels(1)}
     assert circle['pixels'], 'server recorded no circle pixels'
+    # PAINT inside it and GPRINT beside it: the harness checks the client
+    # draws exactly the pixels the server recorded (#85)
+    basic.process_command('PAINT(100,90),4,1')
+    circle['painted'] = pixels(4)
+    basic.process_command('GPRINT(140,30),"AB?~",2')
+    circle['gprint'] = {'x': 140, 'y': 30, 'text': 'AB?~', 'color': 2, 'pixels': pixels(2)}
+    assert circle['painted'] and circle['gprint']['pixels']
     circle_file = tmp_path / 'server_circle.json'
     circle_file.write_text(json.dumps(circle))
 
