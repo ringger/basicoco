@@ -229,7 +229,7 @@ class ASTEvaluator(ASTVisitor):
         # Array access uses the same syntax as function calls — both are parsed
         # as FunctionCallNode and distinguished here at evaluation time.
         if len(arg_values) > 0:  # Has arguments, likely array access
-            indices = [int(val) for val in arg_values]
+            indices = self._subscript_values(arg_values)
             return self.emulator.read_array_element(func_name, indices)
 
         # Neither function nor array access
@@ -245,14 +245,20 @@ class ASTEvaluator(ASTVisitor):
         )
         raise ValueError(error.format_message())
 
+    def _subscript_values(self, values):
+        """Array subscripts as ints; a string subscript is ?TM."""
+        if any(isinstance(value, str) for value in values):
+            self._type_mismatch("array subscripts must be numbers")
+        return [int(value) for value in values]
+
+    def _subscripts(self, index_nodes):
+        """Evaluate array subscript expressions to ints."""
+        return self._subscript_values([self.visit(node) for node in index_nodes])
+
     def visit_array_access(self, node: ArrayAccessNode) -> Any:
         """Visit array access"""
         array_name = node.array_name.upper()
-
-        # Evaluate indices
-        indices = []
-        for index_node in node.indices:
-            indices.append(int(self.visit(index_node)))
+        indices = self._subscripts(node.indices)
 
         # Get array element
         value, error = self.emulator.variable_manager.get_array_element(array_name, indices)
@@ -443,7 +449,7 @@ class ASTEvaluator(ASTVisitor):
             if err:
                 return err
             try:
-                indices = [int(self.visit(idx)) for idx in node.target.indices]
+                indices = self._subscripts(node.target.indices)
             except (ValueError, TypeError) as e:
                 err = self.emulator.error_context.wrapped_error(
                     "Invalid array index: ", e,
@@ -495,7 +501,7 @@ class ASTEvaluator(ASTVisitor):
         variables = []
         for var_node in node.variables:
             if isinstance(var_node, ArrayAccessNode):
-                indices = [int(self.visit(idx)) for idx in var_node.indices]
+                indices = self._subscripts(var_node.indices)
                 var_name = var_node.array_name.upper()
                 variables.append({
                     'name': var_name,

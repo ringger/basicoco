@@ -187,27 +187,32 @@ class BasicGraphics:
                 x -= 1
                 err += 2 * (y - x) + 1
 
-    def _parse_coord_pair(self, args, command_name):
-        """Parse (x,y) from args. Returns (x, y, remainder_after_paren) or error list."""
+    def _parse_coord_pair(self, args, command_name, usage=None):
+        """Parse (x,y) from args. Returns (x, y, remainder_after_paren) or error list.
+
+        *usage* is (syntax, example) for the error suggestions; it defaults
+        to a single point, NAME(x,y).
+        """
+        syntax, example = usage or (f'{command_name}(x,y)', f'{command_name}(100,50)')
         args = args.strip()
         if not (args.startswith('(') and ')' in args):
             return self._syntax_error(
                 f"{command_name} requires parenthesized coordinates",
-                [f'Correct syntax: {command_name}(x,y)', f'Example: {command_name}(100,50)'])
+                [f'Correct syntax: {syntax}', f'Example: {example}'])
         coords_end = self._find_matching_parenthesis(args, 0)
         if coords_end == -1:
             return self._syntax_error(
                 f"Missing closing parenthesis in {command_name} coordinates",
-                [f'Correct syntax: {command_name}(x,y)',
-                 f'Example: {command_name}(100,50)',
+                [f'Correct syntax: {syntax}',
+                 f'Example: {example}',
                  'Make sure parentheses are properly matched'])
         coords = args[1:coords_end]
         coord_parts = _split_args(coords)
         if len(coord_parts) != 2:
             return self._syntax_error(
-                f"{command_name} requires exactly two coordinates",
-                [f'Correct syntax: {command_name}(x,y)',
-                 f'Example: {command_name}(100,50)',
+                f"{command_name} coordinates need an X and a Y: ({coords})",
+                [f'Correct syntax: {syntax}',
+                 f'Example: {example}',
                  'Specify both X and Y coordinates'])
         x = self.emulator.eval_int(coord_parts[0])
         y = self.emulator.eval_int(coord_parts[1])
@@ -247,23 +252,24 @@ class BasicGraphics:
         end of the previous LINE. Returns (x1, y1, x2, y2, extra_parts) or an
         error response list.
         """
+        usage = (f'{command_name}(x1,y1)-(x2,y2)', f'{command_name}(0,0)-(50,50)')
         args = args.strip()
         if args.startswith('-'):
             x1, y1 = self.last_line_end
             rest = args[1:].strip()
         else:
-            first = self._parse_coord_pair(args, command_name)
+            first = self._parse_coord_pair(args, command_name, usage)
             if isinstance(first, list):
                 return first
             x1, y1, rest = first
             if not rest.startswith('-'):
                 return self._syntax_error(
                     f"{command_name} requires (x1,y1)-(x2,y2)",
-                    [f'Correct syntax: {command_name}(x1,y1)-(x2,y2)',
-                     f'Example: {command_name}(0,0)-(50,50)',
+                    [f'Correct syntax: {usage[0]}',
+                     f'Example: {usage[1]}',
                      'Put a dash between the two coordinate pairs'])
             rest = rest[1:].strip()
-        second = self._parse_coord_pair(rest, command_name)
+        second = self._parse_coord_pair(rest, command_name, usage)
         if isinstance(second, list):
             return second
         x2, y2, remainder = second

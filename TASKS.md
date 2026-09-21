@@ -41,6 +41,9 @@ match the session task list, where every entry here is mirrored.
 - [ ] **PPOINT sees PAINT fills and GPRINT text** [#85]
   The server tracks LINE/CIRCLE/DRAW/PSET pixels but not PAINT or GPRINT, so `PPOINT` inside a painted area or on GPRINT text returns 0.
   **Done when:** the server records PAINT fills (same flood-fill rules as the client) and GPRINT glyph pixels, and tests check PPOINT inside a painted box and on a GPRINT stroke.
+- [ ] **The CLI prints every runtime error twice** [#98]
+  `program_executor.py` logs each untrapped runtime error with `logger.warning`; basicoco.py configures no logging, so Python prints the warning on stderr just before the CLI shows the same error. A BASIC error is normal program output, not a server problem.
+  **Done when:** running `10 PRINT 1/0` in basicoco.py shows the error once, with a test.
 - [ ] **Robustness test sweep** [#86]
   These areas work but haven't been tested with awkward inputs. Write the tests; any bug found becomes its own task.
   - File I/O: several files open at once; EOF exactly at the last record; a file of thousands of lines; closing a file mid-read.
@@ -59,9 +62,9 @@ Rarely needed, or hard to emulate meaningfully.
   Because unknown names with parentheses auto-dimension as arrays, `X=VARPTR(A)` and `X=USR(1)` silently return 0, `PEEK(100)` says BAD SUBSCRIPT, and `EXEC 100` says "Unrecognized command".
   **Done when:** each gives a clear "not supported in BasiCoCo" error with suggestions (they become reserved names, so they can't be used as arrays), with tests. Real PEEK/POKE (a simulated memory map) would be a separate task.
 - [ ] **Random-access files: FIELD, GET/PUT (file)** [#88] — **Done when:** OPEN "R", FIELD, LSET/RSET, GET#/PUT# and LOC/LOF work with tests.
-- [ ] **Error messages that leak Python or suggest the wrong syntax** [#95]
-  `A("X")=5` says "invalid literal for int() with base 10: 'X'" (should be TYPE MISMATCH); a malformed LINE coordinate (`LINE (A,)-(1,1)`) says "LINE requires exactly two coordinates" and suggests `LINE(x,y)`; `IF 1 THEN "A"` reports "Unrecognized command: A", dropping the quotes.
-  **Done when:** each gives a BASIC-style message with correct suggestions, with tests.
+- [ ] **PRINT items without a separator** [#99]
+  Color BASIC accepts `PRINT "A""B"` and `PRINT "X="X` (adjacent items print as if separated by `;`); BasiCoCo says `Unexpected "B"`.
+  **Done when:** adjacent PRINT items print like `;`-separated ones (PRINT and PRINT#), with tests, and the rule is in docs/audit_decisions.md.
 - [ ] **Prove or remove possibly unreachable branches** [#96]
   No test reaches these, and the #81 probes suggest nothing can: ast_evaluator.py `visit_if_statement` ELSE-with-a-number branch (`IF 0 THEN 30 ELSE 10+10` takes another path); control_flow.py's second NEXT WITHOUT FOR; ast_parser.py's `'` token and leftover-REM checks (the splitter removes comments first); ast_converter.py `_is_jump_target`'s quote branch.
   **Done when:** each has a test that reaches it, or is deleted with the full suite passing.

@@ -69,10 +69,17 @@ def test_else_rem_is_a_comment_not_a_jump(basic, helpers):
 
 # -- arrays ------------------------------------------------------------------
 
-def test_string_array_index_is_refused(basic, helpers):
-    result = basic.process_command('A("X")=5')
-    assert 'Invalid array index' in errors(helpers, result)
-    assert 'A' not in basic.arrays or basic.arrays['A'] == [0] * 11
+@pytest.mark.parametrize('command', ['A("X")=5', 'PRINT A("X")', 'X=A(1,"X")'])
+def test_string_array_subscript_is_a_type_mismatch(basic, helpers, command):
+    """#95: used to say "invalid literal for int() with base 10: 'X'"."""
+    message = errors(helpers, basic.process_command(command))
+    assert 'TYPE MISMATCH: array subscripts must be numbers' in message
+    assert 'int()' not in message
+
+
+def test_string_subscript_in_input_is_a_type_mismatch(basic, helpers):
+    result = helpers.execute_program(basic, ['10 INPUT A("X")'])
+    assert 'TYPE MISMATCH: array subscripts must be numbers' in errors(helpers, result)
 
 
 def test_string_array_dimension_is_refused(basic, helpers):
@@ -153,8 +160,25 @@ class TestFileErrors:
 def test_line_with_a_malformed_coordinate(basic, helpers, command):
     basic.process_command('PMODE 4,1')
     result = basic.process_command(command)
-    assert 'LINE' in errors(helpers, result)
+    message = errors(helpers, result)
+    # #95: suggests LINE's own syntax, not the single-point LINE(x,y)
+    assert 'Correct syntax: LINE(x1,y1)-(x2,y2)' in message, message
+    assert 'LINE(x,y)' not in message
     assert not helpers.get_graphics_output(result)
+
+
+def test_a_point_command_still_suggests_one_point(basic, helpers):
+    basic.process_command('PMODE 4,1')
+    assert 'Correct syntax: PSET(x,y)' in errors(helpers, basic.process_command('PSET (1,)'))
+
+
+@pytest.mark.parametrize('command, shown', [
+    ('IF 1 THEN "A"', 'Unrecognized command: "A"'),
+    ('"A"', 'Unrecognized command: "A"'),
+    ('X=5 "A"', 'Unexpected "A"'),
+])
+def test_syntax_errors_show_strings_with_their_quotes(basic, helpers, command, shown):
+    assert shown in errors(helpers, basic.process_command(command))
 
 
 def test_line_with_trailing_text(basic, helpers):

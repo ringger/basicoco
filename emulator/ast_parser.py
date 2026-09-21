@@ -97,6 +97,14 @@ class ASTParser:
         self._require_all_consumed(line)
         return result
 
+    @staticmethod
+    def _token_text(token, quote=False):
+        """A token as the user typed it: strings keep their double quotes;
+        with *quote*, anything else is shown in single quotes."""
+        if token['type'] == 'STRING':
+            return f'"{token["value"]}"'
+        return f"'{token['value']}'" if quote else str(token['value'])
+
     def _require_all_consumed(self, line):
         """Raise a syntax error if tokens remain after a complete parse
         (e.g. X=5 6, PRINT 1 2), instead of silently ignoring them."""
@@ -105,7 +113,7 @@ class ASTParser:
             if leftover['type'] == 'KEYWORD' and leftover['value'] == 'REM':
                 return
             error = self.error_context.syntax_error(
-                f"Unexpected '{leftover['value']}'",
+                f"Unexpected {self._token_text(leftover, quote=True)}",
                 line,
                 suggestions=[
                     "Separate statements with a colon: A=1: B=2",
@@ -756,7 +764,7 @@ class ASTParser:
             raise RegistryCommandError(f"Registry command: {token['value']}")
 
         # Reject anything else
-        raise ValueError(f"Unrecognized command: {token['value']}")
+        raise ValueError(f"Unrecognized command: {self._token_text(token)}")
 
     def _is_assignment(self) -> bool:
         """Check if the current tokens form an assignment"""
