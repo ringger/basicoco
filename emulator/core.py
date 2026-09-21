@@ -84,6 +84,7 @@ class CoCoBasic:
         self.error_line = 0               # ERL pseudo-variable
         self.error_resume_position = None # (line_num, sub_index) of error site
         self.in_error_handler = False     # Prevents recursive error handling
+        self.pending_input_error = None   # an INPUT answer that couldn't be stored (#118)
 
         # Multi-variable INPUT state
         self.input_variables = None  # List of variables waiting for input
@@ -807,8 +808,10 @@ class CoCoBasic:
         var_desc is a dict with 'name', 'array', and optionally 'indices'.
         For backwards compatibility, var_desc may also be a plain string (variable name).
 
-        Returns None on success, or an error message (e.g. "BAD SUBSCRIPT")
-        that the caller must report.
+        Returns None on success, or an error message (e.g. "BAD SUBSCRIPT",
+        "OVERFLOW"). The message is also kept as pending_input_error, so the
+        next continue_program_execution() raises it at the INPUT statement:
+        front ends that only store and continue can't drop it.
         """
         if isinstance(var_desc, str):
             # Legacy: plain variable name string
@@ -827,10 +830,14 @@ class CoCoBasic:
             try:
                 typed_value = basic_number_prefix(str(value))
             except OverflowError:
-                typed_value = 0
+                self.pending_input_error = 'OVERFLOW'   # as VAL reports it
+                return self.pending_input_error
 
         if is_array and indices is not None:
-            return self.variable_manager.set_array_element(var_name, indices, typed_value)
+            err = self.variable_manager.set_array_element(var_name, indices, typed_value)
+            if err:
+                self.pending_input_error = err
+            return err
         self.variables[var_name] = typed_value
         return None
 
@@ -879,6 +886,7 @@ class CoCoBasic:
         self.error_line = 0
         self.error_resume_position = None
         self.in_error_handler = False
+        self.pending_input_error = None
 
         # Clear multi-variable INPUT state
         self.clear_input_state()

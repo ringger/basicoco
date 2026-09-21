@@ -324,6 +324,40 @@ class TestStoreInputValue:
         assert basic.variables['N$'] == 'WORLD'
 
 
+class TestInputAnswerErrors:
+    """#118: an answer that can't be stored (a number too large, a subscript
+    out of range) is a runtime error at the INPUT statement; it used to be
+    stored as 0 or dropped by the web and CLI front ends."""
+
+    @staticmethod
+    def run(basic, lines, answers):
+        return '\n'.join(run_with_inputs(basic, lines, answers))
+
+    def test_overflowing_number_stops_with_overflow(self, basic):
+        text = self.run(basic, ['10 INPUT A', '20 PRINT "AFTER";A'], ['1E999'])
+        assert 'OVERFLOW at line 10' in text
+        assert 'AFTER' not in text
+
+    def test_bad_subscript_in_the_answer_target(self, basic):
+        text = self.run(basic, ['10 INPUT A(20)', '20 PRINT "AFTER"'], ['5'])
+        assert 'BAD SUBSCRIPT at line 10' in text and 'AFTER' not in text
+
+    def test_on_error_traps_it(self, basic):
+        text = self.run(basic, [
+            '10 ON ERROR GOTO 100', '20 INPUT A', '30 PRINT "AFTER"', '40 END',
+            '100 PRINT "ERR";ERR;"LINE";ERL: RESUME NEXT'], ['1E999'])
+        assert 'ERR 6 LINE 20' in text and 'AFTER' in text
+
+    def test_an_error_on_the_last_line_is_still_reported(self, basic):
+        text = self.run(basic, ['10 INPUT A(20)'], ['5'])
+        assert 'BAD SUBSCRIPT' in text
+
+    def test_the_error_is_reported_once(self, basic):
+        self.run(basic, ['10 INPUT A', '20 END'], ['1E999'])
+        text = self.run(basic, ['10 INPUT A', '20 PRINT "OK"'], ['5'])
+        assert 'OVERFLOW' not in text and 'OK' in text
+
+
 class TestInputParserArraySupport:
     """The AST parser should parse INPUT with array subscripts."""
 

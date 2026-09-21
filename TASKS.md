@@ -52,8 +52,6 @@ Each was decided provisionally (`auto` in docs/audit_decisions.md) and works as 
 
 - [ ] **DRAW variable substitution (`M=X;,=Y;`, `U=N;`)** [#117] Now an error ("unknown command '='"); Extended Color BASIC supports it.
   **Done when:** implemented with tests, or documented as unsupported in HELP DRAW and docs/audit_decisions.md.
-- [ ] **Numeric INPUT of an overflowing value stores 0** [#118] `INPUT A` given `1E999` sets A to 0 silently.
-  **Done when:** it gives ?OV (or re-asks, ?REDO), decided and tested.
 - [ ] **Coverage pass over what changed since the last one** [#119]
   **Done when:** `tools/diff_coverage.py` against 33f5f6e shows every uncovered changed line tested or listed with a reason in tests/README.
 - [ ] **A reusable BASIC probe tool** [#122] The session repeatedly hand-wrote scratch scripts to run snippets and print outputs, errors, stack depths and pixels.

@@ -17,6 +17,10 @@ from .error_context import (error_response, text_response, error_message, text_m
 
 logger = logging.getLogger(__name__)
 
+# program_counter for "resume after the last statement" (sorts after every
+# real (line, subline) position)
+END_OF_PROGRAM = (float('inf'), 0)
+
 
 # ERR values, numbered as in Microsoft BASIC (whose ERR/ERL/ON ERROR this
 # extension follows; Color BASIC itself has no ERR). Specific phrases come
@@ -79,12 +83,14 @@ class ProgramExecutor:
     # ------------------------------------------------------------------
 
     def _save_resume_point(self, current_pos_index, all_positions):
-        """Save the program counter to the next position for later resumption."""
+        """Save the program counter to the next position for later resumption
+        (END_OF_PROGRAM after the last statement: resuming then just ends
+        the program, reporting any pending INPUT error first)."""
         emu = self.emulator
         if current_pos_index + 1 < len(all_positions):
             emu.program_counter = all_positions[current_pos_index + 1]
         else:
-            emu.program_counter = None
+            emu.program_counter = END_OF_PROGRAM
 
     def _rebuild_data_statements(self):
         """Rebuild the READ queue from the DATA values collected at store
@@ -606,21 +612,42 @@ class ProgramExecutor:
         emu.iteration_count = 0
         all_positions = sorted(emu.expanded_program.keys())
 
-        try:
-            start_index = all_positions.index(emu.program_counter)
-        except ValueError:
-            emu.running = False
-            emu.program_counter = None
-            error = emu.error_context.runtime_error(
-                "Cannot resume - program has been modified",
-                suggestions=[
-                    'The program was changed while paused',
-                    'Use RUN to start the program from the beginning'
-                ]
-            )
-            return error_response(error)
+        if emu.program_counter == END_OF_PROGRAM:
+            start_index = len(all_positions)
+        else:
+            try:
+                start_index = all_positions.index(emu.program_counter)
+            except ValueError:
+                emu.running = False
+                emu.program_counter = None
+                error = emu.error_context.runtime_error(
+                    "Cannot resume - program has been modified",
+                    suggestions=[
+                        'The program was changed while paused',
+                        'Use RUN to start the program from the beginning'
+                    ]
+                )
+                return error_response(error)
 
-        output = self._execute_statements_loop(all_positions, start_index)
+        output = []
+        pending, emu.pending_input_error = emu.pending_input_error, None
+        if pending:
+            # The INPUT answer couldn't be stored: a runtime error at the
+            # INPUT statement (the one before the resume point), which ON
+            # ERROR can trap like any other
+            input_index = start_index - 1
+            line = all_positions[input_index][0]
+            error = emu.error_context.runtime_error(
+                pending, line, suggestions=['Check the value typed in answer to INPUT',
+                                            'Undimensioned arrays allow indices 0 to 10'])
+            start_index, action = self._runtime_error(
+                error_response(error)[0], input_index, all_positions, output)
+            if action == 'stop':
+                emu.program_counter = None
+                emu.finish_immediate_line()
+                return output
+
+        output += self._execute_statements_loop(all_positions, start_index)
         if not emu.waiting_for_input and not emu.waiting_for_pause_continuation:
             emu.running = False
             emu.program_counter = None
