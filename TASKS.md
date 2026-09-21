@@ -47,6 +47,7 @@ Each was decided provisionally (`auto` in docs/audit_decisions.md) and works as 
 - [ ] **PAINT with no border colour: fill the start colour's region (current) or default the border to the paint colour?** [#112] Check the Extended Color BASIC manual; server `_record_paint` and client `paint()` change together.
 - [ ] **Line numbers up to 65535 (current) or the CoCo's 63999?** [#113]
 - [ ] **CIRCLE arcs: 64-segment polygon (current) vs the CoCo's own rasterisation and ratio rule?** [#114]
+- [ ] **Non-numeric INPUT answer: read as 0 (current, VAL's rule) or re-ask with ?REDO as Color BASIC does?** [#125]
 
 ## Loose ends
 
