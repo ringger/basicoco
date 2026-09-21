@@ -36,6 +36,31 @@ match the session task list, where every entry here is mirrored.
   9 loops of 12 stickers, one per layer; precompute node positions in Python. Teaching value.
   **Done when:** a program animates the ring view in sync with moves, and a test checks node colors against pycuber.
 
+## Decisions waiting for the user
+
+Each was decided provisionally (`auto` in docs/audit_decisions.md) and works as described there.
+**Done when** (each): the user confirms or picks the alternative; if it changes, code, tests and the decision row follow.
+
+- [ ] **ERR numbering: Microsoft's (current, /0 = 11) or CoCo 3 ERNO's (/0 = 10)?** [#109] Also whether errors with no code (LOOP WITHOUT DO, ELSE/ENDIF WITHOUT IF) should stay ERR 0.
+- [ ] **PRINT# comma: a literal `,` (current) or Color BASIC's print-zone padding?** [#110] address_book.bas relies on the literal comma; Color BASIC's own behaviour is unverified.
+- [ ] **Enforce the 255-character string limit (?LS ERROR)?** [#111] Currently unlimited.
+- [ ] **PAINT with no border colour: fill the start colour's region (current) or default the border to the paint colour?** [#112] Check the Extended Color BASIC manual; server `_record_paint` and client `paint()` change together.
+- [ ] **Line numbers up to 65535 (current) or the CoCo's 63999?** [#113]
+- [ ] **CIRCLE arcs: 64-segment polygon (current) vs the CoCo's own rasterisation and ratio rule?** [#114]
+
+## Loose ends
+
+- [ ] **DRAW variable substitution (`M=X;,=Y;`, `U=N;`)** [#117] Now an error ("unknown command '='"); Extended Color BASIC supports it.
+  **Done when:** implemented with tests, or documented as unsupported in HELP DRAW and docs/audit_decisions.md.
+- [ ] **Numeric INPUT of an overflowing value stores 0** [#118] `INPUT A` given `1E999` sets A to 0 silently.
+  **Done when:** it gives ?OV (or re-asks, ?REDO), decided and tested.
+- [ ] **Coverage pass over what changed since the last one** [#119]
+  **Done when:** `tools/diff_coverage.py` against 33f5f6e shows every uncovered changed line tested or listed with a reason in tests/README.
+- [ ] **A reusable BASIC probe tool** [#122] The session repeatedly hand-wrote scratch scripts to run snippets and print outputs, errors, stack depths and pixels.
+  **Done when:** `tools/basic_probe.py` does that from arguments or stdin (checking conftest helpers first), with a test.
+- [ ] **Post-audit chapter in docs/project_evolution.md** [#90]
+  **Done when:** the chapter covers the audit's follow-up work (coverage pass, browser tests, parity between server and canvas, decisions) in the document's collaboration-story voice.
+
 ## Low priority — not implemented from Extended Color BASIC
 
 Rarely needed, or hard to emulate meaningfully.
