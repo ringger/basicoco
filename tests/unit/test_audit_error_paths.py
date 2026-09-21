@@ -150,6 +150,25 @@ class TestFileErrors:
         assert 'UNDEFINED LINE 999' in errors(helpers, result)
         assert helpers.get_text_output(result) == []
 
+    def test_chain_to_a_missing_line_is_not_trapped(self, basic, helpers):
+        """#116: the chained program never started, so there's nothing to
+        RESUME, and the old handler's line means nothing in it."""
+        helpers.load_program(basic, ['10 PRINT "IN NEXT"', '100 PRINT "HANDLER IN NEXTP"'])
+        basic.process_command('SAVE "NEXTP"')
+        result = run(basic, helpers, ['10 ON ERROR GOTO 100', '20 CHAIN "NEXTP",999',
+                                      '100 PRINT "OLD HANDLER": END'])
+        assert 'UNDEFINED LINE 999' in errors(helpers, result)
+        assert helpers.get_text_output(result) == []
+
+
+@pytest.mark.xfail(reason='#123: RUN ignores its line number', strict=True)
+def test_run_to_a_missing_line(basic, helpers):
+    """#116: RUN n clears ON ERROR first, so this always stops."""
+    helpers.load_program(basic, ['10 ON ERROR GOTO 20', '20 PRINT "H"'])
+    result = basic.process_command('RUN 999')
+    assert 'UNDEFINED LINE 999' in errors(helpers, result)
+    assert helpers.get_text_output(result) == []
+
 
 # -- graphics ----------------------------------------------------------------
 
