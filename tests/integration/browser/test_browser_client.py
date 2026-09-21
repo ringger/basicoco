@@ -58,7 +58,12 @@ CANVAS_COLOR_INDEX_JS = """([x, y]) => {
      'CIRCLE(100,100),20: PAINT(100,100),2,4: PRESET(100,100)', 'GPRINT(150,50),"HI",1'],
     ['COLOR 2,1', 'PCLS 6', 'LINE(10,10)-(60,60),PSET,BF: LINE(20,20)-(50,50),PRESET,B'],
     ['PSET(10,10)', 'PMODE 4,1', 'COLOR 7', 'PSET(30,30): PCLS: PSET(40,40)'],
-], ids=['draw-and-preset', 'pcls-colour-and-boxes', 'pmode-and-pcls'])
+    # #106: GET a block, PUT it back with every action
+    ['LINE(10,10)-(40,10),2: LINE(10,10)-(10,40),6: CIRCLE(25,25),8,5', 'GET(10,10)-(40,40),S',
+     'LINE(100,100)-(100,130),3: LINE(100,120)-(130,120),1', 'COLOR 4',
+     'PUT(100,100),S,PSET: PUT(150,100),S,PRESET: PUT(100,20),S,OR',
+     'LINE(150,20)-(180,40),3,BF: PUT(150,20),S,AND: PUT(20,100),S,NOT'],
+], ids=['draw-and-preset', 'pcls-colour-and-boxes', 'pmode-and-pcls', 'get-and-put'])
 def test_ppoint_matches_the_canvas(basic_page, commands):
     """#124: PPOINT (the server's record) and the canvas (what the client
     drew) agree after COLOR, PRESET, LINE...PRESET, PCLS and PMODE."""

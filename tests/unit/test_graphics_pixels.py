@@ -144,6 +144,42 @@ class TestColourState:
         assert ppoint(gfx, 10, 10) == 0
 
 
+class TestGetPut:
+    """#106: PPOINT sees what PUT draws, with the canvas's rules ("on" means
+    not the background; PRESET/NOT write the foreground where off)."""
+
+    @pytest.fixture
+    def block(self, gfx):
+        # A 4x4 block at (10,10): its top row lit in colour 2
+        gfx.process_command('LINE (10,10)-(13,10),2')
+        gfx.process_command('GET (10,10)-(13,13),S')
+        # The screen under the target at (50,50): its left column lit in 3
+        gfx.process_command('LINE (50,50)-(50,53),3')
+        gfx.process_command('COLOR 4')
+        return gfx
+
+    @pytest.mark.parametrize('action, corner, top_right, bottom_right', [
+        ('PSET', 2, 2, 0),      # a copy of the block
+        ('PRESET', 0, 0, 4),    # its inverse: off becomes the foreground
+        ('AND', 3, 0, 0),       # the screen kept only where both are on (the corner)
+        ('OR', 2, 2, 0),        # the block's on pixels over the screen
+        ('NOT', 0, 4, 4),       # the screen area inverted
+    ])
+    def test_put_actions(self, block, action, corner, top_right, bottom_right):
+        block.process_command(f'PUT (50,50),s,{action}')   # lower-case name works too
+        assert ppoint(block, 50, 50) == corner
+        assert ppoint(block, 53, 50) == top_right
+        assert ppoint(block, 53, 53) == bottom_right
+
+    def test_put_leaves_the_rest_of_the_screen(self, block):
+        block.process_command('PUT (50,50),S,PSET')
+        assert ppoint(block, 12, 10) == 2 and ppoint(block, 54, 50) == 0
+
+    def test_put_of_an_unknown_block_draws_nothing(self, gfx):
+        gfx.process_command('PUT (50,50),NOPE')
+        assert gfx.graphics.pixel_buffer == {}
+
+
 class TestCircleRatioAndArcs:
     """#84: CIRCLE(x,y),r,c,ratio,start,end. The ratio scales the height
     (y radius = r * ratio); start and end are fractions of a turn,

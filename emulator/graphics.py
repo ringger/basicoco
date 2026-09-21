@@ -96,6 +96,7 @@ class BasicGraphics:
         self.pixel_buffer = {}  # Sparse dict: (x, y) -> color
         self.clear_color = 0  # Color of undrawn pixels (the last clear's fill)
         self.background = 0   # COLOR's background: PRESET's colour, PCLS's default
+        self.sprites = {}     # GET blocks: name -> {(dx, dy): colour}, like the client's spriteStorage
         self.last_line_end = (0, 0)  # Start point for LINE -(x,y)
     
     def register_commands(self, registry):
@@ -234,6 +235,51 @@ class BasicGraphics:
             self.pixel_buffer[p] = fill
             filled.add(p)
             stack.extend(((px + gx, py), (px - gx, py), (px, py + gy), (px, py - gy)))
+
+    def _on_screen(self, x, y):
+        return 0 <= x < self.SCREEN_WIDTH and 0 <= y < self.SCREEN_HEIGHT
+
+    def _record_get(self, x1, y1, x2, y2, name):
+        """Store a GET block as the client does: whole mode pixels from the
+        top-left to the bottom-right corner, off-screen parts reading 0."""
+        if self.emulator.graphics_mode is None:
+            return
+        gx, gy = self._MODE_PIXEL[self.emulator.graphics_mode]
+        ax, ay = self._snap(min(x1, x2), min(y1, y2))
+        bx, by = self._snap(max(x1, x2), max(y1, y2))
+        self.sprites[name] = {
+            (x - ax, y - ay): self.get_pixel(x, y) if self._on_screen(x, y) else 0
+            for y in range(ay, by + 1, gy) for x in range(ax, bx + 1, gx)}
+
+    def _record_put(self, x, y, name, action):
+        """Record a PUT with the client's rules (GraphicsDisplay.putGraphics):
+        a pixel is "on" when it isn't the background; PRESET and NOT write
+        the foreground (COLOR's first argument) where they turn a pixel on."""
+        sprite = self.sprites.get(name)
+        if self.emulator.graphics_mode is None or sprite is None:
+            return
+        bg, fg = self.background, self.emulator.current_draw_color
+
+        def on(colour):
+            return colour % PALETTE_SIZE != bg % PALETTE_SIZE
+
+        ox, oy = self._snap(x, y)
+        for (dx, dy), block in sprite.items():
+            px, py = ox + dx, oy + dy
+            if not self._on_screen(px, py):
+                continue
+            screen = self.get_pixel(px, py)
+            if action == 'PSET':
+                new = block
+            elif action == 'PRESET':
+                new = bg if on(block) else fg
+            elif action == 'AND':
+                new = screen if on(block) and on(screen) else bg
+            elif action == 'OR':
+                new = block if on(block) else screen
+            else:  # NOT
+                new = bg if on(screen) else fg
+            self.pixel_buffer[(px, py)] = new
 
     def _record_text(self, x, y, text, color):
         """Record GPRINT's pixels as the client's drawText plots them: one
@@ -693,8 +739,9 @@ class BasicGraphics:
                  'Example: GET(0,0)-(50,50),A',
                  'Specify rectangular area and target array'])
         x1, y1, x2, y2, extra = result
-        return [{'type': 'get', 'x1': x1, 'y1': y1, 'x2': x2, 'y2': y2,
-                 'array': extra[0].strip().upper()}]
+        name = extra[0].strip().upper()
+        self._record_get(x1, y1, x2, y2, name)
+        return [{'type': 'get', 'x1': x1, 'y1': y1, 'x2': x2, 'y2': y2, 'array': name}]
     
     @_graphics_command('PUT', require_graphics=True)
     def execute_put(self, args):
@@ -714,7 +761,7 @@ class BasicGraphics:
                         'Example: PUT(100,50),A',
                         'Specify array name after coordinates'])
 
-            array_name = parts[0].strip()
+            array_name = parts[0].strip().upper()   # as GET stores it
             action = 'PSET'  # Default action
             if len(parts) > 1 and parts[1]:
                 action = parts[1].strip().upper()
@@ -723,6 +770,7 @@ class BasicGraphics:
                     ['PUT actions are PSET, PRESET, AND, OR and NOT',
                      'Example: PUT(100,50),A,PSET'])
 
+            self._record_put(x, y, array_name, action)
             return [{'type': 'put', 'x': x, 'y': y, 'array': array_name, 'action': action}]
         else:
             return self._syntax_error("Invalid PUT syntax", ['Correct syntax: PUT(x,y),array_name or PUT(x,y),array_name,action',
