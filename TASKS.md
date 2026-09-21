@@ -35,9 +35,6 @@ match the session task list, where every entry here is mirrored.
 - [ ] **Ring (circle-graph) view with synchronized animation** [#61] (after #55, #58)
   9 loops of 12 stickers, one per layer; precompute node positions in Python. Teaching value.
   **Done when:** a program animates the ring view in sync with moves, and a test checks node colors against pycuber.
-- [ ] **math_plotter.bas: the DRAW star isn't where its comments say** [#104]
-  Menu option 6 does `PSET (128, 40)` to "position" the star, but PSET doesn't move the DRAW pen, so the star starts wherever the pen was (now the screen centre). The path isn't a five-pointed star, and `PAINT (128, 80), 1` may not be inside a closed region.
-  **Done when:** the routine positions with `BM`, draws a closed star, paints its inside, and a browser test checks the painted area stays inside the star.
 
 ## Low priority — not implemented from Extended Color BASIC
 
