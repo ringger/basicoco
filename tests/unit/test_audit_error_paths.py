@@ -104,7 +104,7 @@ def test_delete_a_range(basic, helpers):
 def test_renum_refuses_to_reorder_lines(basic, helpers):
     helpers.load_program(basic, ['10 PRINT 1', '20 PRINT 2', '30 PRINT 3'])
     # Renumbering from line 20 to start at 5 would move 20 and 30 before 10
-    result = basic.process_command('RENUM 5,1,20')
+    result = basic.process_command('RENUM 5,20,1')
     assert 'RENUM WOULD REORDER PROGRAM LINES' in errors(helpers, result)
     assert sorted(basic.program) == [10, 20, 30]
 

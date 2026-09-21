@@ -44,8 +44,8 @@ class TestRenumCommand:
         basic.process_command('30 PRINT "SKIP"')
         basic.process_command('40 PRINT "TARGET"')
         
-        # RENUM with custom start and increment
-        basic.process_command('RENUM 100,50')
+        # RENUM new_start,,increment (CoCo order: new, old start, increment)
+        basic.process_command('RENUM 100,,50')
         
         # Verify GOTO reference was updated
         list_result = basic.process_command('LIST')
@@ -153,8 +153,7 @@ class TestRenumCommand:
         basic.process_command('15 PRINT "C"')
         
         # RENUM with start=1000, increment=100
-        result = basic.process_command('RENUM 1000,100')
-        result = basic.process_command('RENUM 1000,100')
+        result = basic.process_command('RENUM 1000,,100')
         text_output = helpers.get_text_output(result)
         assert 'RENUMBERED 3 LINES' in text_output
         
@@ -175,9 +174,8 @@ class TestRenumCommand:
         basic.process_command('110 PRINT "CHANGE"')
         
         # RENUM from line 100 with start=500, increment=10
-        result = basic.process_command('RENUM 500,10,100')
-        text_output = helpers.get_text_output(result)
-        assert 'RENUMBERED' in ' '.join(text_output) or len(result) == 0  # Check for success message or no error
+        result = basic.process_command('RENUM 500,100,10')
+        assert helpers.get_text_output(result) == ['RENUMBERED 2 LINES']
         
         # Verify partial renumbering
         list_result = basic.process_command('LIST')
@@ -216,7 +214,7 @@ class TestRenumCommand:
         
         # RENUM from line 100 with start=50 - would try to put line 100 at 50, 
         # but line 50 exists and won't be renumbered
-        result = basic.process_command('RENUM 50,10,100')
+        result = basic.process_command('RENUM 50,100,10')
         
         # Should detect conflict
         error_messages = helpers.get_error_messages(result)
@@ -227,13 +225,19 @@ class TestRenumCommand:
         # Create program
         basic.process_command('10 PRINT "TEST"')
         
+        # The last line may land exactly near the top
+        result = basic.process_command('RENUM 65530')
+        assert helpers.get_text_output(result) == ['RENUMBERED 1 LINES']
+
         # Test line number too high
-        result = basic.process_command('RENUM 65530,10')
+        basic.process_command('65531 PRINT "SECOND"')
+        result = basic.process_command('RENUM 65530,,10')
         error_messages = helpers.get_error_messages(result)
         assert any('exceed maximum value' in msg.lower() for msg in error_messages)
-        
+        assert sorted(basic.program) == [65530, 65531]
+
         # Test invalid increment
-        result = basic.process_command('RENUM 10,0')
+        result = basic.process_command('RENUM 10,,0')
         error_messages = helpers.get_error_messages(result)
         assert any('must be positive' in msg.lower() for msg in error_messages)
 
@@ -325,3 +329,32 @@ class TestRenumCommand:
         
         assert 'FOR I = 1 TO 100' in list_output  # 100 unchanged
         assert 'PRINT I * 200' in list_output     # 200 unchanged
+
+
+class TestRenumArgumentOrder:
+    """#97: Extended Color BASIC's order, RENUM new,start,increment
+    (a CoCo listing's RENUM must renumber the same lines here)."""
+
+    def listing(self, basic, helpers):
+        return helpers.get_text_output(basic.process_command('LIST'))
+
+    def test_second_argument_is_the_first_line_to_renumber(self, basic, helpers):
+        helpers.load_program(basic, ['10 PRINT 1', '20 PRINT 2', '30 GOTO 20'])
+        basic.process_command('RENUM 100,20')
+        assert self.listing(basic, helpers) == ['10 PRINT 1', '100 PRINT 2', '110 GOTO 100']
+
+    def test_third_argument_is_the_increment(self, basic, helpers):
+        helpers.load_program(basic, ['10 PRINT 1', '20 PRINT 2', '30 PRINT 3'])
+        basic.process_command('RENUM 100,20,5')
+        assert self.listing(basic, helpers) == ['10 PRINT 1', '100 PRINT 2', '105 PRINT 3']
+
+    def test_empty_arguments_keep_their_defaults(self, basic, helpers):
+        helpers.load_program(basic, ['1 PRINT 1', '2 PRINT 2'])
+        basic.process_command('RENUM ,,5')
+        assert self.listing(basic, helpers) == ['10 PRINT 1', '15 PRINT 2']
+
+    def test_too_many_arguments(self, basic, helpers):
+        helpers.load_program(basic, ['10 PRINT 1'])
+        result = basic.process_command('RENUM 10,10,10,10')
+        assert helpers.get_error_messages(result)
+        assert sorted(basic.program) == [10]

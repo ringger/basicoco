@@ -65,9 +65,6 @@ match the session task list, where every entry here is mirrored.
 - [ ] **LINE INPUT # into a numeric variable silently stores 0** [#94]
   `LINE INPUT #1, A` reads the line and sets A to 0 with no error. LINE INPUT only takes string variables.
   **Done when:** it gives TYPE MISMATCH (file and console LINE INPUT alike), with tests.
-- [ ] **Decide RENUM's argument order** [#97]
-  BasiCoCo takes `RENUM new,increment,old`; Extended Color BASIC takes `RENUM new,old,increment`. Programs typed from CoCo listings would renumber the wrong lines.
-  **Done when:** the user picks one; if CoCo's, RENUM, its HELP text and tests are changed, and the choice is recorded in docs/audit_decisions.md.
 
 ## Low priority — not implemented from Extended Color BASIC
 

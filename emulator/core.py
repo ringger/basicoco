@@ -971,8 +971,8 @@ class CoCoBasic:
         self.command_registry.register('RENUM', self.execute_renum,
                                      category='system',
                                      description="Renumber program lines",
-                                     syntax="RENUM [new_start],[increment],[old_start]",
-                                     examples=["RENUM", "RENUM 100", "RENUM 100,10", "RENUM 100,10,50"])
+                                     syntax="RENUM [new_start],[old_start],[increment]",
+                                     examples=["RENUM", "RENUM 100", "RENUM 1000,500", "RENUM 100,,5"])
         
         self.command_registry.register('SAFETY', self.execute_safety,
                                      category='system',
@@ -1187,32 +1187,32 @@ class CoCoBasic:
 
     def execute_renum(self, args):
         """RENUM statement - renumber program lines"""
-        # Parse arguments: RENUM [new_start],[increment],[old_start]
-        # Defaults: new_start=10, increment=10, old_start=first line
-        
+        # Extended Color BASIC order: RENUM [new_start],[old_start],[increment]
+        # Defaults: new_start=10, old_start=first line, increment=10
+
         new_start = 10
         increment = 10
         old_start = None
-        
-        if args:
-            args = args.strip()
-            parts = args.split(',')
-            
+
+        if args.strip():
+            parts = [p.strip() for p in StatementSplitter.split_args(args, keep_empty=True)]
             try:
-                if len(parts) >= 1 and parts[0].strip():
-                    new_start = int(parts[0].strip())
-                if len(parts) >= 2 and parts[1].strip():
-                    increment = int(parts[1].strip())
-                if len(parts) >= 3 and parts[2].strip():
-                    old_start = int(parts[2].strip())
+                if len(parts) > 3:
+                    raise ValueError('too many arguments')
+                if parts[0]:
+                    new_start = int(parts[0])
+                if len(parts) >= 2 and parts[1]:
+                    old_start = int(parts[1])
+                if len(parts) >= 3 and parts[2]:
+                    increment = int(parts[2])
             except ValueError:
                 error = self.error_context.syntax_error(
                     "Invalid line number in RENUM command",
                     self.current_line,
                     suggestions=[
-                        'Line numbers must be integers',
-                        'Example: RENUM 10,10',
-                        'Check that line numbers are valid'
+                        'RENUM new_start,old_start,increment (any may be left empty)',
+                        'Example: RENUM 100,,10',
+                        'Line numbers must be integers'
                     ]
                 )
                 return error_response(error)
@@ -1234,7 +1234,7 @@ class CoCoBasic:
                 self.current_line,
                 suggestions=[
                     'Increment must be greater than 0',
-                    'Example: RENUM 10,10 (increment of 10)',
+                    'Example: RENUM 10,,10 (increment of 10)',
                     'Use positive increment value'
                 ]
             )
@@ -1255,8 +1255,6 @@ class CoCoBasic:
         line_mapping = {}
         current_new = new_start
         for old_line in old_lines:
-            line_mapping[old_line] = current_new
-            current_new += increment
             if current_new > 65535:
                 error = self.error_context.runtime_error(
                     "New line numbers exceed maximum value",
@@ -1267,7 +1265,9 @@ class CoCoBasic:
                     ]
                 )
                 return error_response(error)
-        
+            line_mapping[old_line] = current_new
+            current_new += increment
+
         # Check for conflicts with existing lines not being renumbered
         unchanged_lines = set(self.program.keys()) - set(old_lines)
         new_lines = set(line_mapping.values())
