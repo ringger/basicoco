@@ -68,6 +68,7 @@ Tests multiple components working together:
 - `test_websocket_security.py` - origin checks, KILL protocol, Ctrl+C, command serialization, reconnect (live server)
 - `test_complex_if_then.py` - Complex conditional logic
 - `test_program_audit.py` - runs every bundled program via pexpect (in a temp working directory)
+- `test_standalone_cli.py` - `basicoco.py` with commands piped in, checking everything it prints on stdout and stderr
 - `test_input_resume.py`, `test_array_combinations.py`, `test_single_line_control_structures.py`
 
 #### End-to-End Tests (`integration/e2e/`)

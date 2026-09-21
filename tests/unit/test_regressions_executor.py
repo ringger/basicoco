@@ -308,3 +308,16 @@ class TestErrorHandling:
         ])
         assert errors == []
         assert 'Z' not in ' '.join(texts)
+
+
+@pytest.mark.parametrize('program, message', [
+    (['10 PRINT 1/0'], 'Division by zero'),
+    (['10 GOTO 10'], 'TOO MANY ITERATIONS'),
+])
+def test_runtime_errors_are_output_not_warnings(basic, helpers, caplog, program, message):
+    """#98: a BASIC runtime error is program output; logging it at WARNING
+    made the CLI (no logging configured) print it a second time."""
+    with caplog.at_level('WARNING'):
+        texts, errors = run(basic, helpers, program)
+    assert len(errors) == 1 and message in errors[0]
+    assert caplog.records == []

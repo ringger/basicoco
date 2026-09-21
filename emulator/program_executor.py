@@ -356,8 +356,9 @@ class ProgramExecutor:
                             emu.error_resume_position = (line_num, sub_index)
                             emu.in_error_handler = True
                             return handler_idx, 'jumped'
-                    # No handler or handler line not found
-                    logger.warning('Runtime error at line %d: %s',
+                    # No handler or handler line not found. The error is
+                    # program output (the caller shows it), so only debug-log it
+                    logger.debug('Runtime error at line %d: %s',
                                    all_positions[current_pos_index][0],
                                    item.get('message', '(unknown)'))
                     output.append(item)
@@ -385,14 +386,16 @@ class ProgramExecutor:
         while current_pos_index < len(all_positions) and emu.running:
             # Safety check
             emu.iteration_count += 1
+            # INFO, not WARNING: the program gets the message; the server log
+            # (INFO by default) still records runaway programs
             if emu.safety_enabled and emu.iteration_count > emu.max_iterations:
-                logger.warning('Program stopped: too many iterations (%d > %d)',
+                logger.info('Program stopped: too many iterations (%d > %d)',
                                emu.iteration_count, emu.max_iterations)
                 output.append(error_message('PROGRAM STOPPED - TOO MANY ITERATIONS'))
                 emu.running = False
                 break
             if emu.iteration_count > emu.max_absolute_iterations:
-                logger.warning('Program stopped: absolute iteration limit reached (%d)',
+                logger.info('Program stopped: absolute iteration limit reached (%d)',
                                emu.max_absolute_iterations)
                 output.append(error_message('PROGRAM STOPPED - ABSOLUTE ITERATION LIMIT REACHED'))
                 emu.running = False
