@@ -69,12 +69,27 @@ class TestBlockIfDetection:
 
 
 class TestErrorCodes:
+    # Microsoft BASIC's numbering (#102)
     @pytest.mark.parametrize('message,code', [
-        ('TYPE MISMATCH: cannot READ "SYNTAX" (line 10) into numeric A', 13),
-        ('SYNTAX ERROR: Unexpected token at line 10', 1),
-        ('Division by zero at line 20', 99),
-        ('BAD SUBSCRIPT at line 5\nSuggestions:\n  - SYNTAX example', 9),
+        ('NEXT WITHOUT FOR at line 30', 1),
+        ('SYNTAX ERROR: Unexpected token at line 10', 2),
+        ('RETURN WITHOUT GOSUB at line 5', 3),
         ('OUT OF DATA at line 3', 4),
+        ('ILLEGAL FUNCTION CALL: STRING$ needs a non-empty string', 5),
+        ('OVERFLOW at line 7', 6),
+        ('OUT OF MEMORY: A would need 2000000 elements', 7),
+        ('UNDEFINED LINE 999', 8),
+        ('BAD SUBSCRIPT at line 5\nSuggestions:\n  - SYNTAX example', 9),
+        ('Division by zero at line 20', 11),
+        ('Error in IF condition: Division by zero', 11),
+        ('TYPE MISMATCH: cannot READ "SYNTAX" (line 10) into numeric A', 13),
+        ('RESUME WITHOUT ERROR', 20),
+        ('WEND WITHOUT WHILE', 30),
+        ('FILE NOT OPEN: #1 at line 30', 52),
+        ('FILE NOT FOUND: X.DAT', 53),
+        ('FILE MODE ERROR: #1 is open for input', 54),
+        ('FILE ALREADY OPEN: #1', 55),
+        ('INPUT PAST END OF FILE: #1 at line 50', 62),
         ('something unknown', 0),
     ])
     def test_classify(self, message, code):

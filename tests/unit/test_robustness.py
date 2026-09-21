@@ -109,11 +109,16 @@ def test_an_error_inside_the_handler_stops_the_program(basic, helpers):
     assert len(errors) == 1 and 'Division by zero' in errors[0] and 'line 100' in errors[0]
 
 
-@pytest.mark.xfail(reason='#102: ERR codes mix numbering schemes (/0 is 99)', strict=True)
-def test_err_for_division_by_zero_is_a_real_error_code(basic, helpers):
+@pytest.mark.parametrize('failing, code', [
+    ('X=1/0', 11), ('READ A', 4), ('A$=1', 13), ('RETURN', 3),
+    pytest.param('GOTO 999', 8, marks=pytest.mark.xfail(
+        reason='#105: a jump to a missing line is not trapped by ON ERROR', strict=True)),
+])
+def test_err_uses_microsoft_numbering(basic, helpers, failing, code):
+    """#102: ERR numbering was a mix of schemes (division by zero was 99)."""
     texts, errors = run(basic, helpers, [
-        '10 ON ERROR GOTO 100', '20 X=1/0', '30 END', '100 PRINT ERR: END'])
-    assert texts != [' 99 ']
+        '10 ON ERROR GOTO 100', f'20 {failing}', '30 END', '100 PRINT ERR: END'])
+    assert errors == [] and texts == [f' {code} ']
 
 
 # -- CHAIN ALL ---------------------------------------------------------------

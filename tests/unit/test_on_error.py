@@ -135,8 +135,8 @@ class TestErrErl:
             '110 RESUME NEXT',
         ])
         texts = helpers.get_text_output(result)
-        # Division by zero should give error code 99
-        assert any('99' in t for t in texts)
+        # Division by zero is error 11, as in Microsoft BASIC (#102)
+        assert ' 11 ' in texts
 
     def test_err_erl_default_zero(self, basic):
         """ERR and ERL default to 0 before any error."""

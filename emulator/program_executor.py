@@ -18,16 +18,32 @@ from .error_context import (error_response, text_response, error_message, text_m
 logger = logging.getLogger(__name__)
 
 
+# ERR values, numbered as in Microsoft BASIC (whose ERR/ERL/ON ERROR this
+# extension follows; Color BASIC itself has no ERR). Specific phrases come
+# before general ones: the first pattern that matches wins. Anything
+# unrecognised is 0.
 _ERROR_CODES = [
-    (r'DIVISION BY ZERO|DIVIDE BY ZERO', 99),
-    (r'TYPE MISMATCH', 13),
-    (r'UNDEFINED LINE', 7),
-    (r'OVERFLOW', 6),
+    (r'NEXT WITHOUT FOR', 1),
+    (r'RETURN WITHOUT GOSUB', 3),
+    (r'RESUME WITHOUT ERROR', 20),
+    (r'WEND WITHOUT WHILE', 30),
     (r'OUT OF DATA', 4),
     (r'ILLEGAL FUNCTION|ILLEGAL QUANTITY', 5),
-    (r'STRING TOO LONG', 14),
+    (r'OVERFLOW', 6),
+    (r'OUT OF MEMORY', 7),
+    (r'UNDEFINED LINE', 8),
+    (r'DIVISION BY ZERO|DIVIDE BY ZERO', 11),
+    (r'TYPE MISMATCH', 13),
+    (r'STRING TOO LONG', 15),
+    (r'FILE NUMBER ERROR|FILE NOT OPEN', 52),     # Bad file number
+    (r'FILE NOT FOUND', 53),
+    (r'FILE MODE ERROR', 54),
+    (r'FILE ALREADY OPEN', 55),
+    (r'INPUT PAST END', 62),
+    (r'PERMISSION DENIED', 70),
+    (r'DIRECTORY NOT FOUND', 76),                 # Path not found
     (r'BAD SUBSCRIPT|SUBSCRIPT|OUT OF RANGE|DIMENSION', 9),
-    (r'SYNTAX', 1),
+    (r'SYNTAX', 2),
 ]
 
 

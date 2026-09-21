@@ -65,7 +65,7 @@ Nesting: `_skip_if_or_else_block()` counts nested IFs by checking `stmt.startswi
 
 `ON ERROR GOTO <line>` registers an error handler; `ON ERROR GOTO 0` disables it. When a runtime error occurs during program execution, `_handle_flow_control()` in `program_executor.py` intercepts the error (if a handler is registered and not already in an error handler), saves error state, and jumps to the handler line.
 
-State fields on `CoCoBasic`: `on_error_goto_line`, `error_number` (ERR), `error_line` (ERL), `error_resume_position`, `in_error_handler`. All reset by `clear_interpreter_state()`.
+State fields on `CoCoBasic`: `on_error_goto_line`, `error_number` (ERR), `error_line` (ERL), `error_resume_position`, `in_error_handler`. All reset by `clear_interpreter_state()`. ERR values follow Microsoft BASIC's numbering (/0 = 11, TM = 13): `_ERROR_CODES` in program_executor.py maps each error message to its number.
 
 `RESUME` / `RESUME NEXT` / `RESUME <line>` return `resume` / `resume_next` / `jump` directives handled by `_handle_flow_control()`. ERR and ERL are read-only pseudo-variables exposed in `visit_variable()`.
 
