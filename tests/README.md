@@ -73,6 +73,11 @@ Tests multiple components working together:
 #### End-to-End Tests (`integration/e2e/`)
 - `test_cli_sessions.py` - drives `cli_client.py` with pexpect against a live server: store/run, INPUT round trip, and a full lunar lander game
 
+#### Browser tests (`integration/browser/`)
+- `test_browser_client.py` - the web client in headless Google Chrome (Playwright): commands typed into the real REPL, output and scrollback read back, graphics checked pixel by pixel on the real canvas
+- Marked `browser` and `slow`; they use the installed Chrome (`channel='chrome'`) and are skipped, with the launch error as the reason, if Chrome can't start. Run just these with `python -m pytest -m browser`
+- `tests/client/dual_monitor_harness.js` (run by `unit/test_client_rendering.py`) checks the same client code in Node on a fake canvas, with no browser needed
+
 #### Live server fixture
 `tests/integration/conftest.py` provides `live_server`: it starts `app.py` on a free localhost port with its working directory set to a fresh temp directory, so anything the server writes stays out of the repo's `programs/`. Tests get `live_server.url`, `.port` and `.programs_dir`. A server that fails to start fails the test — nothing is silently skipped.
 
