@@ -252,3 +252,31 @@ class TestPrintOkNotSuppressed:
         result = basic.process_command('PRINT "OK"')
         text = helpers.get_text_output(result)
         assert 'OK' in text
+
+
+class TestAdjacentPrintItems:
+    """#99: as in Color BASIC, an item next to a string literal needs no
+    separator; it prints as if separated by ';'."""
+
+    @pytest.mark.parametrize('items, shown', [
+        ('"X="X', 'X= 5 '),
+        ('"A""B"', 'AB'),
+        ('"A" "B"', 'AB'),
+        ('A$"!"', 'HI!'),
+        ('"(";X;")"', '( 5 )'),
+        ('"N="X,"M="X', 'N= 5 '.ljust(16) + 'M= 5 '),   # comma: next 16-column zone
+    ])
+    def test_string_next_to_an_item(self, basic, helpers, items, shown):
+        basic.process_command('X=5: A$="HI"')
+        result = basic.process_command(f'PRINT {items}')
+        assert helpers.get_error_messages(result) == []
+        assert helpers.get_text_output(result) == [shown]
+
+    def test_two_numbers_still_need_a_separator(self, basic, helpers):
+        errors = helpers.get_error_messages(basic.process_command('PRINT 1 2'))
+        assert errors and "Unexpected '2'" in errors[0]
+
+    def test_in_a_program_and_a_then_branch(self, basic, helpers):
+        result = helpers.execute_program(basic, [
+            '10 X=7: IF X>5 THEN PRINT "BIG"X: PRINT "DONE"'])
+        assert helpers.get_text_output(result) == ['BIG 7 ', 'DONE']

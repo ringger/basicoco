@@ -50,8 +50,5 @@ Rarely needed, or hard to emulate meaningfully.
   Because unknown names with parentheses auto-dimension as arrays, `X=VARPTR(A)` and `X=USR(1)` silently return 0, `PEEK(100)` says BAD SUBSCRIPT, and `EXEC 100` says "Unrecognized command".
   **Done when:** each gives a clear "not supported in BasiCoCo" error with suggestions (they become reserved names, so they can't be used as arrays), with tests. Real PEEK/POKE (a simulated memory map) would be a separate task.
 - [ ] **Random-access files: FIELD, GET/PUT (file)** [#88] — **Done when:** OPEN "R", FIELD, LSET/RSET, GET#/PUT# and LOC/LOF work with tests.
-- [ ] **PRINT items without a separator** [#99]
-  Color BASIC accepts `PRINT "A""B"` and `PRINT "X="X` (adjacent items print as if separated by `;`); BasiCoCo says `Unexpected "B"`.
-  **Done when:** adjacent PRINT items print like `;`-separated ones (PRINT and PRINT#), with tests, and the rule is in docs/audit_decisions.md.
 - [ ] **Optimal solver for short scrambles (bidirectional BFS)** [#62] (after #56)
   **Done when:** any ≤8-move scramble is solved optimally, checked against a Python BFS for seeded scrambles.

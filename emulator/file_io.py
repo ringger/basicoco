@@ -238,82 +238,38 @@ class FileIOManager:
             handle.flush()
             return []
 
-        # Parse and evaluate expressions with separators (;,)
-        # Walk through expr_part, splitting on ; and , while respecting quotes and parens
-        output_parts = []
-        trailing_separator = None
+        # The items parse exactly as PRINT's (the same parser), so adjacent
+        # items, separators and expressions follow the same rules
+        try:
+            node = self.emulator.ast_parser.parse_statement(
+                'PRINT ' + expr_part, self.emulator.current_line)
+        except ValueError as e:
+            return error_response(self.emulator.error_context.wrapped_error(
+                "Error in PRINT#: ", e, self.emulator.current_line,
+                ["Check expression syntax", "Example: PRINT #1, X, Y"]))
 
-        tokens = self._tokenize_print_args(expr_part)
-        for token_type, token_value in tokens:
-            if token_type == 'sep':
-                if token_value == ',':
-                    output_parts.append(',')
-                # semicolon = no separator in file output
-                trailing_separator = token_value
-            elif token_type == 'expr':
-                trailing_separator = None
-                try:
-                    value = self.emulator.evaluate_expression(token_value)
-                    # Same text PRINT shows, so numbers keep their spaces and
-                    # INPUT # reads 5;6 back as two numbers
-                    output_parts.append(format_print_item(value))
-                except BASIC_RUNTIME_ERRORS as e:
-                    return error_response(self.emulator.error_context.wrapped_error(
-                        "Error evaluating PRINT# expression: ", e, self.emulator.current_line,
-                        ["Check expression syntax", "Example: PRINT #1, X, Y"]))
+        output_parts = []
+        for i, expr in enumerate(node.expressions):
+            try:
+                value = self.emulator.ast_evaluator.visit(expr)
+            except BASIC_RUNTIME_ERRORS as e:
+                return error_response(self.emulator.error_context.wrapped_error(
+                    "Error evaluating PRINT# expression: ", e, self.emulator.current_line,
+                    ["Check expression syntax", "Example: PRINT #1, X, Y"]))
+            # Same text PRINT shows, so numbers keep their spaces and
+            # INPUT # reads 5;6 back as two numbers
+            output_parts.append(format_print_item(value))
+            # A comma writes a literal comma (INPUT # reads the items back
+            # separately); a semicolon writes nothing
+            if i < len(node.separators) and node.separators[i] == ',':
+                output_parts.append(',')
 
         text = ''.join(output_parts)
-        if trailing_separator is None:
-            text += '\n'
+        if len(node.separators) < len(node.expressions):
+            text += '\n'   # no trailing separator: end the line
         handle.write(text)
         handle.flush()
         return []
-
-    def _tokenize_print_args(self, text):
-        """Split PRINT# arguments into (type, value) pairs.
-        type is 'expr' or 'sep'. Respects quotes and parentheses.
-        """
-        tokens = []
-        i = 0
-        current_expr = []
-        paren_depth = 0
-
-        while i < len(text):
-            ch = text[i]
-            if ch == '"':
-                # Consume quoted string
-                current_expr.append(ch)
-                i += 1
-                while i < len(text) and text[i] != '"':
-                    current_expr.append(text[i])
-                    i += 1
-                if i < len(text):
-                    current_expr.append(text[i])
-                    i += 1
-            elif ch == '(':
-                paren_depth += 1
-                current_expr.append(ch)
-                i += 1
-            elif ch == ')':
-                paren_depth -= 1
-                current_expr.append(ch)
-                i += 1
-            elif ch in (',', ';') and paren_depth == 0:
-                expr_str = ''.join(current_expr).strip()
-                if expr_str:
-                    tokens.append(('expr', expr_str))
-                tokens.append(('sep', ch))
-                current_expr = []
-                i += 1
-            else:
-                current_expr.append(ch)
-                i += 1
-
-        expr_str = ''.join(current_expr).strip()
-        if expr_str:
-            tokens.append(('expr', expr_str))
-
-        return tokens
 
     # ── INPUT# ────────────────────────────────────────────────────────
 

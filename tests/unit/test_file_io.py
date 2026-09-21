@@ -158,6 +158,9 @@ class TestPrintFile:
         ('5;6;-3', ' 5  6 -3 \n'),
         ('"X=";.5', 'X= .5 \n'),
         ('"A";"B"', 'AB\n'),
+        ('"X=".5', 'X= .5 \n'),            # #99: no separator next to a string
+        ('"A""B"', 'AB\n'),
+        ('"A" "B"', 'AB\n'),
     ])
     def test_print_formats_items_like_print(self, basic, helpers, items, written):
         """#103: PRINT# wrote 5;6 as 56 (read back as one number)."""

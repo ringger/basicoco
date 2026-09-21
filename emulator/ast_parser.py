@@ -10,7 +10,7 @@ import re
 from typing import Any, List, Optional, Dict
 
 from .ast_nodes import (
-    ASTNode, SourceLocation, Operator,
+    ASTNode, SourceLocation, Operator, NodeType,
     LiteralNode, VariableNode, BinaryOpNode, UnaryOpNode,
     FunctionCallNode, ArrayAccessNode, AssignmentNode,
     IfStatementNode, ForStatementNode, WhileStatementNode,
@@ -1034,19 +1034,36 @@ class ASTParser:
                 location=self._make_location(print_token)
             )
 
+        def starts_item(token):
+            return bool(token) and not (
+                token['type'] == 'KEYWORD' and token['value'] not in _OPERATOR_KEYWORDS
+            ) and not (token['type'] == 'PUNCTUATION' and token['value'] != '(')
+
         # Parse expressions and separators
         expressions.append(self._parse_or_expression())
 
-        while self._match_punctuation(';', ','):
-            sep_token = self._advance()
-            separators.append(sep_token['value'])
-
-            # Check if there's another expression (not a statement keyword or another separator)
+        while True:
             token = self._current_token()
-            if (token and
-                not (token['type'] == 'KEYWORD' and token['value'] not in _OPERATOR_KEYWORDS) and
-                not (token['type'] == 'PUNCTUATION' and token['value'] in (';', ','))):
+            if self._match_punctuation(';', ','):
+                sep_token = self._advance()
+                separators.append(sep_token['value'])
+
+                # Another expression follows unless a statement keyword or another separator does
+                token = self._current_token()
+                if (token and
+                    not (token['type'] == 'KEYWORD' and token['value'] not in _OPERATOR_KEYWORDS) and
+                    not (token['type'] == 'PUNCTUATION' and token['value'] in (';', ','))):
+                    expressions.append(self._parse_or_expression())
+            elif starts_item(token) and (
+                    token['type'] == 'STRING'
+                    or (isinstance(expressions[-1], LiteralNode)
+                        and expressions[-1].node_type == NodeType.STRING)):
+                # Color BASIC: an item next to a string literal needs no
+                # separator ("X="X, A$"!"); it prints as after ';'
+                separators.append(';')
                 expressions.append(self._parse_or_expression())
+            else:
+                break
 
         return PrintStatementNode(
             expressions=expressions,
