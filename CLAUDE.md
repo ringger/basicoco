@@ -2,6 +2,17 @@
 
 The main interpreter module is `emulator/core.py` (`CoCoBasic` class). All emulator source lives under `emulator/`. The conftest with test fixtures (`basic`, `helpers`, `temp_programs_dir`) is at `conftest.py` (project root).
 
+## Working on this project
+
+- **Backlog**: [TASKS.md](TASKS.md). Every entry must be finishable and say **Done when**. High-priority entries are mirrored on the session task list (same `#N`). A bug found while working on something else becomes a TASKS.md entry (and a session task if high priority), not an inline fix.
+- **Commits**: commit each task directly on `main` as soon as it is done and its tests pass: one task, one commit. Don't wait to be asked. No feature branches, no PRs. **Push only when the user says so.**
+- **Tests first**: a bug fix starts with a failing test that reproduces it; every fix keeps that test. Before calling a check meaningful, make sure it fails on the old code.
+- **Judgment calls** made without the user go in [docs/audit_decisions.md](docs/audit_decisions.md), marked `auto`, with open questions flagged for review.
+- **Don't simulate in your head**: never trace cube permutations, state transitions or other combinatorial questions by reasoning — run the emulator or pycuber. Validate Rubik's algorithms against pycuber (`tools/validate_moves.py`) before writing BASIC for them.
+- **Background test runs**: wait for the completion notice; don't poll.
+- **Installing tools or packages**: ask the user first; install and run in separate steps.
+- **Stuck or about to write throwaway experiments**: describe the plan or the mismatch to the user first.
+
 ## Command Dispatch
 
 `process_statement()` in `core.py` tries these in order:

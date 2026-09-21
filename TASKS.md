@@ -1,0 +1,72 @@
+# BasiCoCo Tasks
+
+The project backlog. Every entry is a task that can be finished, with a
+**Done when** line. Standing rules and known behaviour live in
+[CLAUDE.md](CLAUDE.md); past decisions and their rationale in
+[docs/audit_decisions.md](docs/audit_decisions.md). Numbers like `[#82]`
+match the session task list, where every high-priority task is mirrored.
+
+## High priority
+
+- [ ] **Check the Rubik's static-render bleed-through in a real browser** [#82]
+  Reported: in the static "CUBE SOLVED!" view, stickers from back subcubes bleed through at the boundaries between the three visible faces. The Sept 2026 audit could not reproduce it outside a browser: the per-subcube depth sort matched a true per-pixel z-buffer for every move type at 15/45/75°, and a replica of the client's LINE/PAINT rasterization was within 16 px of an ideal fill. Headless-Chrome tests (`tests/integration/browser/`) can now look at the real canvas.
+  **Done when:** a browser test renders the solved cube and asserts no back-face sticker color shows inside the front faces. If it passes, close the report; if it reproduces, fix it with that test.
+- [ ] **Coverage pass over every surface touched in the audit** [#81]
+  Run pytest-cov (`-m ""`) over `emulator/`, `app.py`, `cli_client.py`, `basicoco.py`; add tests for real behaviour in uncovered, audit-changed code. Map each changed client method (GraphicsDisplay, TextDisplay, TabManager) to a harness or browser check.
+  **Done when:** every uncovered line in audit-changed code has a test or a one-line reason listed here, and every changed client method has a check. Commit per area.
+- [ ] **Generate the move tables from pycuber** [#55]
+  A `tools/` script that derives each move's facelet 4-cycles (R L U D F B M E S X Y Z) from pycuber and emits BASIC DATA for the existing `CL(2,2,2,5)` layout. Extend `tools/validate_moves.py` rather than duplicating it.
+  **Done when:** the script emits all 12 moves, and a test applying each move from the tables matches pycuber on every sticker.
+- [ ] **One table-driven ApplyMove instead of 10 Perm\* routines** [#56] (after #55)
+  The Perm\* routines are ~230 of the engine's 423 lines; CCW is 3×CW. One ~15-line routine walking the DATA cycles (reversed for CCW) is ~25× faster and removes the class of code behind past cycle-direction bugs. Keep `CL` so DrawCube and the solver are untouched.
+  **Done when:** the Perm\* routines are gone and the move, sticker-stability, validate_moves and 100-scramble solver tests pass unchanged.
+
+## Medium priority
+
+- [ ] **Cycle-notation tool for algorithms** [#57] (after #55)
+  Prints a move string's net effect ("swaps 2 top edges, corners fixed").
+  **Done when:** the tool exists in `tools/` with a test, and every algorithm claim in `docs/rubiks_solver_plan.md` has been checked with it.
+- [ ] **Flat-net view of the cube (ShowNet)** [#58] (easier after #56)
+  54 boxes from a DATA layout, no depth sort, no PAINT.
+  **Done when:** a ShowNet subroutine exists, a program shows it beside the 3D cube, and a test checks the net's colors after moves against pycuber.
+- [ ] **Move-cancellation pass on solver output** [#59]
+  Merge same-face turns (UUU→u), cancel inverses (bB→∅), commute opposite faces. Audit data: mean 152 quarter turns after #63/#64; a merge pass cuts ~13%.
+  **Done when:** the simplified sequence is what gets animated, the 100-scramble test still solves every cube, and before/after mean move counts are recorded.
+- [ ] **Table-driven solver lookups** [#60] (after #56)
+  Replace the ~150 lines of hand-unrolled FE0–FE11 / FC0–FC7 / KickMid\* lookups with loops over DATA tables.
+  **Done when:** they're gone and the solver tests pass unchanged.
+- [ ] **Ring (circle-graph) view with synchronized animation** [#61] (after #55, #58)
+  9 loops of 12 stickers, one per layer; precompute node positions in Python. Teaching value.
+  **Done when:** a program animates the ring view in sync with moves, and a test checks node colors against pycuber.
+- [ ] **CIRCLE ratio and arc arguments**
+  `CIRCLE(x,y),r,c,ratio,start,end` — the ratio, start and end arguments are parsed but ignored (`CIRCLE(100,100),20,1,.5` still draws a full round circle).
+  **Done when:** server pixel tracking and the client draw ellipses and arcs the same way (shared algorithm, as for circles), with server tests, a harness check and a browser check.
+- [ ] **PPOINT sees PAINT fills and GPRINT text**
+  The server tracks LINE/CIRCLE/DRAW/PSET pixels but not PAINT or GPRINT, so `PPOINT` inside a painted area or on GPRINT text returns 0.
+  **Done when:** the server records PAINT fills (same flood-fill rules as the client) and GPRINT glyph pixels, and tests check PPOINT inside a painted box and on a GPRINT stroke.
+- [ ] **Decide: finish or remove the web client's session save/load**
+  `saveSession()` runs on a timer but `loadSession()` is never called, and saved ImageData serializes to `{}`. The server's 10-minute reconnect grace already keeps programs across a reload.
+  **Done when:** the user has decided, and the feature is either finished (restores tabs after a reload, with a browser test) or removed (code, preference checkbox and help text).
+- [ ] **Decide: drop or enforce `min_args` / `max_args`**
+  `CommandRegistry.register` accepts them but nothing passes or enforces them.
+  **Done when:** the user has decided, and they are removed or enforced for every command, with tests.
+- [ ] **Robustness test sweep**
+  These areas work but haven't been tested with awkward inputs. Write the tests; any bug found becomes its own task.
+  - File I/O: several files open at once; EOF exactly at the last record; a file of thousands of lines; closing a file mid-read.
+  - ON ERROR / RESUME: handler inside a nested GOSUB using LOCAL; RESUME NEXT across sublines; an error raised inside the handler.
+  - CHAIN ALL carrying arrays, open files and an active error handler.
+  - GOTO out of deeply nested FOR/WHILE/IF blocks, repeated in a loop (stacks mustn't grow without bound).
+  - Strings: very long strings; empty strings in +, MID$, INSTR; comparisons with trailing spaces.
+  - Graphics: PAINT through narrow corridors; LINE/DRAW crossing the screen edge; switching PMODE mid-drawing.
+  **Done when:** each bullet has at least one test (tests that expose bugs are marked xfail against a new task).
+
+## Low priority — not implemented from Extended Color BASIC
+
+Rarely needed, or hard to emulate meaningfully.
+
+- [ ] **Unsupported machine-language words fail misleadingly: PEEK, POKE, VARPTR, EXEC, USR**
+  Because unknown names with parentheses auto-dimension as arrays, `X=VARPTR(A)` and `X=USR(1)` silently return 0, `PEEK(100)` says BAD SUBSCRIPT, and `EXEC 100` says "Unrecognized command".
+  **Done when:** each gives a clear "not supported in BasiCoCo" error with suggestions (they become reserved names, so they can't be used as arrays), with tests. Real PEEK/POKE (a simulated memory map) would be a separate task.
+- [ ] **Random-access files: FIELD, GET/PUT (file)** — **Done when:** OPEN "R", FIELD, LSET/RSET, GET#/PUT# and LOC/LOF work with tests.
+- [ ] **Optimal solver for short scrambles (bidirectional BFS)** [#62] (after #56)
+  **Done when:** any ≤8-move scramble is solved optimally, checked against a Python BFS for seeded scrambles.

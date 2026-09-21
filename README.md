@@ -119,7 +119,7 @@ These were not in Extended Color BASIC but make the environment more learner-fri
 - **GPRINT(x,y),"text"[,color]** — draw text on the graphics screen using a built-in 4x6 pixel font
 
 ### Not Yet Implemented
-See [ISSUES.md](ISSUES.md) for the full list. Highlights: PEEK/POKE, random-access file I/O (FIELD/GET/PUT).
+See [TASKS.md](TASKS.md) for the full list. Highlights: PEEK/POKE, random-access file I/O (FIELD/GET/PUT).
 
 ## Interfaces
 
@@ -137,7 +137,7 @@ This is a BASIC interpreter, not a hardware emulator. It doesn't emulate the 680
 - **SOUND** accepts frequency in Hz (1-4095) rather than the CoCo's pitch table values (1-255)
 - **PRINT** formats numbers like Color BASIC (9 significant digits, `.5`), but comma zones and some spacing don't exactly match hardware
 - **Keywords must be separated from names**: `FORI=1TO10` (crunched listings) is not understood, though `10PRINT`, `IFA$="X"THEN` and `DATA"A"` are
-- **No PEEK/POKE/USR/EXEC** (see [ISSUES.md](ISSUES.md)), so programs relying on machine language or memory tricks won't run
+- **No PEEK/POKE/USR/EXEC** (see [TASKS.md](TASKS.md)), so programs relying on machine language or memory tricks won't run
 - **Modern extensions** (MOD, EXIT FOR, WHILE/WEND, DO/LOOP, LOCAL, PRIVATE, PAUSE, labels) are additions beyond the original ROM
 - Can't run real CoCo binaries, cassette images, or disk images
 
