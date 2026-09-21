@@ -568,10 +568,9 @@ class CoCoBasic:
             if condition:
                 try:
                     condition_result = self.evaluate_condition(condition)
-                except (ValueError, IndexError, KeyError, AttributeError, TypeError) as e:
-                    return error_response(self.error_context.syntax_error(
-                        f"Invalid IF condition: {condition} ({e})",
-                        self.current_line,
+                except BASIC_RUNTIME_ERRORS as e:
+                    return error_response(self.error_context.wrapped_error(
+                        "Error in IF condition: ", e, self.current_line,
                         suggestions=['Example: IF X = 5 THEN',
                                      'Conditions compare two values: =, <>, <, >, <=, >=',
                                      'Check for a missing operand after the operator']))

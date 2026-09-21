@@ -59,9 +59,6 @@ match the session task list, where every entry here is mirrored.
 - [ ] **A failing RESUME re-enters the error handler forever** [#92]
   `10 ON ERROR GOTO 30 / 20 X=1/0 / 30 PRINT "HANDLER" / 40 RESUME "A"`: RESUME's own error is trapped by the same handler, which runs again, until the runaway guard stops the program (found in the #81 pass). An error raised inside the handler should stop the program with that error, as CoCo does.
   **Done when:** a test shows the program above prints HANDLER once and stops with the RESUME error.
-- [ ] **An IF condition that raises leaks a Python exception at the prompt** [#93]
-  Typing `IF 1/0 THEN` raises ZeroDivisionError out of `process_command` (core.py's multi-line-IF branch catches a hand-written tuple, not `BASIC_RUNTIME_ERRORS`). The web server turns it into "Error: Division by zero"; other callers crash.
-  **Done when:** the branch uses `BASIC_RUNTIME_ERRORS` and a test gets a BASIC error for `IF 1/0 THEN`.
 - [ ] **LINE INPUT # into a numeric variable silently stores 0** [#94]
   `LINE INPUT #1, A` reads the line and sets A to 0 with no error. LINE INPUT only takes string variables.
   **Done when:** it gives TYPE MISMATCH (file and console LINE INPUT alike), with tests.

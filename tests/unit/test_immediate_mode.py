@@ -1,6 +1,8 @@
 """Immediate-mode behaviour (task #19): control structures and jumps typed
 at the prompt run alongside the stored program, not in place of it."""
 
+import pytest
+
 
 def show(helpers, result):
     return helpers.get_text_output(result), helpers.get_error_messages(result)
@@ -72,3 +74,15 @@ def test_immediate_loops_do_not_duplicate_data(basic, helpers):
     basic.process_command('FOR I=1 TO 1: X=1: NEXT')
     basic.process_command('FOR I=1 TO 1: X=1: NEXT')
     assert len(basic.data_statements) == 2
+
+
+@pytest.mark.parametrize('condition, message', [
+    ('1/0', 'Division by zero'),                 # #93: used to escape as ZeroDivisionError
+    ('9^999', 'OVERFLOW'),
+    ('X=', 'Error in IF condition'),
+])
+def test_block_if_whose_condition_fails_is_a_basic_error(basic, helpers, condition, message):
+    result = basic.process_command(f'IF {condition} THEN')
+    assert message in '\n'.join(helpers.get_error_messages(result)), result
+    assert basic.if_stack == []
+    assert helpers.get_text_output(basic.process_command('PRINT "OK"')) == ['OK']
