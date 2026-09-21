@@ -47,9 +47,6 @@ match the session task list, where every high-priority task is mirrored.
 - [ ] **Decide: finish or remove the web client's session save/load**
   `saveSession()` runs on a timer but `loadSession()` is never called, and saved ImageData serializes to `{}`. The server's 10-minute reconnect grace already keeps programs across a reload.
   **Done when:** the user has decided, and the feature is either finished (restores tabs after a reload, with a browser test) or removed (code, preference checkbox and help text).
-- [ ] **Decide: drop or enforce `min_args` / `max_args`**
-  `CommandRegistry.register` accepts them but nothing passes or enforces them.
-  **Done when:** the user has decided, and they are removed or enforced for every command, with tests.
 - [ ] **Robustness test sweep**
   These areas work but haven't been tested with awkward inputs. Write the tests; any bug found becomes its own task.
   - File I/O: several files open at once; EOF exactly at the last record; a file of thousands of lines; closing a file mid-read.

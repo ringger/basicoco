@@ -53,9 +53,8 @@ class CommandRegistry:
             'string': []       # String functions
         }
     
-    def register(self, command_name: str, handler: Callable, 
-                min_args: int = 0, max_args: Optional[int] = None,
-                aliases: Optional[List[str]] = None, 
+    def register(self, command_name: str, handler: Callable,
+                aliases: Optional[List[str]] = None,
                 category: str = 'system',
                 description: str = "",
                 syntax: str = "",
@@ -65,9 +64,8 @@ class CommandRegistry:
         
         Args:
             command_name: The primary command name
-            handler: Function to handle the command
-            min_args: Minimum number of arguments required
-            max_args: Maximum number of arguments allowed (None = unlimited)
+            handler: Function to handle the command (it validates its own
+                arguments, with command-specific errors)
             aliases: Alternative names for the command
             category: Command category for organization
             description: Brief description of what the command does
@@ -77,8 +75,6 @@ class CommandRegistry:
         command_name = command_name.upper()
         self.commands[command_name] = {
             'handler': handler,
-            'min_args': min_args,
-            'max_args': max_args,
             'category': category,
             'description': description,
             'syntax': syntax,

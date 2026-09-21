@@ -39,8 +39,6 @@ class TestCommandRegistry:
         self.registry.register(
             'PRINT',
             print_handler,
-            min_args=0,
-            max_args=None,
             aliases=['P', '?'],
             category='io',
             description='Display text and expressions',
@@ -67,8 +65,6 @@ class TestCommandRegistry:
         self.registry.register(
             'FOR',
             for_handler,
-            min_args=1,
-            max_args=1,
             category='control',
             description='Begin FOR loop with counter variable',
             syntax='FOR variable = start TO end [STEP increment]',
@@ -81,8 +77,7 @@ class TestCommandRegistry:
         assert info['category'] == 'control'
         assert info['syntax'] == 'FOR variable = start TO end [STEP increment]'
         assert len(info['examples']) == 2
-        assert info['min_args'] == 1
-        assert info['max_args'] == 1
+        assert 'min_args' not in info and 'max_args' not in info
 
     def test_command_aliases(self, basic, helpers):
         """Test command alias functionality"""
