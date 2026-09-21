@@ -11,8 +11,6 @@ import pytest
 from emulator.error_context import (
     ErrorContextManager, BasicError, SourceContext, 
     ErrorSeverity, ErrorCategory,
-    create_legacy_error, convert_error_to_legacy,
-    syntax_error, runtime_error, file_error
 )
 from emulator.core import CoCoBasic
 
@@ -125,17 +123,6 @@ class TestErrorContext:
         assert self.error_manager.current_source == "TEST LINE"
         assert self.error_manager.current_filename == "test.bas"
         assert self.error_manager.current_function == "test_function"
-        
-        # Test context stack - push_context creates a new context
-        self.error_manager.push_context(50, "NESTED LINE", "nested.bas")
-        assert self.error_manager.current_line == 50
-        assert len(self.error_manager.execution_stack) == 1
-        
-        # After popping, there's no previous context to restore to
-        # so current values become None
-        self.error_manager.pop_context()
-        assert self.error_manager.current_line == None
-        assert len(self.error_manager.execution_stack) == 0
 
     def test_syntax_error_creation(self, basic, helpers):
         """Test syntax error creation with context"""
@@ -221,57 +208,10 @@ class TestErrorContext:
         assert "load" in error.details
         assert any("exists" in suggestion for suggestion in error.suggestions)
 
-    def test_warning_creation(self, basic, helpers):
-        """Test warning message creation"""
-        warning = self.error_manager.warning(
-            "Variable not used",
-            line=20,
-            suggestions=["Remove unused variable", "Use variable in calculation"]
-        )
-        
-        assert warning.severity == ErrorSeverity.WARNING
-        assert warning.category == ErrorCategory.SYNTAX
-        assert warning.error_code == "WARNING"
-
-    def test_stack_trace_generation(self, basic, helpers):
-        """Test execution stack trace generation"""
-        # Build a call stack
-        self.error_manager.push_context(10, "GOSUB 100", "main.bas", "main")
-        self.error_manager.push_context(100, "GOSUB 200", "main.bas", "subroutine1") 
-        self.error_manager.push_context(200, "LET A = B + C", "main.bas", "subroutine2")
-        
-        stack_trace = self.error_manager.get_stack_trace()
-        assert len(stack_trace) == 3
-        
-        # Check that most recent call is first
-        assert "line 200" in stack_trace[0]
-        assert "line 100" in stack_trace[1]
-        assert "line 10" in stack_trace[2]
-
-    def test_legacy_compatibility_functions(self, basic, helpers):
-        """Test legacy compatibility functions"""
-        # Test create_legacy_error
-        legacy = create_legacy_error("Test error message")
-        assert legacy['type'] == 'error'
-        assert legacy['message'] == 'Test error message'
-        
-        # Test convert_error_to_legacy
-        error = BasicError("Structured error", ErrorCategory.SYNTAX)
-        legacy = convert_error_to_legacy(error)
-        assert legacy['type'] == 'error'
-        assert legacy['message'] == 'Structured error'
-        
-        # Test standalone error functions
-        syntax_err = syntax_error("Bad syntax", 10)
-        assert syntax_err['type'] == 'error'
-        assert "SYNTAX ERROR" in syntax_err['message']
-        assert "line 10" in syntax_err['message']
-        
-        runtime_err = runtime_error("Runtime problem", 25)
-        assert "line 25" in runtime_err['message']
-        
-        file_err = file_error("File issue", "test.bas", 15)
-        assert "test.bas" in file_err['message']
+    def test_file_error_always_has_suggestions(self, basic, helpers):
+        """#13: every file error carries at least two suggestions."""
+        error = self.error_manager.file_error("DISK FULL", "x.bas", "save", line=5)
+        assert len(error.suggestions) >= 2
 
     def test_integration_with_expression_evaluator(self, basic, helpers):
         """Test integration with expression evaluator error reporting"""
@@ -307,18 +247,6 @@ class TestErrorContext:
         assert errors[0].category == ErrorCategory.SYNTAX
         assert errors[1].category == ErrorCategory.RUNTIME
         assert errors[2].category == ErrorCategory.TYPE
-
-    def test_error_message_enhancement(self, basic, helpers):
-        """Test error message enhancement functions"""
-        from emulator.error_context import enhance_error_message
-        
-        # Test basic enhancement
-        enhanced = enhance_error_message("Basic error")
-        assert enhanced == "Basic error"
-        
-        # Test with line number
-        enhanced = enhance_error_message("Basic error", 42)
-        assert enhanced == "Basic error at line 42"
 
     def test_context_preservation_across_calls(self, basic, helpers):
         """Test that context is preserved across multiple operations"""

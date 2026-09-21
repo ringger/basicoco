@@ -5,9 +5,15 @@ This module provides structured error handling with enhanced context information
 including line numbers, column positions, and source code context for better debugging.
 """
 
+import re
 from typing import Optional, Dict, Any, List
 from dataclasses import dataclass
 from enum import Enum
+
+# Python exceptions that evaluating BASIC code can raise and that must be
+# reported as BASIC runtime errors (never allowed to escape the interpreter).
+BASIC_RUNTIME_ERRORS = (ValueError, IndexError, KeyError, AttributeError,
+                        TypeError, ZeroDivisionError, OverflowError)
 
 
 class ErrorSeverity(Enum):
@@ -90,8 +96,14 @@ class BasicError:
         return result
     
     def format_message(self, include_context: bool = True) -> str:
-        """Format error message with optional context"""
-        if include_context and self.context:
+        """Format error message with optional context.
+
+        Immediate-mode errors (line 0, or the temporary line -1) carry no
+        location, as on the CoCo; a message that already names its line
+        (a wrapped inner error) isn't given a second one.
+        """
+        if (include_context and self.context and self.context.line_number > 0
+                and ' at line ' not in self.message):
             return f"{self.message} at {self.context}"
         return self.message
     
@@ -130,8 +142,7 @@ class ErrorContextManager:
         self.current_source: Optional[str] = None
         self.current_filename: Optional[str] = None
         self.current_function: Optional[str] = None
-        self.execution_stack: List[SourceContext] = []
-    
+
     def set_context(self, line: int, source: Optional[str] = None, 
                    filename: Optional[str] = None, function: Optional[str] = None):
         """Set current execution context"""
@@ -139,37 +150,7 @@ class ErrorContextManager:
         self.current_source = source
         self.current_filename = filename
         self.current_function = function
-    
-    def push_context(self, line: int, source: Optional[str] = None, 
-                    filename: Optional[str] = None, function: Optional[str] = None):
-        """Push context onto execution stack (for nested calls)"""
-        context = SourceContext(
-            line_number=line,
-            source_line=source,
-            filename=filename,
-            function_name=function
-        )
-        self.execution_stack.append(context)
-        self.set_context(line, source, filename, function)
-    
-    def pop_context(self):
-        """Pop context from execution stack"""
-        if self.execution_stack:
-            self.execution_stack.pop()
-            if self.execution_stack:
-                last_context = self.execution_stack[-1]
-                self.set_context(
-                    last_context.line_number,
-                    last_context.source_line,
-                    last_context.filename,
-                    last_context.function_name
-                )
-            else:
-                self.current_line = None
-                self.current_source = None
-                self.current_filename = None
-                self.current_function = None
-    
+
     def create_context(self, line: Optional[int] = None, column: Optional[int] = None,
                       length: Optional[int] = None, source: Optional[str] = None) -> SourceContext:
         """Create source context from current state or provided parameters"""
@@ -304,7 +285,10 @@ class ErrorContextManager:
         elif "permission" in message.lower():
             suggestions.append("Check file permissions")
             suggestions.append("Ensure the file is not locked by another program")
-        
+        else:
+            suggestions.append("Use DIR to list the available files")
+            suggestions.append('Filenames are plain names inside programs/, e.g. "MYPROG"')
+
         return BasicError(
             message=message,
             category=ErrorCategory.FILE,
@@ -314,67 +298,22 @@ class ErrorContextManager:
             suggestions=suggestions,
             error_code="FILE_ERROR"
         )
-    
-    def warning(self, message: str, line: Optional[int] = None,
-               suggestions: Optional[List[str]] = None) -> BasicError:
-        """Create a warning message"""
-        context = self.create_context(line)
-        return BasicError(
-            message=message,
-            category=ErrorCategory.SYNTAX,  # Most warnings are syntax-related
-            severity=ErrorSeverity.WARNING,
-            context=context,
-            suggestions=suggestions,
-            error_code="WARNING"
-        )
-    
-    def get_stack_trace(self) -> List[str]:
-        """Get current execution stack trace"""
-        trace = []
-        for i, context in enumerate(reversed(self.execution_stack)):
-            prefix = "  " * i
-            trace.append(f"{prefix}at {context}")
-        return trace
 
+    def wrapped_error(self, prefix: str, exc: Exception, line: Optional[int] = None,
+                      suggestions: Optional[List[str]] = None) -> BasicError:
+        """A runtime error that wraps another error's text, e.g.
+        "Error in PSET: TYPE MISMATCH ...".
 
-# Global error context manager instance
-error_context = ErrorContextManager()
-
-
-def create_legacy_error(message: str) -> Dict[str, Any]:
-    """Create legacy-format error for backward compatibility"""
-    return {'type': 'error', 'message': message}
-
-
-def convert_error_to_legacy(error: BasicError) -> Dict[str, Any]:
-    """Convert structured error to legacy format"""
-    return create_legacy_error(error.message)
-
-
-def enhance_error_message(message: str, line: Optional[int] = None) -> str:
-    """Enhance a simple error message with context"""
-    if line is not None:
-        return f"{message} at line {line}"
-    return message
-
-
-# Common error creation functions for backward compatibility
-def syntax_error(message: str, line: Optional[int] = None) -> Dict[str, Any]:
-    """Create a syntax error in legacy format"""
-    enhanced_message = enhance_error_message(f"SYNTAX ERROR: {message}", line)
-    return create_legacy_error(enhanced_message)
-
-
-def runtime_error(message: str, line: Optional[int] = None) -> Dict[str, Any]:
-    """Create a runtime error in legacy format"""
-    enhanced_message = enhance_error_message(message, line)
-    return create_legacy_error(enhanced_message)
-
-
-def file_error(message: str, filename: str, line: Optional[int] = None) -> Dict[str, Any]:
-    """Create a file error in legacy format"""
-    enhanced_message = enhance_error_message(f"{message}: {filename}", line)
-    return create_legacy_error(enhanced_message)
+        The inner text may be a full formatted error (message, Details,
+        Suggestions). Only its first line goes into the message, with any
+        trailing "at line N" dropped (the wrapper adds the current line), and
+        its own suggestions win over the generic *suggestions*.
+        """
+        text_lines = str(exc).splitlines() or ['']
+        head = re.sub(r' at line -?\d+.*$', '', text_lines[0])
+        inner = [l.strip()[2:] for l in text_lines[1:] if l.strip().startswith('- ')]
+        return self.runtime_error(f"{prefix}{head}", line,
+                                  suggestions=inner or suggestions)
 
 
 # ── Response builder helpers ──────────────────────────────────────────
