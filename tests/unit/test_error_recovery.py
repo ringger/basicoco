@@ -24,7 +24,7 @@ class TestErrorRecovery:
         error_tests = [
             ('READ X', 'OUT OF DATA'),  # No DATA statements
             ('DIM A(5): DIM A(10)', "already dimensioned"),
-            ('UNDIM(999) = 5', "UNDIM'D ARRAY")  # Undimensioned array error
+            ('UNDIM(999) = 5', "BAD SUBSCRIPT")  # auto-dimensioned 0-10, so 999 is out of range
         ]
         
         for command, expected_error in error_tests:
@@ -117,8 +117,8 @@ class TestErrorRecovery:
         errors = helpers.get_error_messages(results)
         text_outputs = helpers.get_text_output(results)
         
-        # Should have UNDIM'D ARRAY error
-        assert any("UNDIM'D ARRAY" in error for error in errors)
+        # Should have BAD SUBSCRIPT error (auto-dimensioned array is 0-10)
+        assert any("BAD SUBSCRIPT" in error for error in errors)
         
         # Should reach subroutine but not return
         assert any('IN SUBROUTINE' in output for output in text_outputs)
@@ -227,7 +227,7 @@ class TestErrorRecovery:
         errors = helpers.get_error_messages(results)
         
         # Should have error
-        assert any("UNDIM'D ARRAY" in error for error in errors)
+        assert any("BAD SUBSCRIPT" in error for error in errors)
         
         # Program counter should be reset
         assert basic.program_counter is None

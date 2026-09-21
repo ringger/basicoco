@@ -15,7 +15,7 @@ class TestGraphicsCommand:
     def test_basic_functionality(self, basic, helpers):
         """Test basic graphics command functionality"""
         result = basic.process_command('PMODE 4,1')
-        assert len(result) >= 0  # Should not error
+        assert helpers.get_error_messages(result) == []
         # Should produce graphics output for PMODE command
         graphics = helpers.get_graphics_output(result)
         assert any(g['type'] == 'pmode' for g in graphics)
@@ -42,8 +42,8 @@ class TestGraphicsCommand:
     def test_screen_command(self, basic, helpers):
         """Test SCREEN command"""
         result = basic.process_command('SCREEN 1,1')
-        # Should execute without error
-        assert isinstance(result, list)
+        assert result == [{'type': 'set_screen', 'mode': 1, 'page': 1}]
+        assert basic.screen_mode == 1
 
     def test_pset_command(self, basic, helpers):
         """Test PSET command"""
@@ -114,8 +114,7 @@ class TestGraphicsCommand:
     def test_color_command(self, basic, helpers):
         """Test COLOR command"""
         result = basic.process_command('COLOR 1,2')
-        # Should execute without error
-        assert isinstance(result, list)
+        assert result == [{'type': 'set_color', 'fg': 1, 'bg': 2}]
 
     def test_draw_command(self, basic, helpers):
         """Test DRAW command"""
@@ -158,10 +157,11 @@ class TestGraphicsCommand:
 
     def test_graphics_without_pmode(self, basic, helpers):
         """Test graphics commands without setting PMODE first"""
-        # Some implementations may require PMODE first
+        # As on the CoCo, drawing needs a PMODE first
         result = basic.process_command('PSET(100,100)')
-        # Behavior may vary - either works or produces error
-        assert isinstance(result, list)
+        errors = helpers.get_error_messages(result)
+        assert errors and 'ILLEGAL FUNCTION CALL' in errors[0]
+        assert helpers.get_graphics_output(result) == []
 
     def test_graphics_program(self, basic, helpers):
         """Test graphics commands within a program"""

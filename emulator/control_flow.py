@@ -8,7 +8,10 @@ Opening commands (FOR, WHILE, DO, IF, GOTO, GOSUB, RETURN) are handled by
 the AST evaluator in ast_evaluator.py.
 """
 
+import re
+
 from .ast_nodes import basic_truthy
+from .text_utils import StatementSplitter
 from .error_context import error_response, text_response
 
 
@@ -87,7 +90,7 @@ class ControlFlowCommands:
                          examples=["CONT"])
 
         registry.register('RESUME', self.execute_resume,
-                         category='flow',
+                         category='control',
                          description="Resume execution after ON ERROR GOTO handler",
                          syntax="RESUME [NEXT | line]",
                          examples=["RESUME", "RESUME NEXT", "RESUME 100"])
@@ -101,23 +104,40 @@ class ControlFlowCommands:
                 "Check that FOR and NEXT statements are properly paired"
             ])
 
-        for_info = em.for_stack[-1]
-        var_name = for_info['var']
+        # NEXT, NEXT I, or NEXT J,I (closes J then I). A named variable
+        # unwinds any inner loops abandoned above it, as in Microsoft BASIC.
+        names = [v.strip().upper() for v in (args or '').split(',') if v.strip()]
+        for name in (names or [None]):
+            if name is not None:
+                depth = next((i for i in range(len(em.for_stack) - 1, -1, -1)
+                              if em.for_stack[i]['var'] == name), None)
+                if depth is None:
+                    return self._runtime_error(f"NEXT WITHOUT FOR: {name}", [
+                        f"No active FOR loop uses {name}",
+                        "Example: FOR I = 1 TO 10: ... : NEXT I",
+                        "Check that FOR and NEXT statements are properly paired"
+                    ])
+                del em.for_stack[depth + 1:]
+            elif not em.for_stack:
+                return self._runtime_error("NEXT WITHOUT FOR", [
+                    "NEXT must be preceded by a FOR statement",
+                    "Example: FOR I = 1 TO 10: ... : NEXT I",
+                    "Check that FOR and NEXT statements are properly paired"
+                ])
 
-        # Increment the loop variable
-        em.variables[var_name] += for_info['step']
+            for_info = em.for_stack[-1]
+            var_name = for_info['var']
+            em.variables[var_name] += for_info['step']
+            current_val = em.variables[var_name]
+            end_val = for_info['end']
+            step_val = for_info['step']
 
-        # Check if loop should continue
-        current_val = em.variables[var_name]
-        end_val = for_info['end']
-        step_val = for_info['step']
-
-        if ((step_val > 0 and current_val <= end_val) or
-            (step_val < 0 and current_val >= end_val)):
-            return [{'type': 'jump_after_for', 'for_line': for_info['line'], 'for_sub_line': for_info['sub_line']}]
-        else:
+            if ((step_val > 0 and current_val <= end_val) or
+                (step_val < 0 and current_val >= end_val)):
+                return [{'type': 'jump_after_for', 'for_line': for_info['line'],
+                         'for_sub_line': for_info['sub_line']}]
             em.for_stack.pop()
-            return []
+        return []
 
     def execute_wend(self, args):
         """WEND statement - end WHILE loop"""
@@ -156,19 +176,36 @@ class ControlFlowCommands:
 
         # Check for condition at LOOP (overrides DO condition)
         for keyword in ('WHILE', 'UNTIL'):
-            prefix = keyword + ' '
-            if args.upper().startswith(prefix):
-                condition_str = args[len(prefix):].strip()
+            # WHILE/UNTIL as a whole word, with or without a space after it:
+            # LOOP WHILE X<3 and LOOP WHILE(X<3)
+            m = re.match(rf'{keyword}(?![A-Z0-9_$])', args.strip(), re.IGNORECASE)
+            if m:
+                condition_str = args.strip()[m.end():].strip()
                 condition_type = keyword
                 if 'loop_condition_ast' not in do_info or do_info.get('loop_condition_str') != condition_str:
                     try:
                         do_info['loop_condition_ast'] = em.ast_parser.parse_expression(condition_str, em.current_line)
                         do_info['loop_condition_str'] = condition_str
                     except (ValueError, IndexError, KeyError, AttributeError):
-                        do_info['loop_condition_ast'] = None
+                        # A malformed condition is an error, not "false"
+                        # (treating it as false loops until the safety limit)
+                        return error_response(em.error_context.syntax_error(
+                            f"Invalid LOOP {keyword} condition: {condition_str}",
+                            em.current_line,
+                            suggestions=[f'Example: LOOP {keyword} X < 10',
+                                         'Conditions compare two values: =, <>, <, >, <=, >=',
+                                         'Check for a missing operand after the operator']))
                 condition_ast = do_info.get('loop_condition_ast')
                 condition = condition_str if condition_ast is None else None
                 break
+        else:
+            if args and not StatementSplitter.is_rem_line(args):
+                return error_response(em.error_context.syntax_error(
+                    f"LOOP expects WHILE or UNTIL, got: {args}",
+                    em.current_line,
+                    suggestions=['Plain loop: LOOP',
+                                 'With a condition: LOOP WHILE X < 10',
+                                 'Or: LOOP UNTIL X = 10']))
 
         # Evaluate loop continuation
         should_continue = False
@@ -293,6 +330,9 @@ class ControlFlowCommands:
     def execute_stop(self, args):
         """STOP command - stop program execution with message (allows CONT)"""
         em = self.emulator
+        if not em.running:
+            # STOP typed at the prompt: nothing to continue
+            return text_response('BREAK')
         em.running = False
         em.stopped_position = (em.current_line, em.current_sub_line)
         return text_response('BREAK IN ' + str(em.current_line))
@@ -312,9 +352,13 @@ class ControlFlowCommands:
         elif args == 'NEXT':
             return [{'type': 'resume_next', 'position': em.error_resume_position}]
         else:
-            try:
-                line = em.eval_int(args, em.current_line)
-            except (ValueError, TypeError):
-                return self._syntax_error(f"Invalid RESUME target: {args}",
-                    ["Use RESUME, RESUME NEXT, or RESUME line"])
+            # Labels take precedence over same-named variables, as in GOTO
+            line = em.resolve_label(args)
+            if line is None:
+                try:
+                    line = em.eval_int(args, em.current_line)
+                except (ValueError, TypeError):
+                    return self._syntax_error(f"Invalid RESUME target: {args}",
+                        ["Use RESUME, RESUME NEXT, RESUME line or RESUME label",
+                         "Example: RESUME 100"])
             return [{'type': 'jump', 'line': line}]

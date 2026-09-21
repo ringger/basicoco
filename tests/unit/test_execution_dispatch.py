@@ -240,37 +240,3 @@ class TestStateManagement:
         assert len(basic.if_stack) == 0
         assert len(basic.while_stack) == 0
         assert len(basic.do_stack) == 0
-
-    def test_save_restore_execution_state(self, basic):
-        """save/restore should preserve program, stacks, and position"""
-        basic.process_command('10 PRINT "A"')
-        basic.process_command('20 PRINT "B"')
-        basic.for_stack.append({'var': 'I'})
-        basic.current_line = 10
-        basic.running = True
-
-        state = basic.save_execution_state()
-
-        # Mutate everything
-        basic.program.clear()
-        basic.expanded_program.clear()
-        basic.for_stack.clear()
-        basic.current_line = 99
-        basic.running = False
-
-        basic.restore_execution_state(state)
-
-        assert 10 in basic.program
-        assert 20 in basic.program
-        assert len(basic.for_stack) == 1
-        assert basic.current_line == 10
-        assert basic.running is True
-
-    def test_save_restore_does_not_share_references(self, basic):
-        """Saved state should be independent copies"""
-        basic.for_stack.append({'var': 'I'})
-        state = basic.save_execution_state()
-
-        basic.for_stack.append({'var': 'J'})
-
-        assert len(state['for_stack']) == 1  # Saved copy unaffected

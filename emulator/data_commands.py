@@ -4,8 +4,11 @@ DATA/READ/RESTORE Commands for BasiCoCo BASIC Environment
 Handles DATA storage, READ into variables, and RESTORE of the data pointer.
 """
 
+import re
+
 from .text_utils import StatementSplitter
 from .error_context import error_response
+from .functions import basic_number_prefix
 
 
 class DataCommands:
@@ -47,12 +50,16 @@ class DataCommands:
     @staticmethod
     def parse_data_values(args):
         """Parse DATA argument string into a list of typed values."""
-        items = StatementSplitter.split_on_delimiter(args, delimiter=',')
+        items = StatementSplitter.split_args(args, keep_empty=True)
         data_items = []
         for item in items:
             item = item.strip()
-            if item.startswith('"') and item.endswith('"'):
+            if item == '':
+                data_items.append('')  # empty item: READ gives 0 or ""
+            elif item.startswith('"') and item.endswith('"'):
                 data_items.append(item[1:-1])
+            elif re.fullmatch(r'&(H[0-9A-F]+|O?[0-7]+)', item, re.IGNORECASE):
+                data_items.append(basic_number_prefix(item))  # DATA &HFF
             else:
                 try:
                     data_items.append(int(item))
@@ -102,12 +109,26 @@ class DataCommands:
             line_num, data_value = em.data_statements[em.data_pointer]
             em.data_pointer += 1
 
+            var_name = var_name.strip()
+            base_name = var_name.split('(', 1)[0].strip().upper()
+            if base_name.endswith('$'):
+                data_value = '' if data_value == '' else str(data_value)
+            elif data_value == '':
+                data_value = 0
+            elif isinstance(data_value, str):
+                return self._runtime_error(
+                    f"TYPE MISMATCH: cannot READ \"{data_value}\" (line {line_num}) into numeric {base_name}", [
+                        f"Read text into a string variable: READ {base_name}$",
+                        "Check that DATA items line up with the READ variables",
+                        "Numbers in DATA must not be quoted or contain letters"
+                    ])
+
             if '(' in var_name and ')' in var_name:
                 result = self.assign_array_element(var_name, data_value)
                 if result:
                     return result
             else:
-                em.variables[var_name] = data_value
+                em.variables[base_name] = data_value
 
         return []
 

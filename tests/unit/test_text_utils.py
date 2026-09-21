@@ -2,7 +2,7 @@
 
 """
 Unit tests for StatementSplitter methods: split_on_delimiter, split_on_delimiter_paren_aware,
-is_rem_line, and expand_line_to_sublines.
+is_rem_line, and core's expand_line_to_sublines.
 """
 
 import pytest
@@ -113,10 +113,24 @@ class TestSplitOnDelimiter:
         result = StatementSplitter.split_on_delimiter('A=1: B=2: REM comment: with: colons')
         assert result == ['A=1', 'B=2', 'REM comment: with: colons']
 
-    def test_remember_variable_not_treated_as_rem(self):
-        """REMEMBER starts with REM but is a variable, not a comment."""
+    def test_rem_prefix_is_a_comment(self):
+        """As on the CoCo (keywords are crunched by prefix), REMEMBER=5 is
+        REM + "EMBER=5", so the rest of the line is a comment — consistent
+        with is_rem_line() and the tokenizer."""
         result = StatementSplitter.split_on_delimiter('REMEMBER=5: A=1')
-        assert result == ['REMEMBER=5', 'A=1']
+        assert result == ['REMEMBER=5: A=1']
+
+    def test_apostrophe_comment_after_statement(self):
+        assert StatementSplitter.split_on_delimiter("SOUND 100,5 ' beep: loud") == \
+            ['SOUND 100,5', "' beep: loud"]
+
+    def test_apostrophe_quotes_filename_for_file_commands(self):
+        assert StatementSplitter.split_on_delimiter("SAVE 'my:prog': PRINT 1") == \
+            ["SAVE 'my:prog'", 'PRINT 1']
+
+    def test_apostrophe_inside_double_quotes(self):
+        assert StatementSplitter.split_on_delimiter('PRINT "RUBIK\'S": A=1') == \
+            ['PRINT "RUBIK\'S"', 'A=1']
 
 
 class TestSplitOnDelimiterParenAware:
@@ -155,92 +169,6 @@ class TestSplitOnDelimiterParenAware:
         assert StatementSplitter.split_on_delimiter_paren_aware('') == []
 
 
-class TestExpandLineToSublines:
-    """Test StatementSplitter.expand_line_to_sublines (static method on parser)"""
-
-    def test_single_statement(self):
-        expanded = {}
-        StatementSplitter.expand_line_to_sublines(10, 'PRINT "HELLO"', expanded)
-        assert expanded == {(10, 0): 'PRINT "HELLO"'}
-
-    def test_multi_statement(self):
-        expanded = {}
-        StatementSplitter.expand_line_to_sublines(10, 'A = 5: B = 10: PRINT A + B', expanded)
-        assert expanded == {
-            (10, 0): 'A = 5',
-            (10, 1): 'B = 10',
-            (10, 2): 'PRINT A + B',
-        }
-
-    def test_if_then_split(self):
-        """Parser-level expand splits IF/THEN on colons (core.py handles
-        AST conversion for control structures before reaching this method)"""
-        expanded = {}
-        StatementSplitter.expand_line_to_sublines(10, 'IF A = 5 THEN PRINT "YES": GOTO 100', expanded)
-        assert len(expanded) == 2
-        assert expanded[(10, 0)] == 'IF A = 5 THEN PRINT "YES"'
-        assert expanded[(10, 1)] == 'GOTO 100'
-
-    def test_rem_not_split(self):
-        """REM lines should never be split on colons.
-        Note: expand_line_to_sublines in parser.py doesn't check REM — the caller
-        (core.py expand_line_to_sublines) does. The parser method splits blindly.
-        This test documents the parser-level behavior."""
-        expanded = {}
-        StatementSplitter.expand_line_to_sublines(20, 'REM EXERCISES: GOSUB, DATA', expanded)
-        # Parser-level expand splits on colons (REM guard is in core.py)
-        # This documents current behavior
-        assert (20, 0) in expanded
-
-    def test_quoted_colons_preserved(self):
-        expanded = {}
-        StatementSplitter.expand_line_to_sublines(10, 'PRINT "TIME: 12:30": END', expanded)
-        assert expanded == {
-            (10, 0): 'PRINT "TIME: 12:30"',
-            (10, 1): 'END',
-        }
-
-    def test_strips_whitespace(self):
-        expanded = {}
-        StatementSplitter.expand_line_to_sublines(10, '  A = 5  :  B = 10  ', expanded)
-        assert expanded[(10, 0)] == 'A = 5'
-        assert expanded[(10, 1)] == 'B = 10'
-
-
-class TestHasControlKeyword:
-    """Test StatementSplitter.has_control_keyword"""
-
-    def test_if_detected(self):
-        assert StatementSplitter.has_control_keyword('IF X=1 THEN PRINT "Y"') is True
-
-    def test_for_detected(self):
-        assert StatementSplitter.has_control_keyword('FOR I = 1 TO 10') is True
-
-    def test_while_detected(self):
-        assert StatementSplitter.has_control_keyword('WHILE X < 5') is True
-
-    def test_do_with_colon(self):
-        assert StatementSplitter.has_control_keyword('DO: X=X+1: LOOP') is True
-
-    def test_do_with_space(self):
-        assert StatementSplitter.has_control_keyword('DO WHILE X < 5') is True
-
-    def test_case_insensitive(self):
-        assert StatementSplitter.has_control_keyword('for i = 1 to 3') is True
-
-    def test_print_not_detected(self):
-        assert StatementSplitter.has_control_keyword('PRINT "HELLO"') is False
-
-    def test_dim_not_detected(self):
-        assert StatementSplitter.has_control_keyword('DIM A(5)') is False
-
-    def test_empty_not_detected(self):
-        assert StatementSplitter.has_control_keyword('') is False
-
-    def test_leading_spaces(self):
-        assert StatementSplitter.has_control_keyword('  IF X THEN Y') is True
-
-
 class TestCoreExpandLineToSublines:
     """Test the core.py expand_line_to_sublines method (which adds REM guards and AST conversion)"""
 
@@ -250,7 +178,9 @@ class TestCoreExpandLineToSublines:
         # Should be a single expanded subline
         rem_sublines = [(k, v) for k, v in basic.expanded_program.items() if k[0] == 10]
         assert len(rem_sublines) == 1
-        assert 'REM EXERCISES: GOSUB/RETURN, DATA/READ' in rem_sublines[0][1]
+        # Stored as a compiled no-op (the text stays in basic.program for LIST)
+        assert rem_sublines[0][1].keyword == 'REM'
+        assert basic.program[10] == 'REM EXERCISES: GOSUB/RETURN, DATA/READ'
 
     def test_multi_statement_expanded(self, basic):
         """Plain multi-statement lines should expand into separate sublines"""

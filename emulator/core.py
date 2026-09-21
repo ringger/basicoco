@@ -15,11 +15,15 @@ from .text_utils import StatementSplitter
 from .graphics import BasicGraphics
 from .variables import VariableManager
 from .commands import CommandRegistry, CompiledCommand, CompiledMultiLineIf
+from .ast_nodes import basic_truthy
+from .ast_converter import (expand_statements, starts_control_structure, command_words,
+                            find_keyword)
 from .function_registry import FunctionRegistry
-from .functions import register_all_functions
+from .functions import register_all_functions, basic_number_prefix
 from .ast_parser import ASTParser
 from .ast_evaluator import ASTEvaluator
-from .error_context import ErrorContextManager, error_response, text_response, text_message
+from .error_context import (ErrorContextManager, error_response, text_response, text_message,
+                            BASIC_RUNTIME_ERRORS)
 from .program_files import FileManager
 from .file_io import FileIOManager
 from .program_executor import ProgramExecutor
@@ -66,9 +70,9 @@ class CoCoBasic:
         self.waiting_for_input = False  # Flag to indicate we're waiting for user input
         self.waiting_for_pause_continuation = False  # Flag for pause continuation
         self._expr_cache = {}  # Cache: expression string -> parsed AST node
-        self.pause_duration = 0  # Duration of current pause
         self.program_counter = None  # For resuming execution after input
         self.stopped_position = None  # For CONT command - stores (line, sub_line) where STOP occurred
+        self.break_requested = False  # Set by another thread (Ctrl+C); checked each statement
 
         # TIMER pseudo-variable (increments at 60 Hz like real CoCo)
         self.timer_epoch = time.time()
@@ -88,7 +92,7 @@ class CoCoBasic:
         self.arrays = {}  # Storage for dimensioned arrays
         self.keyboard_buffer = []  # Buffer for INKEY$ function
         self.print_column = 0  # Current PRINT cursor column (for comma zones)
-        self.last_rnd = 0.0  # Last value returned by RND (for RND(0))
+        self.rng = random.Random()  # Per-interpreter RNG (RND, RANDOMIZE)
         self.current_draw_color = 1  # Default drawing color
         self.turtle_x = 64  # Turtle graphics X position (center of default screen)
         self.turtle_y = 48  # Turtle graphics Y position (center of default screen)
@@ -114,14 +118,31 @@ class CoCoBasic:
         self.command_registry = CommandRegistry()
         self._register_all_commands()
         self.ast_parser.registry_commands = set(self.command_registry.commands.keys())
+        # Statement-starting words, for telling "THEN A*B" (GOTO) from "THEN CLS"
+        self.command_words = command_words(self.ast_parser)
     
 
     def _remove_expanded_lines(self, line_num):
-        """Remove all expanded_program entries for a given line number."""
+        """Remove everything compiled from a line: sublines, DATA values, labels."""
         keys = [k for k in self.expanded_program if k[0] == line_num]
         for k in keys:
             del self.expanded_program[k]
         self.data_values.pop(line_num, None)
+        for label in [name for name, target in self.labels.items() if target == line_num]:
+            del self.labels[label]
+
+    def store_program_line(self, line_num, code):
+        """Store, replace or (with empty code) delete a numbered program line.
+
+        The single entry point for program-line edits, so a re-typed line never
+        leaves stale sublines, DATA values or labels behind.
+        """
+        self._remove_expanded_lines(line_num)
+        if code:
+            self.program[line_num] = code
+            self.expand_line_to_sublines(line_num, code)
+        else:
+            self.program.pop(line_num, None)
 
     @staticmethod
     def _system_ok():
@@ -171,25 +192,20 @@ class CoCoBasic:
         # Check if this is a numbered line (program line)
         line_num, code = self.parse_line(command)
         if line_num is not None:
-            # This is a program line - add it to the program
-            if code:  # Non-empty code
-                self.program[line_num] = code
-                self.expand_line_to_sublines(line_num, code)
-            else:  # Empty code - delete the line
-                if line_num in self.program:
-                    del self.program[line_num]
-                self._remove_expanded_lines(line_num)
+            self.store_program_line(line_num, code)
             return self._system_ok()
 
         # Multi-statement lines go straight to process_line (which splits them)
+        call_depth = len(self.call_stack)
         if not StatementSplitter.is_rem_line(command):
             statements = StatementSplitter.split_on_delimiter(command)
             if len(statements) > 1:
-                return self.process_line(command)
+                return self._follow_immediate_jump(self.process_line(command), call_depth)
 
         # LINE INPUT must be intercepted before the registry sees LINE as a graphics command
-        if command.upper().startswith('LINE INPUT'):
-            return self.file_io.execute_line_input(command[10:].lstrip())
+        m = self._LINE_INPUT_RE.match(command)
+        if m:
+            return self.file_io.execute_line_input(command[m.end():].lstrip())
 
         # Try command registry first (plugin-like architecture)
         result = self.command_registry.execute(command)
@@ -197,19 +213,38 @@ class CoCoBasic:
             return result
 
         # If no command was found, try to execute as a line of code
-        return self.process_line(command)
+        return self._follow_immediate_jump(self.process_line(command), call_depth)
+
+    def _follow_immediate_jump(self, result, call_depth):
+        """GOTO/GOSUB typed at the prompt (GOTO 100, A=1: GOSUB 500) runs the
+        stored program from that line without clearing variables, as on the
+        CoCo, instead of returning a raw jump directive to the caller.
+
+        A GOSUB's return point is set past the last line, so its RETURN
+        comes back to the prompt rather than falling into the program.
+        """
+        jump = next((item for item in result
+                     if isinstance(item, dict) and item.get('type') == 'jump'), None)
+        if jump is None:
+            return result
+        before = [item for item in result if item is not jump]
+        if jump['line'] not in self.program:
+            del self.call_stack[call_depth:]  # drop an immediate GOSUB's frame
+            return before + error_response(self.error_context.runtime_error(
+                f"UNDEFINED LINE {jump['line']}", self.current_line,
+                suggestions=['Check the line number exists: LIST',
+                             'Enter the line first, e.g. 100 PRINT "HERE"',
+                             'Labels must be defined on their own line']))
+        if len(self.call_stack) > call_depth:
+            self.call_stack[-1] = (float('inf'),) + tuple(self.call_stack[-1][1:])
+        return before + self.executor.run_program_from_line(jump['line'], clear_variables=False)
     
     def list_program(self):
         output = []
         for line_num in sorted(self.program.keys()):
-            output.append(text_message(f'{line_num} {self.program[line_num]}'))
+            if line_num >= 0:  # skip a pending immediate-mode line (-1)
+                output.append(text_message(f'{line_num} {self.program[line_num]}'))
         return output
-    
-    def clear_program(self):
-        self.program.clear()
-        self.expanded_program.clear()
-        self.variable_manager.clear_variables()
-        return self._system_ok()
     
     def clear_variables(self, args):
         """BASIC CLEAR command - clears variables, optionally sets string space"""
@@ -217,11 +252,8 @@ class CoCoBasic:
         args = args.strip()
         if args:
             try:
-                string_space = self.eval_int(args)
-                # In TRS-80 BASIC, this would set string space
-                # For our implementation, we'll just acknowledge it
-                self.variable_manager.clear_variables()
-                return text_response('OK')
+                # The string-space size is validated but otherwise ignored
+                self.eval_int(args)
             except ValueError:
                 error = self.error_context.syntax_error(
                     "Invalid number in CLEAR command",
@@ -233,10 +265,9 @@ class CoCoBasic:
                     ]
                 )
                 return error_response(error)
-        else:
-            # CLEAR with no arguments - just clear variables
-            self.variable_manager.clear_variables()
-            return self._system_ok()
+        self.variable_manager.clear_variables()
+        # Silent inside a running program; acknowledged at the prompt
+        return [] if self.running else self._system_ok()
     
     # File operations — delegated to FileManager
     def load_program(self, filename):
@@ -257,7 +288,7 @@ class CoCoBasic:
     def kill_file(self, filename):
         return self.file_manager.kill_file(filename)
 
-    def process_kill_confirmation(self, response, filename):
+    def process_kill_confirmation(self, response, filename=None):
         return self.file_manager.process_kill_confirmation(response, filename)
 
     def merge_program(self, filename):
@@ -276,92 +307,40 @@ class CoCoBasic:
         return self.labels.get(name.upper())
 
     def expand_line_to_sublines(self, line_num, code):
-        """Expand line using StatementSplitter or AST converter for single-line control structures"""
+        """Compile a stored line into sublines (see ast_converter.expand_statements)."""
         # Detect label definition (e.g. "CalcAvg:") before any splitting
         m = self._LABEL_RE.match(code.strip())
         if m:
             label_name = m.group(1).upper()
             self.labels[label_name] = line_num
             # Store as a no-op so the line exists in expanded_program
-            self.expanded_program[(line_num, 0)] = CompiledCommand(lambda args: [], '', keyword='REM')
+            self.expanded_program[(line_num, 0)] = self._COMMENT
             return
 
-        # REM lines should never be split or AST-converted
+        # Comment lines (REM or ') are never split; stored as a no-op
         if StatementSplitter.is_rem_line(code):
-            self.expanded_program[(line_num, 0)] = code.strip()
+            self.expanded_program[(line_num, 0)] = self._COMMENT
             return
 
-        # Use AST conversion for control structures with colons OR IF statements (even without colons)
-        has_control = StatementSplitter.has_control_keyword(code)
-        has_colons = ':' in code
-        is_if_statement = code.upper().strip().startswith('IF ')
-
-        if (has_control and has_colons) or is_if_statement:
-            # Try AST conversion for single-line control structures
-            try:
-                from .ast_converter import parse_and_convert_single_line
-                converted = parse_and_convert_single_line(code, self.ast_parser)
-
-                if converted:
-                    # Add converted statements as sublines, pre-parsing body to AST
-                    for i, statement in enumerate(converted):
-                        stmt = statement.strip()
-                        if stmt:
-                            self._store_subline(line_num, i, stmt)
-                    return
-            except (ValueError, IndexError, KeyError, AttributeError):
-                # Fall back to StatementSplitter if AST conversion fails
-                pass
-
-        # Use StatementSplitter for normal statements, routing through
-        # _store_subline so registry commands get pre-compiled
-        sublines = StatementSplitter.split_on_delimiter(code)
-
-        # Check for mid-line IF/THEN: e.g. "GOSUB Sub: IF cond THEN A=1: B=2"
-        # Rejoin the IF and everything after it, then route through AST conversion
-        if_index = None
-        for idx, sub in enumerate(sublines):
-            if sub.upper().strip().startswith('IF '):
-                if_index = idx
-                break
-
-        if if_index is not None and if_index > 0:
-            # Store pre-IF sublines normally
-            sub_idx = 0
-            for i in range(if_index):
-                self._store_subline(line_num, sub_idx, sublines[i])
-                sub_idx += 1
-            # Rejoin the IF portion and route through AST conversion
-            if_code = ': '.join(sublines[if_index:])
-            try:
-                from .ast_converter import parse_and_convert_single_line
-                converted = parse_and_convert_single_line(if_code, self.ast_parser)
-                if converted:
-                    for statement in converted:
-                        stmt = statement.strip()
-                        if stmt:
-                            self._store_subline(line_num, sub_idx, stmt)
-                            sub_idx += 1
-                    return
-            except (ValueError, IndexError, KeyError, AttributeError):
-                pass
-            # Fall through: store remaining sublines normally if conversion failed
-            for i in range(if_index, len(sublines)):
-                self._store_subline(line_num, sub_idx, sublines[i])
-                sub_idx += 1
-            return
-
-        for i, subline in enumerate(sublines):
+        # Split on colons, expanding a one-line IF (wherever it starts) into
+        # block sublines; each subline is then pre-compiled by _store_subline
+        for i, subline in enumerate(expand_statements(code, self.command_words)):
             self._store_subline(line_num, i, subline)
 
     # Structural markers that skip methods inspect as text — never pre-parse these
+    # Compiled no-op for comment sublines (REM ..., ' ...)
+    _COMMENT = CompiledCommand(lambda args: [], '', keyword='REM')
+
     def _store_subline(self, line_num, sub_index, stmt):
         """Store a subline, pre-parsing to AST node or CompiledCommand."""
+        if StatementSplitter.is_rem_line(stmt):
+            self.expanded_program[(line_num, sub_index)] = self._COMMENT
+            return
         upper = stmt.upper().strip()
         # Collect DATA values before compiling (DATA handler is a no-op at runtime)
-        if upper.startswith('DATA '):
+        if self._DATA_RE.match(upper):
             from .data_commands import DataCommands
-            args = stmt.strip()[5:]
+            args = stmt.strip()[4:]  # DATA"A" (crunched) works too
             values = DataCommands.parse_data_values(args)
             if values:
                 self.data_values.setdefault(line_num, []).extend(values)
@@ -392,28 +371,25 @@ class CoCoBasic:
         compiled = self._try_compile_command(stmt, upper)
         self.expanded_program[(line_num, sub_index)] = compiled if compiled else stmt
 
-    @staticmethod
-    def _is_file_io(upper):
+    # PRINT#/INPUT# with any whitespace before the '#' (a '#' inside a
+    # quoted string, as in PRINT "#", is not a file number)
+    _FILE_IO_RE = re.compile(r'^(?:PRINT|INPUT)\s*#')
+    # LINE INPUT with any spacing between the two words
+    _LINE_INPUT_RE = re.compile(r'^\s*LINE\s+INPUT(?![A-Z0-9_$])', re.IGNORECASE)
+    # DATA as a whole keyword (also crunched: DATA"A",1)
+    _DATA_RE = re.compile(r'^DATA(?![A-Z0-9_$])', re.IGNORECASE)
+
+    @classmethod
+    def _is_file_io(cls, upper):
         """Check if a statement is a file I/O command that must bypass AST."""
-        if upper.startswith('LINE INPUT'):
-            return True
-        if upper.startswith('PRINT') and '#' in upper[:12]:
-            return True
-        if upper.startswith('INPUT') and '#' in upper[:12]:
-            return True
-        return False
+        return bool(cls._LINE_INPUT_RE.match(upper) or cls._FILE_IO_RE.match(upper))
 
     def _try_compile_command(self, stmt, upper=None):
         """Pre-resolve a statement to a CompiledCommand, or return None."""
         if upper is None:
             upper = stmt.upper().strip()
         # File I/O intercepts must go through process_statement
-        if upper.startswith('LINE INPUT'):
-            return None
-        # PRINT#/INPUT# with or without space before #
-        if upper.startswith('PRINT') and '#' in upper[:12]:
-            return None
-        if upper.startswith('INPUT') and '#' in upper[:12]:
+        if self._is_file_io(upper):
             return None
         tokens = CommandRegistry.tokenize_command(stmt.strip())
         if not tokens:
@@ -446,22 +422,14 @@ class CoCoBasic:
         if StatementSplitter.is_rem_line(code):
             return self.process_statement(code)
 
-        # Try AST conversion for single-line control structures
-        has_control = StatementSplitter.has_control_keyword(code)
-        has_colons = ':' in code
-        is_if_statement = code.upper().strip().startswith('IF ')
+        # Lines containing control structures (IF/FOR/WHILE/DO anywhere) run
+        # as a temporary one-line program so loops and IF blocks work
+        statements = expand_statements(code, self.command_words)
+        if any(starts_control_structure(s) for s in statements):
+            if len(statements) > 1:
+                return self._execute_converted_as_temporary_program(statements)
+            return self.process_statement(statements[0])
 
-        if (has_control and has_colons) or is_if_statement:
-            try:
-                from .ast_converter import parse_and_convert_single_line
-                converted = parse_and_convert_single_line(code, self.ast_parser)
-                if converted:
-                    return self._execute_converted_as_temporary_program(converted)
-            except (ValueError, IndexError, KeyError, AttributeError):
-                pass
-
-        # Split on colons; single statements go straight to process_statement
-        statements = StatementSplitter.split_on_delimiter(code)
         if len(statements) <= 1:
             return self.process_statement(code)
 
@@ -480,51 +448,41 @@ class CoCoBasic:
                         return all_results
         return all_results
 
+    # Line number used for an immediate-mode line that needs the executor
+    IMMEDIATE_LINE = -1
+
     def _execute_converted_as_temporary_program(self, converted_statements):
-        """
-        Execute AST-converted statements by creating a temporary program entry
-        and using the existing run_program infrastructure completely.
+        """Run an immediate-mode line that contains control structures.
+
+        Its statements are added to the program as line -1 (which sorts
+        before every real line), followed by END, and run in place. So a
+        jump into the program works (GOTO 100 or IF X THEN GOTO 100 from
+        the prompt continues the stored program at line 100, as on the
+        CoCo), and a pending INPUT can be resumed. Line -1 is removed as
+        soon as execution finishes (see finish_immediate_line).
         """
         if not converted_statements:
             return []
 
-        # Use a temporary line number for immediate mode (negative to avoid conflicts)
-        temp_line_num = -1
+        self.store_program_line(self.IMMEDIATE_LINE, '')
+        self.program[self.IMMEDIATE_LINE] = ': '.join(converted_statements)
+        for i, statement in enumerate(list(converted_statements) + ['END']):
+            self._store_subline(self.IMMEDIATE_LINE, i, statement.strip())
+        self.for_stack.clear()
+        self.call_stack.clear()
 
-        saved_state = self.save_execution_state()
+        results = self.executor.run_program_from_line(self.IMMEDIATE_LINE, clear_variables=False)
+        self.finish_immediate_line()
+        return [item for item in results
+                if not (isinstance(item, dict)
+                        and (item.get('source') == 'system'
+                             or item.get('type') in ('program_end', 'program_start')))]
 
-        try:
-            # Clear program and set up temporary program
-            self.program = {temp_line_num: '# AST Converted statements'}  # Placeholder only
-            self.expanded_program = {}
-
-            self.for_stack.clear()
-            self.call_stack.clear()
-
-            # Add AST-converted statements directly as sublines, pre-parsing to AST
-            for i, statement in enumerate(converted_statements):
-                if statement.strip():
-                    self._store_subline(temp_line_num, i, statement.strip())
-
-            # Use the actual run_program method - it has all the sophisticated control flow logic
-            # Don't clear variables since we want to preserve the current variable state
-            results = self.run_program(clear_variables=False)
-
-            # Filter out system OK messages and other program-mode artifacts
-            filtered_results = []
-            for item in results:
-                if isinstance(item, dict):
-                    if item.get('source') == 'system':
-                        continue  # Skip system messages
-                    elif item.get('type') in ['program_end', 'program_start']:
-                        continue  # Skip program control messages
-
-                filtered_results.append(item)
-
-            return filtered_results
-
-        finally:
-            self.restore_execution_state(saved_state)
+    def finish_immediate_line(self):
+        """Remove the temporary immediate-mode line once nothing is pending."""
+        if (self.IMMEDIATE_LINE in self.program and not self.waiting_for_input
+                and not self.waiting_for_pause_continuation):
+            self.store_program_line(self.IMMEDIATE_LINE, '')
 
     def _try_ast_execute(self, code):
         """Try to execute a statement via AST. Returns None if not handled."""
@@ -536,8 +494,10 @@ class CoCoBasic:
         parts = code_upper.split(None, 1)
         first_word = parts[0] if parts else ''
 
-        # Validate IF statements require THEN keyword
-        if first_word == 'IF' and 'THEN' not in code_upper:
+        # Validate IF statements require a THEN (or GOTO) keyword — outside
+        # quotes: IF A$="THEN" is still missing one
+        if (first_word == 'IF' and find_keyword(code_stripped, 'THEN') < 0
+                and find_keyword(code_stripped, 'GOTO') < 0):
             error = self.error_context.syntax_error(
                 "Missing THEN in IF statement",
                 self.current_line,
@@ -551,7 +511,7 @@ class CoCoBasic:
 
         from .ast_parser import RegistryCommandError
         try:
-            ast_node = self.ast_parser.parse_statement(code_stripped)
+            ast_node = self.ast_parser.parse_statement(code_stripped, self.current_line)
         except RegistryCommandError:
             return None  # Not an AST-handled statement
         except (ValueError, IndexError, KeyError, AttributeError) as e:
@@ -576,16 +536,14 @@ class CoCoBasic:
             if not isinstance(result, list):
                 return None
             return result
-        except (ValueError, IndexError, KeyError, AttributeError, TypeError, ZeroDivisionError) as e:
-            error_msg = str(e)
-            if error_msg:
-                error = self.error_context.syntax_error(
-                    error_msg,
-                    self.current_line,
+        except BASIC_RUNTIME_ERRORS as e:
+            # A runtime error (BAD SUBSCRIPT, TYPE MISMATCH, ...), not a syntax error
+            if str(e):
+                error = self.error_context.wrapped_error(
+                    "", e, self.current_line,
                     suggestions=[
-                        f'Check {first_word} syntax',
+                        f'Check the values used in {first_word}',
                         'Use HELP to see command syntax',
-                        'Check BASIC reference for proper syntax'
                     ]
                 )
                 return error_response(error)
@@ -599,7 +557,7 @@ class CoCoBasic:
         3. AST execution — everything not in the CommandRegistry
         4. CommandRegistry — NEXT, WEND, LOOP, DIM, SOUND, etc.
         """
-        if not code.strip():
+        if not code.strip() or StatementSplitter.is_rem_line(code):
             return []
 
         # Handle multi-line IF (bare "IF condition THEN" without action)
@@ -608,7 +566,15 @@ class CoCoBasic:
             condition = code.strip()[3:]  # Remove 'IF '
             condition = condition[:condition.upper().rfind('THEN')].strip()
             if condition:
-                condition_result = self.evaluate_condition(condition)
+                try:
+                    condition_result = self.evaluate_condition(condition)
+                except (ValueError, IndexError, KeyError, AttributeError, TypeError) as e:
+                    return error_response(self.error_context.syntax_error(
+                        f"Invalid IF condition: {condition} ({e})",
+                        self.current_line,
+                        suggestions=['Example: IF X = 5 THEN',
+                                     'Conditions compare two values: =, <>, <, >, <=, >=',
+                                     'Check for a missing operand after the operator']))
                 if_info = {
                     'condition_met': condition_result,
                     'line': self.current_line,
@@ -622,16 +588,14 @@ class CoCoBasic:
                     return []
 
         # File I/O: PRINT#, INPUT#, LINE INPUT# intercepted before AST
-        if code_upper.startswith('LINE INPUT'):
-            return self.file_io.execute_line_input(code.strip()[10:].lstrip())
-        if code_upper.startswith('PRINT') and '#' in code_upper[:10]:
-            rest = code.strip()[5:].lstrip()
-            if rest.startswith('#'):
-                return self.file_io.execute_print_file(rest[1:])
-        if code_upper.startswith('INPUT') and '#' in code_upper[:10]:
-            rest = code.strip()[5:].lstrip()
-            if rest.startswith('#'):
-                return self.file_io.execute_input_file(rest[1:])
+        m = self._LINE_INPUT_RE.match(code.strip())
+        if m:
+            return self.file_io.execute_line_input(code.strip()[m.end():].lstrip())
+        if self._FILE_IO_RE.match(code_upper):
+            rest = code.strip()[5:].lstrip()[1:]  # drop keyword and '#'
+            if code_upper.startswith('PRINT'):
+                return self.file_io.execute_print_file(rest)
+            return self.file_io.execute_input_file(rest)
 
         # Try AST execution for migrated commands
         ast_result = self._try_ast_execute(code)
@@ -672,59 +636,41 @@ class CoCoBasic:
             return self.ast_evaluator.visit(ast_node)
         except ValueError:
             raise
-        except (IndexError, KeyError, AttributeError, TypeError, ZeroDivisionError) as e:
+        except BASIC_RUNTIME_ERRORS as e:
             raise ValueError(str(e))
 
     def eval_int(self, expr, line=None):
-        """Evaluate an expression and return an integer."""
-        return int(self.evaluate_expression(expr, line))
+        """Evaluate an expression and return an integer (TYPE MISMATCH for a string)."""
+        value = self.evaluate_expression(expr, line)
+        if isinstance(value, str):
+            raise ValueError(f"TYPE MISMATCH: {expr.strip()} is a string; a number is needed here")
+        return int(value)
 
-    def _evaluate_array_access(self, array_name, indices_str):
-        """Evaluate array element access."""
-        if array_name not in self.arrays:
-            error = self.error_context.reference_error(
-                array_name,
-                "UNDIM'D ARRAY",
-                suggestions=[
-                    f"Declare the array first: DIM {array_name}(size)",
-                    "Check the array name spelling"
-                ]
-            )
-            raise ValueError(error.format_message())
-
-        indices = []
-        try:
-            for idx in indices_str.split(','):
-                indices.append(self.eval_int(idx))
-        except ValueError as e:
-            error = self.error_context.type_error(
-                "Invalid array index",
-                "integer",
-                "non-numeric expression"
-            )
-            raise ValueError(error.format_message()) from e
-
+    def read_array_element(self, array_name, indices):
+        """Read an array element given already-evaluated integer indices."""
         value, error_msg = self.variable_manager.get_array_element(array_name, indices)
         if error_msg:
             error = self.error_context.runtime_error(
                 error_msg,
-                suggestions=["Check that array indices are within bounds"]
+                suggestions=["Check that array indices are within bounds",
+                             "Arrays used without DIM hold indices 0-10"]
             )
-            raise ValueError(error.format_message())
+            raise ValueError(error.format_detailed())
 
         return value
 
     def evaluate_condition(self, condition):
-        """Evaluate a condition string using the AST parser."""
-        try:
-            condition = condition.strip()
-            ast_node = self._expr_cache.get(condition)
-            if ast_node is None:
-                ast_node = self.ast_parser.parse_expression(condition, self.current_line)
-                self._expr_cache[condition] = ast_node
-            return bool(self.ast_evaluator.visit(ast_node))
-        except (ValueError, IndexError, KeyError, AttributeError, TypeError, ZeroDivisionError):
-            return False
+        """Evaluate a condition string using the AST parser.
+
+        Parse and runtime errors propagate to the caller: a malformed or
+        failing condition must be reported, never silently read as false.
+        """
+        condition = condition.strip()
+        ast_node = self._expr_cache.get(condition)
+        if ast_node is None:
+            ast_node = self.ast_parser.parse_expression(condition, self.current_line)
+            self._expr_cache[condition] = ast_node
+        return basic_truthy(self.ast_evaluator.visit(ast_node))
     
     def execute_sound(self, args):
         # SOUND frequency,duration
@@ -774,8 +720,8 @@ class CoCoBasic:
             return [{'type': 'sound', 'frequency': frequency, 'duration': duration}]
             
         except (ValueError, TypeError) as e:
-            error = self.error_context.runtime_error(
-                f"Invalid SOUND parameters: {e}",
+            error = self.error_context.wrapped_error(
+                "Invalid SOUND parameters: ", e,
                 self.current_line,
                 suggestions=[
                     "Both frequency and duration must be numeric",
@@ -791,16 +737,16 @@ class CoCoBasic:
         if args:
             try:
                 seed = self.eval_int(args, self.current_line)
-                random.seed(seed)
+                self.rng.seed(seed)
             except (ValueError, TypeError) as e:
-                error = self.error_context.runtime_error(
-                    f"Invalid RANDOMIZE seed: {e}",
+                error = self.error_context.wrapped_error(
+                    "Invalid RANDOMIZE seed: ", e,
                     self.current_line,
                     suggestions=["RANDOMIZE requires a numeric seed",
                                  "Example: RANDOMIZE 42"])
                 return error_response(error)
         else:
-            random.seed()
+            self.rng.seed()
         return self._system_ok()
 
     def execute_pause(self, args):
@@ -819,33 +765,14 @@ class CoCoBasic:
             elif pause_time > 10:
                 pause_time = 10
                 
-            # For program execution, pause and wait for continuation
-            if hasattr(self, 'program_counter') and self.program_counter is not None:
-                # We're in program execution - save state and pause
-                self.waiting_for_pause_continuation = True
-                self.pause_duration = pause_time
-                # Find the next position to continue from
-                all_positions = sorted(self.expanded_program.keys())
-                try:
-                    current_pos_index = all_positions.index(self.program_counter)
-                    if current_pos_index < len(all_positions) - 1:
-                        self.program_counter = all_positions[current_pos_index + 1]
-                    else:
-                        # End of program
-                        self.program_counter = None
-                except ValueError:
-                    # Current position not found, end program
-                    self.program_counter = None
-                
-                return [{'type': 'pause', 'duration': pause_time}]
-            else:
-                # Direct command execution - just return pause instruction
-                return [{'type': 'pause', 'duration': pause_time}]
+            # Inside a program, the executor's pause handler saves the resume
+            # point and sets waiting_for_pause_continuation.
+            return [{'type': 'pause', 'duration': pause_time}]
             
         except (ValueError, TypeError) as e:
             # Return proper error without masking the exception
-            error = self.error_context.runtime_error(
-                f"PAUSE command error: {e}",
+            error = self.error_context.wrapped_error(
+                "PAUSE command error: ", e,
                 self.current_line,
                 suggestions=["PAUSE requires a numeric duration",
                              "Example: PAUSE 1000"])
@@ -856,6 +783,9 @@ class CoCoBasic:
 
         var_desc is a dict with 'name', 'array', and optionally 'indices'.
         For backwards compatibility, var_desc may also be a plain string (variable name).
+
+        Returns None on success, or an error message (e.g. "BAD SUBSCRIPT")
+        that the caller must report.
         """
         if isinstance(var_desc, str):
             # Legacy: plain variable name string
@@ -867,22 +797,19 @@ class CoCoBasic:
             is_array = var_desc.get('array', False)
             indices = var_desc.get('indices')
 
-        # Convert value to appropriate type
+        # Convert value to appropriate type (numbers parse like VAL)
         if var_name.endswith('$'):
             typed_value = str(value)
         else:
             try:
-                if '.' in str(value) or 'E' in str(value).upper():
-                    typed_value = float(value)
-                else:
-                    typed_value = int(value)
-            except (ValueError, TypeError):
+                typed_value = basic_number_prefix(str(value))
+            except OverflowError:
                 typed_value = 0
 
         if is_array and indices is not None:
-            self.variable_manager.set_array_element(var_name, indices, typed_value)
-        else:
-            self.variables[var_name] = typed_value
+            return self.variable_manager.set_array_element(var_name, indices, typed_value)
+        self.variables[var_name] = typed_value
+        return None
 
     def clear_all_stacks(self):
         """Clear all control-flow stacks."""
@@ -898,30 +825,6 @@ class CoCoBasic:
         self.input_variables = None
         self.input_prompt = None
         self.current_input_index = 0
-
-    def save_execution_state(self):
-        """Snapshot program and execution state for later restoration."""
-        return {
-            'program': self.program.copy(),
-            'expanded_program': self.expanded_program.copy(),
-            'running': self.running,
-            'current_line': self.current_line,
-            'current_sub_line': self.current_sub_line,
-            'for_stack': self.for_stack.copy(),
-            'call_stack': self.call_stack.copy(),
-            'local_stack': [frame.copy() for frame in self.local_stack],
-        }
-
-    def restore_execution_state(self, state):
-        """Restore a previously saved execution state snapshot."""
-        self.program = state['program']
-        self.expanded_program = state['expanded_program']
-        self.running = state['running']
-        self.current_line = state['current_line']
-        self.current_sub_line = state['current_sub_line']
-        self.for_stack = state['for_stack']
-        self.call_stack = state['call_stack']
-        self.local_stack = state['local_stack']
 
     def clear_interpreter_state(self, clear_program=True):
         """Clear interpreter state - shared function for NEW, LOAD, and other commands"""
@@ -939,10 +842,10 @@ class CoCoBasic:
         self.running = False
         self.waiting_for_input = False
         self.waiting_for_pause_continuation = False
-        self.pause_duration = 0
         self.program_counter = None
         self.graphics.clear_pixel_buffer()
         self.stopped_position = None  # Clear stopped position
+        self.break_requested = False
 
         # Reset TIMER (trace_mode intentionally NOT reset — persists across RUN like real CoCo)
         self.timer_epoch = time.time()
@@ -966,7 +869,6 @@ class CoCoBasic:
         self.turtle_x = 64  # Reset turtle to center
         self.turtle_y = 48
         self.print_column = 0  # Reset print cursor
-        self.last_rnd = 0.0  # Reset last RND value
 
     def execute_new(self):
         """NEW command - clear program and variables"""
@@ -1246,8 +1148,7 @@ class CoCoBasic:
                 lines_deleted = 0
                 for line_num in list(self.program.keys()):
                     if start_line <= line_num <= end_line:
-                        del self.program[line_num]
-                        self._remove_expanded_lines(line_num)
+                        self.store_program_line(line_num, '')
                         lines_deleted += 1
                 
                 if lines_deleted == 0:
@@ -1260,8 +1161,7 @@ class CoCoBasic:
                 line_num = int(args)
                 
                 if line_num in self.program:
-                    del self.program[line_num]
-                    self._remove_expanded_lines(line_num)
+                    self.store_program_line(line_num, '')
                     return text_response(f'DELETED LINE {line_num}')
                 else:
                     return text_response(f'LINE {line_num} NOT FOUND')
@@ -1281,7 +1181,8 @@ class CoCoBasic:
             error = self.error_context.runtime_error(
                 f"DELETE error: {e}",
                 self.current_line,
-                suggestions=["Check that the specified line numbers exist"])
+                suggestions=["Check that the specified line numbers exist",
+                             "Example: DELETE 100-200"])
             return error_response(error)
 
     def execute_renum(self, args):
@@ -1371,6 +1272,17 @@ class CoCoBasic:
         unchanged_lines = set(self.program.keys()) - set(old_lines)
         new_lines = set(line_mapping.values())
         conflicts = unchanged_lines & new_lines
+        # Renumbering must not change the order in which lines run
+        order_before = sorted(self.program.keys())
+        order_after = sorted(order_before, key=lambda n: line_mapping.get(n, n))
+        if not conflicts and order_after != order_before:
+            error = self.error_context.runtime_error(
+                "RENUM WOULD REORDER PROGRAM LINES",
+                self.current_line,
+                suggestions=["Choose a new start line above the last unchanged line",
+                             "Renumber the whole program with RENUM new,increment",
+                             "Example: RENUM 100,10"])
+            return error_response(error)
         if conflicts:
             error = self.error_context.runtime_error(
                 f"NEW LINE {min(conflicts)} CONFLICTS WITH EXISTING LINE",
@@ -1391,50 +1303,59 @@ class CoCoBasic:
             new_program[new_line] = self._update_line_references(
                 self.program[old_line], line_mapping)
         
-        # Replace the program
-        self.program = new_program
-        
-        # Rebuild expanded program
+        # Replace the program and recompile it from scratch (sublines,
+        # DATA values and labels are all keyed by line number)
+        self.program = {}
         self.expanded_program = {}
-        for line_num in sorted(self.program.keys()):
-            self.expand_line_to_sublines(line_num, self.program[line_num])
+        self.data_values = {}
+        self.labels = {}
+        for line_num in sorted(new_program):
+            self.store_program_line(line_num, new_program[line_num])
         
         return text_response(f'RENUMBERED {len(line_mapping)} LINES')
 
-    @staticmethod
-    def _update_line_references(code, line_mapping):
-        """Update GOTO/GOSUB/THEN line number targets in a line of code."""
-        pattern = r'\b(GOTO|GOSUB|THEN)\s+(\d+)\b'
+    # A jump keyword and the line number(s) after it. GOTO/GOSUB may take a
+    # comma list (ON X GOTO 10,20,30); the others take one number.
+    _LINE_REF_RE = re.compile(r'(GOTO|GOSUB|THEN|ELSE|RESTORE|RESUME)(\s*)(\d+(?:\s*,\s*\d+)*)',
+                              re.IGNORECASE)
 
-        def replace_line_ref(match):
-            keyword = match.group(1)
-            target = int(match.group(2))
-            if target in line_mapping:
-                return f'{keyword} {line_mapping[target]}'
-            return match.group(0)
+    @classmethod
+    def _update_line_references(cls, code, line_mapping):
+        """Renumber line-number targets in one line of code.
 
-        updated = re.sub(pattern, replace_line_ref, code, flags=re.IGNORECASE)
+        Scans the text so that quoted strings and comments are never
+        touched (PRINT "GOTO 10" stays as it is), and crunched targets
+        (GOTO10, IFX=1THEN20) are handled.
+        """
+        def renumber(match):
+            return str(line_mapping.get(int(match.group(0)), int(match.group(0))))
 
-        # Also handle ON...GOTO and ON...GOSUB with comma-separated line numbers
-        on_pattern = r'\b(ON\s+.*?\s+(?:GOTO|GOSUB))\s+([\d,\s]+)\b'
-
-        def replace_on_refs(match):
-            prefix = match.group(1)
-            targets = match.group(2)
-            parts = []
-            for part in targets.split(','):
-                part = part.strip()
-                if part.isdigit():
-                    target = int(part)
-                    if target in line_mapping:
-                        parts.append(str(line_mapping[target]))
-                    else:
-                        parts.append(part)
-                else:
-                    parts.append(part)
-            return f'{prefix} {",".join(parts)}'
-
-        return re.sub(on_pattern, replace_on_refs, updated, flags=re.IGNORECASE)
+        out = []
+        i, in_quotes, statement_start = 0, False, True
+        while i < len(code):
+            char = code[i]
+            if char == '"':
+                in_quotes = not in_quotes
+                statement_start = False
+            elif not in_quotes:
+                if char == "'" or (statement_start and code[i:i + 3].upper() == 'REM'):
+                    out.append(code[i:])  # the rest of the line is a comment
+                    break
+                if char == ':':
+                    statement_start = True
+                elif not char.isspace():
+                    statement_start = False
+                    match = None if i and code[i - 1].isalpha() else cls._LINE_REF_RE.match(code, i)
+                    if match:
+                        keyword, space, numbers = match.groups()
+                        if keyword.upper() not in ('GOTO', 'GOSUB'):
+                            numbers = re.match(r'\d+', numbers).group(0)
+                        out.append(keyword + space + re.sub(r'\d+', renumber, numbers))
+                        i = match.start() + len(keyword) + len(space) + len(numbers)
+                        continue
+            out.append(char)
+            i += 1
+        return ''.join(out)
 
     def execute_safety(self, args):
         """SAFETY statement - enable or disable iteration safety limits"""

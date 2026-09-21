@@ -6,6 +6,7 @@ expressions and statements. Node definitions are in ast_nodes.py; the evaluator
 is in ast_evaluator.py.
 """
 
+import re
 from typing import Any, List, Optional, Dict
 
 from .ast_nodes import (
@@ -65,7 +66,7 @@ class ASTParser:
         self.known_functions = known_functions or set()
         self.registry_commands = registry_commands or set()
 
-    def parse_expression(self, expr_str: str, line: int = 1) -> ASTNode:
+    def parse_expression(self, expr_str: str, line: int = 0) -> ASTNode:
         """
         Parse a BASIC expression into an AST.
 
@@ -92,9 +93,29 @@ class ASTParser:
             )
             raise ValueError(error.format_message())
 
-        return self._parse_or_expression()
+        result = self._parse_or_expression()
+        self._require_all_consumed(line)
+        return result
 
-    def parse_statement(self, stmt_str: str, line: int = 1) -> ASTNode:
+    def _require_all_consumed(self, line):
+        """Raise a syntax error if tokens remain after a complete parse
+        (e.g. X=5 6, PRINT 1 2), instead of silently ignoring them."""
+        if self.current < len(self.tokens):
+            leftover = self.tokens[self.current]
+            if leftover['type'] == 'KEYWORD' and leftover['value'] == 'REM':
+                return
+            error = self.error_context.syntax_error(
+                f"Unexpected '{leftover['value']}'",
+                line,
+                suggestions=[
+                    "Separate statements with a colon: A=1: B=2",
+                    "Separate PRINT items with ; or ,",
+                    "Check for a missing operator between values"
+                ]
+            )
+            raise ValueError(error.format_message())
+
+    def parse_statement(self, stmt_str: str, line: int = 0) -> ASTNode:
         """
         Parse a BASIC statement into an AST.
 
@@ -125,9 +146,11 @@ class ASTParser:
             )
             raise ValueError(error.format_message())
 
-        return self._parse_statement_sequence()
+        result = self._parse_statement_sequence()
+        self._require_all_consumed(line)
+        return result
 
-    def try_parse_statement(self, stmt_str: str, line: int = 1):
+    def try_parse_statement(self, stmt_str: str, line: int = 0):
         """
         Try to parse a BASIC statement. Returns None if the parser can't
         handle it (registry commands, unknown identifiers, syntax errors).
@@ -228,28 +251,31 @@ class ASTParser:
                     raise ValueError(error.format_message())
                 continue
 
-            # Numbers
-            if char.isdigit() or char == '.':
+            # Hex / octal literals: &HFF, &O17 (also bare &17 = octal)
+            if char == '&':
                 start_col = column
-                value = ''
-                while i < len(text) and (text[i].isdigit() or text[i] == '.'):
-                    value += text[i]
-                    i += 1
-                    column += 1
+                m = re.match(r'&(H[0-9A-Fa-f]+|O?[0-7]+)', text[i:], re.IGNORECASE)
+                if not m:
+                    raise ValueError(self._unexpected_character(char, line, column))
+                digits = m.group(1)
+                if digits[0] in 'Hh':
+                    number = int(digits[1:], 16)
+                else:
+                    number = int(digits.lstrip('Oo'), 8)
+                tokens.append({'type': 'NUMBER', 'value': number, 'line': line,
+                               'column': start_col, 'length': len(m.group(0))})
+                i += len(m.group(0))
+                column += len(m.group(0))
+                continue
 
-                # Handle scientific notation
-                if i < len(text) and text[i].upper() == 'E':
-                    value += text[i]
-                    i += 1
-                    column += 1
-                    if i < len(text) and text[i] in '+-':
-                        value += text[i]
-                        i += 1
-                        column += 1
-                    while i < len(text) and text[i].isdigit():
-                        value += text[i]
-                        i += 1
-                        column += 1
+            # Numbers: digits with at most one '.', then an optional exponent
+            # (E only when digits follow, so 1E alone is 1 then E)
+            if char.isdigit() or (char == '.' and i + 1 < len(text) and text[i + 1].isdigit()):
+                start_col = column
+                m = re.match(r'\d*\.?\d*(?:[Ee][+-]?\d+)?', text[i:])
+                value = m.group(0)
+                i += len(value)
+                column += len(value)
 
                 tokens.append({
                     'type': 'NUMBER',
@@ -271,8 +297,9 @@ class ASTParser:
 
                 upper_value = value.upper()
 
-                # REM: stop tokenizing — rest of line is a comment
-                if upper_value == 'REM':
+                # REM: stop tokenizing — rest of line is a comment. Matched
+                # by prefix as on the CoCo, so REMARK is REM + "ARK".
+                if upper_value.startswith('REM'):
                     tokens.append({
                         'type': 'KEYWORD',
                         'value': 'REM',
@@ -321,14 +348,42 @@ class ASTParser:
                 column += 1
                 continue
 
-            # Unknown character — silently skipped. This includes '#' which is
-            # used by file I/O commands (PRINT#, INPUT#). Those commands are
-            # intercepted before reaching the AST parser (see process_statement()
-            # in core.py and _parse_body_statement() in ast_converter.py).
-            i += 1
-            column += 1
+            # ? is the Color BASIC shorthand for PRINT
+            if char == '?':
+                tokens.append({'type': 'KEYWORD', 'value': 'PRINT', 'line': line,
+                               'column': column, 'length': 1})
+                i += 1
+                column += 1
+                continue
+
+            # ' starts a comment (Extended Color BASIC shorthand for REM)
+            if char == "'":
+                tokens.append({'type': 'KEYWORD', 'value': 'REM', 'line': line,
+                               'column': column, 'length': 1})
+                return tokens
+
+            # '#' belongs to file I/O (PRINT#, INPUT#), which is intercepted
+            # before the AST parser; tolerate it here. Anything else unknown
+            # is a syntax error rather than being silently dropped.
+            if char == '#':
+                i += 1
+                column += 1
+                continue
+            raise ValueError(self._unexpected_character(char, line, column))
 
         return tokens
+
+    def _unexpected_character(self, char, line, column):
+        error = self.error_context.syntax_error(
+            f"Unexpected character '{char}'",
+            line,
+            suggestions=[
+                "Remove or correct the character",
+                "Hex numbers are written &HFF, octal &O17",
+                "Strings must be in double quotes: \"TEXT\""
+            ]
+        )
+        return error.format_message()
 
     def _current_token(self) -> Optional[Dict[str, Any]]:
         """Get the current token"""
@@ -416,13 +471,18 @@ class ASTParser:
 
         return left
 
+    # Operator precedence, loosest to tightest (Color BASIC / Microsoft BASIC):
+    #   OR < AND < NOT < relational (= <> < > <= >=) < + - < MOD < * /
+    #   < unary - < ^
+    # All binary levels are left-associative, including ^ (2^3^2 = 64).
+
     def _parse_and_expression(self) -> ASTNode:
         """Parse AND expressions"""
-        left = self._parse_equality_expression()
+        left = self._parse_not_expression()
 
         while self._match_value('AND'):
             op_token = self._advance()
-            right = self._parse_equality_expression()
+            right = self._parse_not_expression()
             left = BinaryOpNode(
                 operator=Operator.AND,
                 left=left,
@@ -432,14 +492,47 @@ class ASTParser:
 
         return left
 
-    def _parse_equality_expression(self) -> ASTNode:
-        """Parse equality/comparison expressions"""
-        left = self._parse_relational_expression()
-
-        while self._match('OPERATOR') and self._current_token()['value'] in ['=', '<>']:
+    def _parse_not_expression(self) -> ASTNode:
+        """Parse NOT, which binds looser than the relational operators:
+        NOT A=5 means NOT (A=5)."""
+        if self._match_value('NOT'):
             op_token = self._advance()
-            right = self._parse_relational_expression()
-            op = Operator.EQUAL if op_token['value'] == '=' else Operator.NOT_EQUAL
+            return UnaryOpNode(
+                operator=Operator.NOT,
+                operand=self._parse_not_expression(),
+                location=self._make_location(op_token)
+            )
+        return self._parse_relational_expression()
+
+    _RELATIONAL_OPERATORS = {
+        '=': Operator.EQUAL, '<>': Operator.NOT_EQUAL, '><': Operator.NOT_EQUAL,
+        '<': Operator.LESS_THAN, '>': Operator.GREATER_THAN,
+        '<=': Operator.LESS_EQUAL, '=<': Operator.LESS_EQUAL,
+        '>=': Operator.GREATER_EQUAL, '=>': Operator.GREATER_EQUAL,
+    }
+
+    def _relational_operator(self):
+        """Consume a relational operator (including the two-token spellings
+        =< => ><) and return (Operator, token), or None."""
+        if not (self._match('OPERATOR') and self._current_token()['value'] in self._RELATIONAL_OPERATORS):
+            return None
+        op_token = self._advance()
+        text = op_token['value']
+        if (text in ('=', '>') and self._match('OPERATOR')
+                and text + self._current_token()['value'] in ('=<', '=>', '><')):
+            text += self._advance()['value']
+        return self._RELATIONAL_OPERATORS[text], op_token
+
+    def _parse_relational_expression(self) -> ASTNode:
+        """Parse = <> < > <= >= (one precedence level, left to right)"""
+        left = self._parse_additive_expression()
+
+        while True:
+            matched = self._relational_operator()
+            if matched is None:
+                return left
+            op, op_token = matched
+            right = self._parse_additive_expression()
             left = BinaryOpNode(
                 operator=op,
                 left=left,
@@ -447,39 +540,13 @@ class ASTParser:
                 location=self._make_location(op_token)
             )
 
-        return left
-
-    def _parse_relational_expression(self) -> ASTNode:
-        """Parse relational expressions (<, >, <=, >=)"""
-        left = self._parse_additive_expression()
-
-        while self._match('OPERATOR') and self._current_token()['value'] in ['<', '>', '<=', '>=']:
-            op_token = self._advance()
-            right = self._parse_additive_expression()
-
-            op_map = {
-                '<': Operator.LESS_THAN,
-                '>': Operator.GREATER_THAN,
-                '<=': Operator.LESS_EQUAL,
-                '>=': Operator.GREATER_EQUAL
-            }
-
-            left = BinaryOpNode(
-                operator=op_map[op_token['value']],
-                left=left,
-                right=right,
-                location=self._make_location(op_token)
-            )
-
-        return left
-
     def _parse_additive_expression(self) -> ASTNode:
         """Parse addition and subtraction"""
-        left = self._parse_multiplicative_expression()
+        left = self._parse_mod_expression()
 
         while self._match('OPERATOR') and self._current_token()['value'] in ['+', '-']:
             op_token = self._advance()
-            right = self._parse_multiplicative_expression()
+            right = self._parse_mod_expression()
             op = Operator.ADD if op_token['value'] == '+' else Operator.SUBTRACT
             left = BinaryOpNode(
                 operator=op,
@@ -490,22 +557,30 @@ class ASTParser:
 
         return left
 
-    def _parse_multiplicative_expression(self) -> ASTNode:
-        """Parse multiplication, division, and modulo"""
-        left = self._parse_power_expression()
+    def _parse_mod_expression(self) -> ASTNode:
+        """Parse MOD (binds looser than * and /: 10 MOD 3*2 = 10 MOD 6)"""
+        left = self._parse_multiplicative_expression()
 
-        while (self._match('OPERATOR') and self._current_token()['value'] in ['*', '/']) or \
-              self._match_value('MOD'):
+        while self._match_value('MOD'):
             op_token = self._advance()
-            right = self._parse_power_expression()
+            right = self._parse_multiplicative_expression()
+            left = BinaryOpNode(
+                operator=Operator.MOD,
+                left=left,
+                right=right,
+                location=self._make_location(op_token)
+            )
 
-            if op_token['value'] == '*':
-                op = Operator.MULTIPLY
-            elif op_token['value'] == '/':
-                op = Operator.DIVIDE
-            else:  # MOD
-                op = Operator.MOD
+        return left
 
+    def _parse_multiplicative_expression(self) -> ASTNode:
+        """Parse multiplication and division"""
+        left = self._parse_unary_expression()
+
+        while self._match('OPERATOR') and self._current_token()['value'] in ['*', '/']:
+            op_token = self._advance()
+            right = self._parse_unary_expression()
+            op = Operator.MULTIPLY if op_token['value'] == '*' else Operator.DIVIDE
             left = BinaryOpNode(
                 operator=op,
                 left=left,
@@ -515,24 +590,8 @@ class ASTParser:
 
         return left
 
-    def _parse_power_expression(self) -> ASTNode:
-        """Parse exponentiation (right-associative)"""
-        left = self._parse_unary_expression()
-
-        if self._match('OPERATOR') and self._current_token()['value'] in ['^', '**']:
-            op_token = self._advance()
-            right = self._parse_power_expression()  # Right associative
-            return BinaryOpNode(
-                operator=Operator.POWER,
-                left=left,
-                right=right,
-                location=self._make_location(op_token)
-            )
-
-        return left
-
     def _parse_unary_expression(self) -> ASTNode:
-        """Parse unary expressions"""
+        """Parse unary + and -, which bind looser than ^ (-2^2 = -4)"""
         if self._match('OPERATOR') and self._current_token()['value'] in ['+', '-']:
             op_token = self._advance()
             operand = self._parse_unary_expression()
@@ -543,16 +602,34 @@ class ASTParser:
                 location=self._make_location(op_token)
             )
 
-        if self._match_value('NOT'):
+        return self._parse_power_expression()
+
+    def _parse_power_expression(self) -> ASTNode:
+        """Parse exponentiation, left-associative (2^3^2 = (2^3)^2 = 64).
+
+        The exponent may carry its own sign: 2^-1.
+        """
+        left = self._parse_primary_expression()
+
+        while self._match('OPERATOR') and self._current_token()['value'] in ['^', '**']:
             op_token = self._advance()
-            operand = self._parse_unary_expression()
-            return UnaryOpNode(
-                operator=Operator.NOT,
-                operand=operand,
+            if self._match('OPERATOR') and self._current_token()['value'] in ['+', '-']:
+                sign_token = self._advance()
+                right = UnaryOpNode(
+                    operator=Operator.ADD if sign_token['value'] == '+' else Operator.SUBTRACT,
+                    operand=self._parse_primary_expression(),
+                    location=self._make_location(sign_token)
+                )
+            else:
+                right = self._parse_primary_expression()
+            left = BinaryOpNode(
+                operator=Operator.POWER,
+                left=left,
+                right=right,
                 location=self._make_location(op_token)
             )
 
-        return self._parse_primary_expression()
+        return left
 
     def _parse_primary_expression(self) -> ASTNode:
         """Parse primary expressions (literals, variables, function calls, parentheses)"""

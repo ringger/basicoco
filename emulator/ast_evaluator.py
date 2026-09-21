@@ -5,6 +5,7 @@ This module evaluates AST nodes produced by the parser, executing BASIC
 statements and expressions at runtime.
 """
 
+import math
 import time
 from typing import Any, Union
 
@@ -15,10 +16,26 @@ from .ast_nodes import (
     ExitForStatementNode, EndStatementNode, GotoStatementNode,
     PrintStatementNode, GosubStatementNode, ReturnStatementNode,
     InputStatementNode, OnBranchStatementNode, OnErrorGotoNode,
-    ProgramNode, BlockNode,
-    Operator, basic_truthy
+    BlockNode,
+    Operator, basic_truthy, format_basic_number
 )
-from .error_context import error_response, text_message, error_message
+from .error_context import error_response, text_message, BASIC_RUNTIME_ERRORS
+
+# Binary operators that accept two strings (+ concatenates, the rest compare)
+_STRING_OPERATORS = frozenset({
+    Operator.ADD, Operator.EQUAL, Operator.NOT_EQUAL, Operator.LESS_THAN,
+    Operator.GREATER_THAN, Operator.LESS_EQUAL, Operator.GREATER_EQUAL,
+})
+
+# Result items that end a multi-statement block: the executor must act on
+# them before any later statement in the block runs.
+_BLOCK_STOP_TYPES = frozenset({
+    'error', 'input_request', 'pause',
+    'jump', 'jump_return', 'jump_after_for', 'jump_after_while', 'jump_after_do',
+    'skip_for_loop', 'skip_while_loop', 'skip_do_loop',
+    'skip_if_block', 'skip_else_block', 'exit_for_loop',
+    'resume', 'resume_next', 'program_modified', 'chain',
+})
 
 
 class ASTEvaluator(ASTVisitor):
@@ -39,19 +56,43 @@ class ASTEvaluator(ASTVisitor):
         return int(val)
 
     @staticmethod
+    def _check_overflow(value):
+        """Raise a BASIC ?OV error instead of producing inf/nan."""
+        if isinstance(value, float) and not math.isfinite(value):
+            raise OverflowError("OVERFLOW")
+        return value
+
+    @staticmethod
+    def _power(base, exponent):
+        """BASIC ^: computed in floating point, so a huge integer power
+        (9^9^9) overflows immediately instead of building a giant integer."""
+        try:
+            result = float(base) ** float(exponent)
+        except OverflowError:
+            raise OverflowError("OVERFLOW") from None
+        except ZeroDivisionError:
+            raise ZeroDivisionError("Division by zero") from None  # 0 ^ negative
+        if isinstance(result, complex):
+            raise ValueError("ILLEGAL FUNCTION CALL: negative number to a fractional power")
+        ASTEvaluator._check_overflow(result)
+        # Keep integer results integers (2^3 is 8, not 8.0) while exact
+        if (isinstance(base, int) and isinstance(exponent, int) and exponent >= 0
+                and result.is_integer() and abs(result) < 2 ** 53):
+            return int(result)
+        return result
+
+    @staticmethod
     def _format_print_value(value):
         """Format a value for PRINT output.
 
         CoCo BASIC numeric formatting: a leading space for the sign position
-        (positive numbers get a space, negative get '-') and a trailing space.
+        (positive numbers get a space, negative get '-') and a trailing space;
+        digits as format_basic_number (9 significant digits, ' .5 ').
         """
         if isinstance(value, str):
             return value
         elif isinstance(value, (int, float)):
-            if isinstance(value, float) and value.is_integer():
-                num_str = str(int(value))
-            else:
-                num_str = str(value)
+            num_str = format_basic_number(value)
             if value < 0:
                 return num_str + ' '
             else:
@@ -80,23 +121,40 @@ class ASTEvaluator(ASTVisitor):
             return self.emulator.variables[var_name]
         return 0 if not var_name.endswith('$') else ""
 
+    def _type_mismatch(self, detail):
+        """Raise a BASIC ?TM error."""
+        error = self.emulator.error_context.type_error(
+            f"TYPE MISMATCH: {detail}", "matching types", "a string and a number",
+            self.emulator.current_line,
+            suggestions=['Use VAL(A$) to turn a string into a number',
+                         'Use STR$(N) to turn a number into a string'])
+        raise ValueError(error.format_detailed())
+
     def visit_binary_op(self, node: BinaryOpNode) -> Any:
         """Visit binary operation"""
         left_val = self.visit(node.left)
         right_val = self.visit(node.right)
 
+        # Strings only concatenate (+) and compare; any other mix is ?TM
+        left_str, right_str = isinstance(left_val, str), isinstance(right_val, str)
+        if left_str or right_str:
+            if left_str != right_str:
+                self._type_mismatch(f"can't combine a string and a number with {node.operator.value}")
+            if node.operator not in _STRING_OPERATORS:
+                self._type_mismatch(f"{node.operator.value} doesn't work on strings")
+
         if node.operator == Operator.ADD:
-            return left_val + right_val
+            return self._check_overflow(left_val + right_val)
         elif node.operator == Operator.SUBTRACT:
-            return left_val - right_val
+            return self._check_overflow(left_val - right_val)
         elif node.operator == Operator.MULTIPLY:
-            return left_val * right_val
+            return self._check_overflow(left_val * right_val)
         elif node.operator == Operator.DIVIDE:
             if right_val == 0:
                 raise ZeroDivisionError("Division by zero")
-            return left_val / right_val
+            return self._check_overflow(left_val / right_val)
         elif node.operator == Operator.POWER:
-            return left_val ** right_val
+            return self._power(left_val, right_val)
         elif node.operator == Operator.EQUAL:
             return -1 if left_val == right_val else 0
         elif node.operator == Operator.NOT_EQUAL:
@@ -114,10 +172,12 @@ class ASTEvaluator(ASTVisitor):
         elif node.operator == Operator.OR:
             return self._to_basic_int(left_val) | self._to_basic_int(right_val)
         elif node.operator == Operator.MOD:
-            # Modulo operation
-            if right_val == 0:
+            # Microsoft BASIC MOD: operands rounded to integers, result has
+            # the sign of the dividend (-7 MOD 3 = -1)
+            left_int, right_int = round(left_val), round(right_val)
+            if right_int == 0:
                 raise ZeroDivisionError("Modulo by zero")
-            return left_val % right_val
+            return int(math.fmod(left_int, right_int))
         else:
             error = self.emulator.error_context.runtime_error(
                 f"Unknown binary operator: {node.operator}",
@@ -131,6 +191,8 @@ class ASTEvaluator(ASTVisitor):
     def visit_unary_op(self, node: UnaryOpNode) -> Any:
         """Visit unary operation"""
         operand_val = self.visit(node.operand)
+        if isinstance(operand_val, str):
+            self._type_mismatch(f"{node.operator.value} doesn't work on strings")
 
         if node.operator == Operator.SUBTRACT:
             return -operand_val
@@ -167,9 +229,8 @@ class ASTEvaluator(ASTVisitor):
         # Array access uses the same syntax as function calls — both are parsed
         # as FunctionCallNode and distinguished here at evaluation time.
         if len(arg_values) > 0:  # Has arguments, likely array access
-            # Convert arguments to indices and delegate to array access
             indices = [int(val) for val in arg_values]
-            return self.emulator._evaluate_array_access(func_name, ','.join(map(str, indices)))
+            return self.emulator.read_array_element(func_name, indices)
 
         # Neither function nor array access
         available_functions = list(self.emulator.function_registry.list_functions()[:10])
@@ -270,8 +331,13 @@ class ASTEvaluator(ASTVisitor):
             return result if isinstance(result, list) else []
         elif node.else_branch:
             result = self.visit(node.else_branch)
+            # ELSE with number = GOTO
             if isinstance(result, (int, float)) and not isinstance(result, bool):
-                return [{'type': 'jump', 'line': int(result)}]
+                line_num = int(result)
+                err = self._validate_line_number(line_num)
+                if err:
+                    return err
+                return [{'type': 'jump', 'line': line_num}]
             if result is None:
                 return None
             return result if isinstance(result, list) else []
@@ -290,32 +356,10 @@ class ASTEvaluator(ASTVisitor):
                 else:
                     results.append(result)
 
-                # Check for control flow signals
+                # Stop at the first control-flow directive, error or pause
                 for item in (result if isinstance(result, list) else [result]):
-                    if isinstance(item, dict) and item.get('type') in ['exit_for', 'jump', 'jump_return']:
-                        return results  # Exit block early on control flow
-
-        return results
-
-    def visit_program(self, node: ProgramNode) -> Any:
-        """Visit PROGRAM node - execute all statements in sequence"""
-        results = []
-        for statement in node.statements:
-            try:
-                result = self.visit(statement)
-                if isinstance(result, list):
-                    results.extend(result)
-                elif result is not None:
-                    results.append(result)
-
-                # Check for control flow that should exit program
-                for item in (result if isinstance(result, list) else [result]):
-                    if isinstance(item, dict) and item.get('type') in ['jump', 'jump_return', 'end']:
-                        return results  # Exit program on control flow
-            except (ValueError, IndexError, KeyError, AttributeError, TypeError, ZeroDivisionError) as e:
-                err = self.emulator.error_context.runtime_error(
-                    str(e), self.emulator.current_line)
-                results.append(error_message(err.format_message()))
+                    if isinstance(item, dict) and item.get('type') in _BLOCK_STOP_TYPES:
+                        return results
 
         return results
 
@@ -339,9 +383,10 @@ class ASTEvaluator(ASTVisitor):
                 formatted = self._format_print_value(value)
                 output_parts.append(formatted)
                 col += len(formatted)
-            except (ValueError, IndexError, KeyError, AttributeError, TypeError, ZeroDivisionError) as e:
-                error = self.emulator.error_context.runtime_error(
-                    f"Error evaluating PRINT expression: {e}",
+            except BASIC_RUNTIME_ERRORS as e:
+                error = self.emulator.error_context.wrapped_error(
+                    "Error evaluating PRINT expression: ", e,
+                    self.emulator.current_line,
                     suggestions=[
                         'Check that all variables are defined',
                         'Verify expression syntax is correct',
@@ -380,6 +425,12 @@ class ASTEvaluator(ASTVisitor):
             return [text_message(output_text, inline=True)]
         return [text_message(output_text)]
 
+    def _check_assignment_type(self, name, value):
+        """?TM unless a $ name gets a string and any other name a number."""
+        if name.endswith('$') != isinstance(value, str):
+            wanted = 'a string' if name.endswith('$') else 'a number'
+            self._type_mismatch(f"{name} needs {wanted}")
+
     def visit_assignment(self, node: AssignmentNode) -> Any:
         """Visit assignment statement"""
         value = self.visit(node.value)
@@ -387,22 +438,25 @@ class ASTEvaluator(ASTVisitor):
         if isinstance(node.target, ArrayAccessNode):
             # Array element assignment: A(5) = 42
             array_name = node.target.array_name.upper()
+            self._check_assignment_type(array_name, value)
             err = self.emulator.check_reserved_name(array_name)
             if err:
                 return err
             try:
                 indices = [int(self.visit(idx)) for idx in node.target.indices]
             except (ValueError, TypeError) as e:
-                err = self.emulator.error_context.runtime_error(
-                    f"Invalid array index: {e}",
+                err = self.emulator.error_context.wrapped_error(
+                    "Invalid array index: ", e,
                     self.emulator.current_line,
-                    suggestions=["Array indices must be numeric integers"])
+                    suggestions=["Array indices must be numeric integers",
+                                 "Example: A(I+1) = 5"])
                 return error_response(err)
             err_msg = self.emulator.variable_manager.set_array_element(array_name, indices, value)
             if err_msg:
                 err = self.emulator.error_context.runtime_error(
                     err_msg, self.emulator.current_line,
-                    suggestions=["Check array dimensions with DIM"])
+                    suggestions=["Check array dimensions with DIM",
+                                 "Arrays used without DIM hold indices 0-10"])
                 return error_response(err)
         elif hasattr(node.target, 'name'):
             var_name = node.target.name.upper()
@@ -419,6 +473,7 @@ class ASTEvaluator(ASTVisitor):
             err = self.emulator.check_reserved_name(var_name)
             if err:
                 return err
+            self._check_assignment_type(var_name, value)
             self.emulator.variables[var_name] = value
         else:
             var_name = str(node.target).upper()
@@ -582,8 +637,8 @@ class ASTEvaluator(ASTVisitor):
             value = self.visit(node.expression)
             index = int(value)
         except (ValueError, TypeError) as e:
-            error = self.emulator.error_context.runtime_error(
-                f"ON expression error: {str(e)}",
+            error = self.emulator.error_context.wrapped_error(
+                "ON expression error: ", e, self.emulator.current_line,
                 suggestions=["Ensure the expression evaluates to a number",
                              "Check variable values"])
             return error_response(error)
@@ -674,19 +729,18 @@ class ASTEvaluator(ASTVisitor):
         except (ValueError, TypeError) as e:
             err = self.emulator.error_context.runtime_error(
                 str(e), self.emulator.current_line,
-                suggestions=["FOR loop bounds must be numeric"])
+                suggestions=["FOR loop bounds must be numeric",
+                             "Example: FOR I = 1 TO 10 STEP 2"])
             return error_response(err)
 
-        # Ensure numeric values
-        try:
-            start_val = float(start_val) if isinstance(start_val, str) else start_val
-            end_val = float(end_val) if isinstance(end_val, str) else end_val
-            step_val = float(step_val) if isinstance(step_val, str) else step_val
-        except (ValueError, TypeError):
+        # The loop variable and all bounds must be numeric (?TM otherwise;
+        # a numeric-looking string like "1" is still a string)
+        if var_name.endswith('$') or any(isinstance(v, str) for v in (start_val, end_val, step_val)):
             error = self.emulator.error_context.type_error(
-                "FOR loop values must be numeric",
+                "TYPE MISMATCH: FOR loop variable and values must be numeric",
                 "number",
-                "non-numeric expression",
+                "string",
+                self.emulator.current_line,
                 suggestions=[
                     "Use numeric expressions: FOR I = 1 TO 10",
                     "Variables must contain numbers: LET N = 5; FOR I = 1 TO N",
@@ -694,6 +748,19 @@ class ASTEvaluator(ASTVisitor):
                 ]
             )
             return error_response(error)
+
+        # Re-entering a FOR for a variable that already has an active loop
+        # (e.g. GOTO back to the FOR line) discards that loop and any loops
+        # nested inside it, as Microsoft BASIC does, so frames don't pile up.
+        # Only loops opened in the current GOSUB level are candidates, so a
+        # subroutine's FOR I (with LOCAL I) leaves the caller's FOR I intact.
+        for_stack = self.emulator.for_stack
+        call_stack = self.emulator.call_stack
+        base = call_stack[-1][3] if call_stack else 0
+        for i in range(len(for_stack) - 1, base - 1, -1):
+            if for_stack[i]['var'] == var_name:
+                del for_stack[i:]
+                break
 
         # Check if loop should execute at all
         if ((step_val > 0 and start_val > end_val) or

@@ -83,10 +83,13 @@ class TestDimCommand:
         helpers.assert_error_output(basic, 'PRINT A(-1)', 'Error evaluating PRINT expression')
         helpers.assert_error_output(basic, 'PRINT A(11)', 'Error evaluating PRINT expression')
 
-    def test_undimensioned_array_error(self, basic, helpers):
-        """Test accessing undimensioned array produces error"""
-        helpers.assert_error_output(basic, 'PRINT D(5)', "Error evaluating PRINT expression")
-        helpers.assert_error_output(basic, 'D(0) = 5', "UNDIM'D ARRAY")
+    def test_undimensioned_array_auto_dimensions_to_10(self, basic, helpers):
+        """Color BASIC: using an array without DIM acts as DIM X(10)"""
+        basic.process_command('D(0) = 5')
+        assert basic.arrays['D'][0] == 5
+        assert len(basic.arrays['D']) == 11  # elements 0-10
+        helpers.assert_error_output(basic, 'D(11) = 5', "BAD SUBSCRIPT")
+        helpers.assert_error_output(basic, 'PRINT E(11)', "BAD SUBSCRIPT")
 
     def test_redimensioning_array_error(self, basic, helpers):
         """Test that redimensioning an array produces an error"""
@@ -176,8 +179,9 @@ class TestDimCommand:
         helpers.assert_error_output(basic, 'DIM A()', 'Invalid array declaration')
         
         # Invalid array size
-        helpers.assert_error_output(basic, 'DIM A(-5)', 'Array dimension must be positive')
-        helpers.assert_error_output(basic, 'DIM A(0)', 'Array dimension must be positive')
+        helpers.assert_error_output(basic, 'DIM A(-5)', 'Array dimension cannot be negative')
+        # DIM A(0) is legal in Color BASIC (one element, A(0))
+        assert helpers.get_error_messages(basic.process_command('DIM Z(0)')) == []
 
     def test_reserved_function_name_conflicts(self, basic, helpers):
         """Test that arrays cannot use reserved function names"""
@@ -423,14 +427,9 @@ class TestDimCommand:
         assert basic.arrays['A'][3] == 30
 
     def test_undimensioned_array_error(self, basic, helpers):
-        """Test that undimensioned arrays produce UNDIM'D ARRAY error"""
-        # Use array without declaring it should produce error
-        helpers.assert_error_output(basic, 'B(5) = 42', "UNDIM'D ARRAY")
-        helpers.assert_error_output(basic, 'PRINT B(10)', "Error evaluating PRINT expression")
-        
-        # Array should not be created
-        assert 'B' not in basic.arrays
-        
+        """Undimensioned arrays auto-dimension to 10; beyond that is BAD SUBSCRIPT"""
+        helpers.assert_error_output(basic, 'C(11) = 42', "BAD SUBSCRIPT")
+
         # After explicit DIM, should work
         basic.process_command('DIM B(10)')
         basic.process_command('B(5) = 42')

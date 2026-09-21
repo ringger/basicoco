@@ -62,9 +62,9 @@ class TestFunction:
         result = basic.evaluate_expression("INT(3.7)")
         assert result == 3
         
-        # Negative numbers (truncates toward zero, not negative infinity)
+        # Negative numbers: INT is floor in Color BASIC (INT(-3.7) = -4)
         result = basic.evaluate_expression("INT(-3.7)")
-        assert result == -3  # Truncates toward zero
+        assert result == -4
         
         # Already integers
         result = basic.evaluate_expression("INT(5)")
@@ -332,7 +332,7 @@ class TestFunction:
         """Test nested function calls"""
         # Simple nesting
         result = basic.evaluate_expression("ABS(INT(-3.7))")
-        assert result == 3  # ABS(INT(-3.7)) = ABS(-3) = 3 (INT truncates toward zero)
+        assert result == 4  # ABS(INT(-3.7)) = ABS(-4) = 4 (INT is floor)
         
         # Complex nesting
         result = basic.evaluate_expression("SQR(ABS(-16))")
@@ -464,9 +464,9 @@ class TestFunction:
         result = basic.evaluate_expression('INSTR(2, "ABCABC", "ABC")')
         assert result == 4
 
-        # Start position 0 should be treated as 1
-        result = basic.evaluate_expression('INSTR(0, "HELLO", "H")')
-        assert result == 1
+        # Start position 0 is ILLEGAL FUNCTION CALL, as on the CoCo (was clamped to 1)
+        with pytest.raises(ValueError, match='ILLEGAL FUNCTION CALL'):
+            basic.evaluate_expression('INSTR(0, "HELLO", "H")')
 
     def test_space_function(self, basic, helpers):
         """Test SPACE$ function for generating spaces"""

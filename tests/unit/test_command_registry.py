@@ -174,67 +174,6 @@ class TestCommandRegistry:
         assert len(tokens) == 1
         assert tokens[0] == 'CLS'
 
-    def test_coordinate_parsing(self, basic, helpers):
-        """Test coordinate parsing utilities"""
-        # Test simple coordinates
-        coords = CommandRegistry.parse_coordinates('10,20')
-        assert len(coords) == 2
-        assert coords[0] == '10'
-        assert coords[1] == '20'
-        
-        # Test coordinates with parentheses
-        coords = CommandRegistry.parse_coordinates('(10,20)')
-        assert len(coords) == 2
-        assert coords[0] == '10'
-        assert coords[1] == '20'
-        
-        # Test coordinates with spaces
-        coords = CommandRegistry.parse_coordinates(' 15 , 25 ')
-        assert len(coords) == 2
-        assert coords[0] == '15'
-        assert coords[1] == '25'
-
-    def test_line_coordinate_parsing(self, basic, helpers):
-        """Test LINE command coordinate parsing"""
-        # Test basic line specification
-        start_coords, end_coords = CommandRegistry.parse_line_coordinates('(10,20)-(30,40)')
-        assert len(start_coords) == 2
-        assert start_coords[0] == '10'
-        assert start_coords[1] == '20'
-        assert len(end_coords) == 2
-        assert end_coords[0] == '30'
-        assert end_coords[1] == '40'
-        
-        # Test with variables
-        start_coords, end_coords = CommandRegistry.parse_line_coordinates('(X1,Y1)-(X2,Y2)')
-        assert start_coords[0] == 'X1'
-        assert end_coords[1] == 'Y2'
-
-    def test_coordinate_parsing_with_array_refs(self, basic, helpers):
-        """Test coordinate parsing with 2D array references like GX(R,C)"""
-        coords = CommandRegistry.parse_coordinates('GX(R,C),GY(R,C)')
-        assert len(coords) == 2
-        assert coords[0] == 'GX(R,C)'
-        assert coords[1] == 'GY(R,C)'
-
-    def test_coordinate_parsing_with_nested_expressions(self, basic, helpers):
-        """Test coordinate parsing with expressions containing commas in parens"""
-        coords = CommandRegistry.parse_coordinates('(A(1,2),B(3,4))')
-        assert len(coords) == 2
-        assert coords[0] == 'A(1,2)'
-        assert coords[1] == 'B(3,4)'
-
-    def test_line_coordinates_with_2d_arrays(self, basic, helpers):
-        """Test LINE coordinate parsing with 2D array refs"""
-        start, end = CommandRegistry.parse_line_coordinates(
-            '(GX(R,C),GY(R,C))-(GX(R,C+1),GY(R,C+1))')
-        assert len(start) == 2
-        assert start[0] == 'GX(R,C)'
-        assert start[1] == 'GY(R,C)'
-        assert len(end) == 2
-        assert end[0] == 'GX(R,C+1)'
-        assert end[1] == 'GY(R,C+1)'
-
     def test_help_system_general(self, basic, helpers):
         """Test general help system functionality"""
         # Register some test commands

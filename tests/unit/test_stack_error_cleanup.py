@@ -23,7 +23,7 @@ class TestWhileStackCleanup:
         ]
         results = helpers.execute_program(basic, program)
         errors = helpers.get_error_messages(results)
-        assert any("UNDIM'D ARRAY" in e for e in errors)
+        assert any("BAD SUBSCRIPT" in e for e in errors)  # auto-dim is 0-10
         assert basic.while_stack == []
 
     def test_nested_while_error_clears_all(self, basic, helpers):
@@ -40,7 +40,7 @@ class TestWhileStackCleanup:
         ]
         results = helpers.execute_program(basic, program)
         errors = helpers.get_error_messages(results)
-        assert any("UNDIM'D ARRAY" in e for e in errors)
+        assert any("BAD SUBSCRIPT" in e for e in errors)  # auto-dim is 0-10
         assert basic.while_stack == []
 
 
@@ -57,7 +57,7 @@ class TestDoStackCleanup:
         ]
         results = helpers.execute_program(basic, program)
         errors = helpers.get_error_messages(results)
-        assert any("UNDIM'D ARRAY" in e for e in errors)
+        assert any("BAD SUBSCRIPT" in e for e in errors)  # auto-dim is 0-10
         assert basic.do_stack == []
 
 

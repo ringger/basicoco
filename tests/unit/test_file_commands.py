@@ -138,53 +138,55 @@ class TestFileCommands:
         assert 'info_test.bas' in output_text
         assert 'bytes' in output_text
 
-    # CD Command Tests
+    # CD Command Tests — CD is a per-session virtual directory inside programs/
     def test_cd_show_current_directory(self, basic, helpers, test_dir):
         """Test CD command without arguments shows current directory"""
         result = basic.process_command('CD')
-        self.assert_output_contains(result, 'CURRENT DIRECTORY:')
-        self.assert_output_contains(result, test_dir)
+        self.assert_output_contains(result, 'CURRENT DIRECTORY: PROGRAMS/')
 
     def test_cd_change_directory(self, basic, helpers, test_dir):
-        """Test CD command changes directory"""
-        # Create a subdirectory
-        subdir = os.path.join(test_dir, 'subdir')
-        os.makedirs(subdir)
-        
-        # Change to subdirectory
-        result = basic.process_command(f'CD "{subdir}"')
-        self.assert_output_contains(result, 'CHANGED FROM')
-        self.assert_output_contains(result, 'TO')
-        
-        # Verify we're in the new directory (use realpath to resolve symlinks, e.g. /var -> /private/var on macOS)
-        assert os.path.realpath(os.getcwd()) == os.path.realpath(subdir)
+        """CD into a subdirectory of programs/ without touching the process cwd"""
+        os.makedirs(os.path.join(self.programs_dir, 'subdir'))
+        before = os.getcwd()
+
+        result = basic.process_command('CD "subdir"')
+        self.assert_output_contains(result, 'CHANGED FROM PROGRAMS/')
+        self.assert_output_contains(result, 'TO PROGRAMS/subdir')
+        assert os.getcwd() == before
+
+        # SAVE now lands in the subdirectory
+        basic.process_command('10 PRINT "IN SUBDIR"')
+        basic.process_command('SAVE "sub_prog"')
+        assert os.path.exists(os.path.join(self.programs_dir, 'subdir', 'sub_prog.bas'))
 
     def test_cd_with_shortcuts(self, basic, helpers, test_dir):
-        """Test CD command with path shortcuts"""
-        # Create subdirectory and change to it
-        subdir = os.path.join(test_dir, 'test_subdir')
-        os.makedirs(subdir)
-        os.chdir(subdir)
-
-        # Test .. (parent directory)
+        """.. goes up but never above programs/; / returns to the root"""
+        os.makedirs(os.path.join(self.programs_dir, 'a', 'b'))
+        basic.process_command('CD "a/b"')
         result = basic.process_command('CD ".."')
-        self.assert_output_contains(result, 'CHANGED FROM')
-        assert os.path.realpath(os.getcwd()) == os.path.realpath(test_dir)
+        self.assert_output_contains(result, 'TO PROGRAMS/a')
+        basic.process_command('CD ".."')
+        result = basic.process_command('CD ".."')
+        self.assert_output_contains(result, 'TO PROGRAMS/')
+        basic.process_command('CD "a/b"')
+        result = basic.process_command('CD "/"')
+        self.assert_output_contains(result, 'TO PROGRAMS/')
 
     def test_cd_quoted_paths(self, basic, helpers, test_dir):
         """Test CD command with quoted paths"""
-        subdir = os.path.join(test_dir, 'quoted test')
-        os.makedirs(subdir)
+        os.makedirs(os.path.join(self.programs_dir, 'quoted test'))
 
-        # Test with double quotes
-        result = basic.process_command(f'CD "{subdir}"')
-        self.assert_output_contains(result, 'CHANGED FROM')
-        assert os.path.realpath(os.getcwd()) == os.path.realpath(subdir)
-        
-        # Go back to test single quotes
-        os.chdir(test_dir)
-        result = basic.process_command(f"CD '{subdir}'")
-        self.assert_output_contains(result, 'CHANGED FROM')
+        result = basic.process_command('CD "quoted test"')
+        self.assert_output_contains(result, 'TO PROGRAMS/quoted test')
+
+        basic.process_command('CD "/"')
+        result = basic.process_command("CD 'quoted test'")
+        self.assert_output_contains(result, 'TO PROGRAMS/quoted test')
+
+    def test_cd_cannot_leave_sandbox(self, basic, helpers, test_dir):
+        """Absolute paths and .. above programs/ are refused"""
+        helpers.assert_error_output(basic, f'CD "{test_dir}"', 'ABSOLUTE PATHS NOT ALLOWED')
+        helpers.assert_error_output(basic, 'CD "../.."', 'OUTSIDE PROGRAMS DIRECTORY')
 
     def test_cd_nonexistent_directory(self, basic, helpers):
         """Test CD command with non-existent directory"""
@@ -219,14 +221,16 @@ class TestFileCommands:
         
         filepath = 'programs/confirm_test.bas'
         assert os.path.exists(filepath)
-        
-        # Test cancellation
-        result = basic.process_kill_confirmation('N', filepath)
+
+        # Test cancellation (the KILL command records which file is pending)
+        basic.process_command('KILL "confirm_test"')
+        result = basic.process_kill_confirmation('N')
         self.assert_output_contains(result, 'DELETE CANCELLED')
         assert os.path.exists(filepath), "File should still exist after cancel"
-        
+
         # Test deletion confirmation
-        result = basic.process_kill_confirmation('Y', filepath)
+        basic.process_command('KILL "confirm_test"')
+        result = basic.process_kill_confirmation('Y')
         self.assert_output_contains(result, 'DELETED confirm_test.bas')
         assert not os.path.exists(filepath), "File should be deleted after confirmation"
 
@@ -306,13 +310,17 @@ class TestFileCommands:
         basic.process_command('10 PRINT "MAIN DIR"')
         basic.process_command('SAVE "main_test"')
         
-        # Change to programs directory
-        result = basic.process_command('CD "programs"')
-        self.assert_output_contains(result, 'CHANGED FROM')
-        
-        # DIR should still work from subdirectory
+        # DIR lists it from the programs root
         files_result = basic.process_command('DIR')
         self.assert_output_contains(files_result, 'main_test.bas')
+
+        # From a subdirectory, DIR lists that subdirectory, and LOAD looks there
+        os.makedirs(os.path.join(self.programs_dir, 'sub'))
+        result = basic.process_command('CD "sub"')
+        self.assert_output_contains(result, 'CHANGED FROM')
+        helpers.assert_error_output(basic, 'LOAD "main_test"', 'FILE NOT FOUND')
+        basic.process_command('CD "/"')
+        self.assert_output_contains(basic.process_command('LOAD "main_test"'), 'LOADED')
 
     # Error Handling Tests
     def test_command_error_messages_are_helpful(self, basic, helpers):

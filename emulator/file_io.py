@@ -7,8 +7,9 @@ CoCo BASIC supports file numbers 1-15 with modes I (input), O (output), A (appen
 
 import os
 
+from .ast_nodes import format_basic_number
 from .error_context import error_response, text_response
-from .program_files import FileManager
+from .program_files import FileManager, SandboxError
 from .text_utils import StatementSplitter
 
 
@@ -47,11 +48,15 @@ class FileIOManager:
                 f"FILE NOT OPEN: #{n}",
                 [f'Open the file first: OPEN "I", #{n}, "filename"',
                  "Check that CLOSE has not already been called"])
-        if required_mode and self.open_files[n]['mode'] not in (required_mode if isinstance(required_mode, (list, tuple)) else [required_mode]):
+        allowed = required_mode if isinstance(required_mode, (list, tuple)) else [required_mode]
+        if required_mode and self.open_files[n]['mode'] not in allowed:
             actual = self.open_files[n]['mode']
+            # The attempted operation is the one the required mode allows:
+            # requiring 'I' means we tried to read; 'O'/'A' means we tried to write.
+            attempted = 'read from' if 'I' in allowed else 'write to'
             return self._runtime_error(
                 f"FILE MODE ERROR: #{n} is open for {'INPUT' if actual == 'I' else 'OUTPUT' if actual == 'O' else 'APPEND'}, "
-                f"cannot {'write to' if required_mode == 'I' else 'read from'} it",
+                f"cannot {attempted} it",
                 ["Close the file and reopen in the correct mode",
                  'Input mode: OPEN "I", #n, "file"',
                  'Output mode: OPEN "O", #n, "file"'])
@@ -76,15 +81,17 @@ class FileIOManager:
             return None, err
         return file_num, None
 
-    def _resolve_filename(self, filename):
-        """Resolve a filename relative to the programs directory."""
+    def _resolve_filename(self, filename, mode):
+        """Resolve a data filename inside the programs sandbox.
+
+        Input mode may also read the bundled programs; output/append only
+        ever write to the writable sandbox. Raises SandboxError on escape.
+        """
+        files = self.emulator.file_manager
         filename = FileManager._strip_quotes(filename)
-        # Resolve relative to programs/ directory
-        if not os.path.isabs(filename):
-            programs_dir = os.path.join(os.getcwd(), 'programs')
-            if os.path.isdir(programs_dir):
-                return os.path.join(programs_dir, filename)
-        return filename
+        if mode == 'I':
+            return files.find_readable(filename) or files.resolve_writable(filename)
+        return files.resolve_writable(filename)
 
     # ── OPEN ──────────────────────────────────────────────────────────
 
@@ -126,18 +133,22 @@ class FileIOManager:
             filename = str(self.emulator.evaluate_expression(filename_expr))
         except Exception:
             filename = filename_expr
-        filepath = self._resolve_filename(filename)
+        try:
+            filepath = self._resolve_filename(filename, mode_str)
+        except SandboxError as e:
+            return self._runtime_error(
+                f"OPEN: {e}",
+                ['Data files live in the programs directory: OPEN "O", #1, "DATA.DAT"',
+                 'Subdirectories inside programs/ are fine: "SAVES/SCORES.DAT"',
+                 'Absolute paths, ~ and .. are not allowed'])
 
         # Open the file
         try:
             if mode_str == 'I':
                 handle = open(filepath, 'r')
-            elif mode_str == 'O':
-                os.makedirs(os.path.dirname(filepath) if os.path.dirname(filepath) else '.', exist_ok=True)
-                handle = open(filepath, 'w')
-            else:  # 'A'
-                os.makedirs(os.path.dirname(filepath) if os.path.dirname(filepath) else '.', exist_ok=True)
-                handle = open(filepath, 'a')
+            else:
+                os.makedirs(os.path.dirname(filepath), exist_ok=True)
+                handle = open(filepath, 'w' if mode_str == 'O' else 'a')
         except FileNotFoundError:
             return self._runtime_error(
                 f"FILE NOT FOUND: {os.path.basename(filepath)}",
@@ -147,7 +158,16 @@ class FileIOManager:
         except PermissionError:
             return self._runtime_error(
                 f"PERMISSION DENIED: {os.path.basename(filepath)}",
-                ["Check file permissions"])
+                ["Check file permissions",
+                 "Choose a different filename",
+                 "Close the file in any other program using it"])
+        except OSError as e:
+            reason = 'IS A DIRECTORY' if isinstance(e, IsADirectoryError) else (e.strerror or str(e)).upper()
+            return self._runtime_error(
+                f"FILE ERROR: {os.path.basename(filepath) or filename}: {reason}",
+                ["Check the filename",
+                 'Use a file name, not a directory: OPEN "I", #1, "DATA.DAT"',
+                 "Use DIR to see available files"])
 
         self.open_files[file_num] = {
             'filename': filepath,
@@ -193,8 +213,8 @@ class FileIOManager:
         """PRINT #n, expr [;|,] expr ...
         args has the # already stripped: "1, expr; expr"
         """
-        # Split off file number (first comma separates file# from expressions)
-        comma_pos = args.find(',')
+        # Split off file number (first top-level comma separates file# from expressions)
+        comma_pos = self._file_number_comma(args)
         if comma_pos == -1:
             # PRINT #n with no expressions — write blank line
             file_num_str = args.strip()
@@ -237,16 +257,13 @@ class FileIOManager:
                     if isinstance(value, str):
                         output_parts.append(value)
                     elif isinstance(value, (int, float)):
-                        if isinstance(value, float) and value.is_integer():
-                            output_parts.append(str(int(value)))
-                        else:
-                            output_parts.append(str(value))
+                        output_parts.append(format_basic_number(value))
                     else:
                         output_parts.append(str(value))
                 except Exception as e:
-                    return self._runtime_error(
-                        f"Error evaluating PRINT# expression: {e}",
-                        ["Check expression syntax", "Example: PRINT #1, X, Y"])
+                    return error_response(self.emulator.error_context.wrapped_error(
+                        "Error evaluating PRINT# expression: ", e, self.emulator.current_line,
+                        ["Check expression syntax", "Example: PRINT #1, X, Y"]))
 
         text = ''.join(output_parts)
         if trailing_separator is None:
@@ -307,7 +324,7 @@ class FileIOManager:
         """INPUT #n, var1, var2, ...
         args has the # already stripped: "1, A, B$"
         """
-        comma_pos = args.find(',')
+        comma_pos = self._file_number_comma(args)
         if comma_pos == -1:
             return self._syntax_error(
                 "INPUT# requires file number and at least one variable",
@@ -330,7 +347,8 @@ class FileIOManager:
         if not var_names:
             return self._syntax_error(
                 "INPUT# requires at least one variable",
-                ["Example: INPUT #1, A$"])
+                ["Example: INPUT #1, A$",
+                 "Several variables: INPUT #1, NM$, AGE"])
 
         # Read values from file — values are separated by commas and/or newlines
         for var_str in var_names:
@@ -348,9 +366,40 @@ class FileIOManager:
                     ["Check EOF(n) before reading",
                      "Example: IF EOF(1) THEN GOTO 100"])
 
-            self.emulator.store_input_value(var_desc, value)
+            err = self.emulator.store_input_value(var_desc, value)
+            if err:
+                return self._store_error(err, var_str)
 
         return []
+
+    def _store_error(self, message, var_str):
+        """Report a failed store into an INPUT#/LINE INPUT# target."""
+        return self._runtime_error(
+            f"{message}: {var_str.strip().upper()}",
+            ["Check the array index is within its DIM size",
+             "Undimensioned arrays allow indices 0 to 10",
+             "Example: DIM A(100) before INPUT #1, A(50)"])
+
+    @staticmethod
+    def _file_number_comma(args):
+        """Index of the comma ending the file-number expression, or -1.
+
+        Parentheses and quotes are respected, so PRINT #F(1,2),X splits
+        after F(1,2), not inside it.
+        """
+        depth, in_quotes = 0, False
+        for i, char in enumerate(args):
+            if char == '"':
+                in_quotes = not in_quotes
+            elif in_quotes:
+                continue
+            elif char == '(':
+                depth += 1
+            elif char == ')':
+                depth -= 1
+            elif char == ',' and depth == 0:
+                return i
+        return -1
 
     def _parse_var_descriptor(self, var_str):
         """Parse a variable reference like 'A', 'B$', 'A(1)' into a var_desc dict."""
@@ -433,11 +482,12 @@ class FileIOManager:
 
     def _line_input_file(self, args):
         """LINE INPUT #n, var$"""
-        comma_pos = args.find(',')
+        comma_pos = self._file_number_comma(args)
         if comma_pos == -1:
             return self._syntax_error(
                 "LINE INPUT# requires file number and variable",
-                ["Example: LINE INPUT #1, A$"])
+                ["Example: LINE INPUT #1, A$",
+                 "Put a comma after the file number"])
 
         file_num_str = args[:comma_pos].strip()
         var_str = args[comma_pos + 1:].strip()
@@ -454,11 +504,14 @@ class FileIOManager:
         if not line:
             return self._runtime_error(
                 f"INPUT PAST END OF FILE: #{file_num}",
-                ["Check EOF(n) before reading"])
+                ["Check EOF(n) before reading",
+                 "Example: WHILE NOT EOF(1): LINE INPUT #1, L$: WEND"])
 
         value = line.rstrip('\n').rstrip('\r')
         var_desc = self._parse_var_descriptor(var_str)
-        self.emulator.store_input_value(var_desc, value)
+        err = self.emulator.store_input_value(var_desc, value)
+        if err:
+            return self._store_error(err, var_str)
         return []
 
     def _line_input_console(self, args):
@@ -485,33 +538,48 @@ class FileIOManager:
                 ["Example: LINE INPUT A$",
                  'Example: LINE INPUT "Enter name"; N$'])
 
-        var_name = var_str.upper()
-
-        # Set up input state (similar to regular INPUT but with line_input flag)
-        var_desc = {'name': var_name, 'array': False}
+        # Set up input state (similar to regular INPUT but with line_input
+        # flag); the target may be an array element, LINE INPUT A$(3)
+        var_desc = self._parse_var_descriptor(var_str)
+        if not var_desc['name'].endswith('$'):
+            return self._runtime_error(
+                f"TYPE MISMATCH: LINE INPUT needs a string variable, not {var_desc['name']}",
+                [f"Use a string variable: LINE INPUT {var_desc['name']}$",
+                 "Then VAL() it if you need a number"])
         self.emulator.input_variables = [var_desc]
         self.emulator.input_prompt = prompt_text
         self.emulator.current_input_index = 0
         self.emulator.waiting_for_input = True
         self.emulator.program_counter = (self.emulator.current_line, self.emulator.current_sub_line)
 
-        return [{'type': 'input_request', 'prompt': prompt_text, 'variable': var_name,
-                 'array': False, 'indices': None, 'line_input': True}]
+        return [{'type': 'input_request', 'prompt': prompt_text, 'variable': var_desc['name'],
+                 'array': var_desc['array'], 'indices': var_desc.get('indices'),
+                 'line_input': True}]
 
     # ── EOF ───────────────────────────────────────────────────────────
 
     def eof(self, file_num):
         """EOF(n) — returns -1 at end of file, 0 otherwise."""
+        def fail(message, suggestions):
+            raise ValueError(self.emulator.error_context.runtime_error(
+                message, self.emulator.current_line,
+                suggestions=suggestions).format_detailed())
+
         err = self._validate_file_number(file_num)
         if err:
-            raise ValueError(f"FILE NUMBER ERROR: file number must be 1-{self.MAX_FILE_NUMBER}")
+            fail(f"FILE NUMBER ERROR: file number must be 1-{self.MAX_FILE_NUMBER}",
+                 ["Use the number the file was opened with", 'Example: EOF(1) after OPEN "I", #1, "DATA"'])
 
         if file_num not in self.open_files:
-            raise ValueError(f"FILE NOT OPEN: #{file_num}")
+            fail(f"FILE NOT OPEN: #{file_num}",
+                 [f'Open it first: OPEN "I", #{file_num}, "FILENAME"',
+                  "Check that CLOSE hasn't already run"])
 
         info = self.open_files[file_num]
         if info['mode'] != 'I':
-            raise ValueError(f"EOF only valid for input files")
+            fail(f"EOF only valid for input files (#{file_num} is open for output)",
+                 [f'Open the file for input: OPEN "I", #{file_num}, "FILENAME"',
+                  "EOF tells you when INPUT# has read everything"])
 
         handle = info['handle']
         # Check read buffer first
@@ -519,13 +587,18 @@ class FileIOManager:
         if buf.strip():
             return 0  # Data still in buffer
 
-        # Peek at the file
+        # Peek ahead: only blank lines left counts as end of file, because
+        # INPUT# skips blank lines (it would fail with INPUT PAST END)
         pos = handle.tell()
-        chunk = handle.read(1)
-        if not chunk:
-            return -1  # EOF
-        handle.seek(pos)  # Restore position
-        return 0
+        try:
+            while True:
+                line = handle.readline()
+                if not line:
+                    return -1
+                if line.strip():
+                    return 0
+        finally:
+            handle.seek(pos)
 
     # ── Registry integration ──────────────────────────────────────────
 

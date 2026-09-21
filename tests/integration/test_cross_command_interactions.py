@@ -202,7 +202,7 @@ class TestCrossCommandInteraction:
     def test_error_recovery_across_commands(self, basic, helpers):
         """Test error recovery and state after command errors"""
         # Cause an error
-        result1 = basic.process_command('PRINT A(5)')  # Undimensioned array
+        result1 = basic.process_command('PRINT A(11)')  # Beyond auto-dim range 0-10
         errors1 = helpers.get_error_messages(result1)
         assert len(errors1) > 0
         

@@ -300,7 +300,7 @@ class TestExpressionEvaluation:
         """Test nested function calls"""
         # Simple nesting
         result = basic.evaluate_expression("ABS(INT(-3.7))")
-        assert result == 3
+        assert result == 4  # INT is floor: INT(-3.7) = -4
         
         # Complex nesting
         result = basic.evaluate_expression("SQR(ABS(-16))")
@@ -347,8 +347,10 @@ class TestExpressionEvaluation:
                   "ERROR" in error.upper() or "ZERO" in error.upper() for error in errors), \
                f"Expected error related to division by zero, got: {errors}"
 
-        # Invalid function should produce function error
-        result = basic.process_command("PRINT INVALID_FUNC(5)")
+        # A function called with the wrong number of arguments is an error.
+        # (An unknown name like FOO(5) is an auto-dimensioned array in Color
+        # BASIC, so it is not an error.)
+        result = basic.process_command("PRINT MID$(\"ABC\")")
         errors = helpers.get_error_messages(result)
         assert len(errors) > 0, "Invalid function should produce an error"
         # Accept any error containing relevant keywords

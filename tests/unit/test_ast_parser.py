@@ -342,20 +342,8 @@ class TestASTParser:
         """Test basic AST converter functionality"""
         # Simple IF/THEN with colon-separated statements
         result = parse_and_convert_single_line('IF A=1 THEN PRINT "ONE": B=2', self.parser)
-        expected = ['IF A = 1 THEN', 'PRINT "ONE"', 'B = 2', 'ENDIF']  # AST converter adds spaces around operators
-        assert result is not None
-        assert len(result) == len(expected)
-
-        # Normalize and compare each line
-        for i, (got, exp) in enumerate(zip(result, expected)):
-            got_norm = got.strip().upper()
-            exp_norm = exp.strip().upper()
-            # Allow for LET prefix flexibility
-            if exp_norm.startswith('LET '):
-                exp_norm = exp_norm[4:]
-            if got_norm.startswith('LET '):
-                got_norm = got_norm[4:]
-            assert got_norm == exp_norm, f"Line {i} mismatch: got '{got_norm}', expected '{exp_norm}'"
+        # The expansion keeps each statement's source text verbatim
+        assert result == ['IF A=1 THEN', 'PRINT "ONE"', 'B=2', 'ENDIF']
 
     def test_ast_converter_if_then_else(self, basic, helpers):
         """Test AST converter with IF/THEN/ELSE"""
@@ -454,28 +442,26 @@ class TestASTParser:
         """Test AST converter handling of GOTO statements in control structures"""
         # Test GOTO in IF THEN context - the exact bug pattern that was fixed
         result = parse_and_convert_single_line('IF X=1 THEN PRINT "HI": GOTO 50', self.parser)
-        expected = ['IF X = 1 THEN', 'PRINT "HI"', 'GOTO 50', 'ENDIF']
-        assert result == expected
+        assert result == ['IF X=1 THEN', 'PRINT "HI"', 'GOTO 50', 'ENDIF']
 
-        # Test GOTO with complex expression in IF THEN - now works with simple statements!
+        # A branch that is only a jump stays a single-line IF (no if_stack
+        # entry to leak when the jump is taken)
         result = parse_and_convert_single_line('IF A>0 THEN GOTO A*10+5', self.parser)
-        expected = ['IF A > 0 THEN', 'GOTO (A * 10 + 5)', 'ENDIF']  # AST converter adds parentheses for complex expressions
-        assert result == expected
+        assert result == ['IF A>0 THEN GOTO A*10+5']
 
         # Test multiple statements with GOTO in IF THEN
         result = parse_and_convert_single_line('IF FLAG=1 THEN PRINT "JUMPING": COUNT=COUNT+1: GOTO DEST', self.parser)
-        expected = ['IF FLAG = 1 THEN', 'PRINT "JUMPING"', 'LET COUNT = COUNT + 1', 'GOTO DEST', 'ENDIF']  # AST converter adds LET for assignments
-        assert result == expected
+        assert result == ['IF FLAG=1 THEN', 'PRINT "JUMPING"', 'COUNT=COUNT+1', 'GOTO DEST', 'ENDIF']
 
-        # Test GOTO in FOR loop context
+        # In a one-line loop, the IF's body is just its own statement
         result = parse_and_convert_single_line('FOR I=1 TO 5: IF I=3 THEN GOTO 100: NEXT I', self.parser)
-        expected = ['FOR I = 1 TO 5', 'IF I = 3 THEN', 'GOTO 100', 'ENDIF', 'NEXT I']
-        assert result == expected
+        assert result == ['FOR I=1 TO 5', 'IF I=3 THEN GOTO 100', 'NEXT I']
 
-        # Test simple GOTO in IF THEN (no colons)
-        result = parse_and_convert_single_line('IF X=5 THEN GOTO 100', self.parser)
-        expected = ['IF X = 5 THEN', 'GOTO 100', 'ENDIF']
-        assert result == expected
+        # Implicit GOTO forms
+        assert parse_and_convert_single_line('IF X=5 THEN 100', self.parser) == ['IF X=5 THEN GOTO 100']
+        assert parse_and_convert_single_line('IF X=5 GOTO 100', self.parser) == ['IF X=5 THEN GOTO 100']
+        assert parse_and_convert_single_line('IF X=5 THEN 100 ELSE 200', self.parser) == \
+            ['IF X=5 THEN GOTO 100 ELSE GOTO 200']
 
     def test_gosub_statement_parsing(self, basic, helpers):
         """Test GOSUB statement parsing"""

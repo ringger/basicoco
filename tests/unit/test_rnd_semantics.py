@@ -2,8 +2,8 @@
 
 CoCo semantics:
   RND(n) where n >= 1: random integer from 1 to INT(n)
-  RND(0): repeat last random number
-  RND(-n): reseed with n, then return float (0 < x < 1)
+  RND(0): random fraction, 0 <= x < 1 (not a repeat, as in MS BASIC-80)
+  RND(-n): reseed with n, then return a fraction (0 <= x < 1)
 """
 
 import pytest
@@ -44,30 +44,27 @@ class TestRndPositiveInteger:
 
 
 class TestRndZero:
-    """RND(0) returns the last random number."""
+    """RND(0) returns a fresh random fraction (CoCo Color BASIC)."""
 
-    def test_rnd_zero_repeats_last(self, basic):
-        val = basic.evaluate_expression('RND(6)')
-        repeat = basic.evaluate_expression('RND(0)')
-        assert repeat == val
+    def test_rnd_zero_is_a_fraction(self, basic):
+        for _ in range(50):
+            value = basic.evaluate_expression('RND(0)')
+            assert isinstance(value, float)
+            assert 0 <= value < 1
 
-    def test_rnd_zero_repeats_multiple_times(self, basic):
-        basic.evaluate_expression('RND(6)')
-        a = basic.evaluate_expression('RND(0)')
-        b = basic.evaluate_expression('RND(0)')
-        assert a == b
+    def test_rnd_zero_does_not_repeat(self, basic):
+        values = {basic.evaluate_expression('RND(0)') for _ in range(20)}
+        assert len(values) > 1
 
-    def test_rnd_zero_before_any_rnd(self, basic):
-        """RND(0) before any RND call returns 0.0 (initial last_rnd)."""
-        result = basic.evaluate_expression('RND(0)')
-        assert result == 0.0
+    def test_rnd_zero_before_any_rnd_is_random(self, basic):
+        assert 0 <= basic.evaluate_expression('RND(0)') < 1
 
-    def test_rnd_zero_updates_after_new_rnd(self, basic):
-        first = basic.evaluate_expression('RND(6)')
-        basic.evaluate_expression('RND(0)')  # should be first
-        second = basic.evaluate_expression('RND(10)')
-        repeat = basic.evaluate_expression('RND(0)')
-        assert repeat == second
+    def test_rnd_zero_sequence_reproducible_after_reseed(self, basic):
+        basic.evaluate_expression('RND(-5)')
+        first = [basic.evaluate_expression('RND(0)') for _ in range(3)]
+        basic.evaluate_expression('RND(-5)')
+        second = [basic.evaluate_expression('RND(0)') for _ in range(3)]
+        assert first == second
 
 
 class TestRndNegative:
@@ -94,10 +91,8 @@ class TestRndNegative:
         assert isinstance(result, float)
         assert 0 < result < 1
 
-    def test_negative_seed_updates_last_rnd(self, basic):
-        val = basic.evaluate_expression('RND(-42)')
-        repeat = basic.evaluate_expression('RND(0)')
-        assert repeat == val
+    def test_negative_seed_is_deterministic(self, basic):
+        assert basic.evaluate_expression('RND(-42)') == basic.evaluate_expression('RND(-42)')
 
 
 class TestRndWithRandomize:

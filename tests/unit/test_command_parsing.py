@@ -169,10 +169,10 @@ class TestCommandParsing:
         helpers.load_program(basic, program)
         assert len(basic.program) == 3, f"Expected 3 program lines, got {len(basic.program)}"
         
-        # Test GOTO with line numbers
+        # GOTO typed at the prompt runs the program from that line (as on
+        # the CoCo) rather than returning a raw jump directive
         result = basic.process_command('GOTO 100')
-        assert any(item.get('type') == 'jump' and item.get('line') == 100
-                           for item in result)
+        assert helpers.get_text_output(result) == ['LINE 100', 'LINE 9999']
 
     def test_error_condition_parsing(self, basic, helpers):
         """Test parsing of malformed commands for proper error handling"""

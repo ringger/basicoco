@@ -102,15 +102,14 @@ class TestGotoMigration:
         """GOTO with invalid target should return error"""
         basic.variables['A$'] = "HELLO"
         result = basic._try_ast_execute('GOTO A$')
-        # Should either return error or fall back to registry
-        if result is not None:
-            assert any(item.get('type') == 'error' for item in result)
+        assert result is not None
+        assert any(item.get('type') == 'error' for item in result)
 
     def test_goto_negative_line_error(self, basic):
         """GOTO with negative line number should return error"""
         result = basic._try_ast_execute('GOTO -5')
-        if result is not None:
-            assert any(item.get('type') == 'error' for item in result)
+        assert result is not None
+        assert any(item.get('type') == 'error' for item in result)
 
 
 class TestLetMigration:
@@ -256,8 +255,8 @@ class TestGosubReturnMigration:
         """GOSUB with invalid target should produce error"""
         basic.variables['A$'] = "HELLO"
         result = basic._try_ast_execute('GOSUB A$')
-        if result is not None:
-            assert any(item.get('type') == 'error' for item in result)
+        assert result is not None
+        assert any(item.get('type') == 'error' for item in result)
 
     def test_gosub_return_in_program(self, basic, helpers):
         """GOSUB/RETURN in program should work correctly"""

@@ -9,6 +9,11 @@ import re
 from .text_utils import StatementSplitter
 from .error_context import error_response
 
+# Largest array DIM will create (total elements across all dimensions). The
+# interpreter is network-reachable, so an unbounded DIM A(10000,10000) would
+# let one program exhaust server memory.
+MAX_ARRAY_ELEMENTS = 1_000_000
+
 
 class VariableManager:
     """Handler for BASIC variable and array operations"""
@@ -76,13 +81,25 @@ class VariableManager:
                     dimensions = []
                     for dim_str in StatementSplitter.split_args(dimensions_str):
                         dim_value = self.emulator.eval_int(dim_str)
-                        if dim_value <= 0:
-                            return self._syntax_error(f"Array dimension must be positive: {dim_value}", [
-                                'Array dimensions must be greater than 0',
-                                'Example: DIM A(10) not DIM A(0)',
-                                'Use positive integers for array sizes'
+                        if dim_value < 0:
+                            return self._syntax_error(f"Array dimension cannot be negative: {dim_value}", [
+                                'DIM A(N) creates elements 0 to N, so N must be 0 or more',
+                                'Example: DIM A(10) creates A(0) through A(10)',
+                                'Check the expression used for the size'
                             ])
                         dimensions.append(dim_value)
+
+                    elements = 1
+                    for dim_value in dimensions:
+                        elements *= dim_value + 1
+                    if elements > MAX_ARRAY_ELEMENTS:
+                        return self._runtime_error(
+                            f"OUT OF MEMORY: {array_name} would need {elements:,} elements "
+                            f"(limit {MAX_ARRAY_ELEMENTS:,})", [
+                                'Use smaller array dimensions',
+                                'Split the data across several smaller arrays',
+                                'Example: DIM A(100,100) has 10,201 elements'
+                            ])
                     
                     # Check if array is already dimensioned (after syntax validation)
                     if array_name in self.emulator.arrays:
@@ -103,7 +120,8 @@ class VariableManager:
                         self.emulator.arrays[array_name] = self._create_multidim_array(dimensions, 0)
                         
                 except ValueError as e:
-                    return self._syntax_error(f"Invalid array dimension expression: {str(e)}", [
+                    first_line = str(e).splitlines()[0] if str(e) else ''
+                    return self._syntax_error(f"Invalid array dimension expression: {first_line}", [
                         'Array dimensions must evaluate to positive integers',
                         'Example: DIM A(N), B(X*2)',
                         'Check that all variables in dimensions are defined'
@@ -117,12 +135,20 @@ class VariableManager:
                 'Ensure all expressions are valid'
             ])
     
+    AUTO_DIM_SIZE = 10  # Color BASIC: an undimensioned array acts as DIM A(10)
+
+    def _auto_dimension(self, array_name, dimension_count):
+        """Create an undimensioned array on first use, as Color BASIC does."""
+        default = "" if array_name.endswith('$') else 0
+        self.emulator.arrays[array_name] = self._create_multidim_array(
+            [self.AUTO_DIM_SIZE] * dimension_count, default)
+
     def get_array_element(self, array_name, indices):
         """Get value from array element using nested array structure"""
         try:
             if array_name not in self.emulator.arrays:
-                return None, "UNDIM'D ARRAY"
-            
+                self._auto_dimension(array_name, len(indices))
+
             # Get the nested array structure
             array_data = self.emulator.arrays[array_name]
             
@@ -143,8 +169,8 @@ class VariableManager:
         """Set value in array element using nested array structure"""
         try:
             if array_name not in self.emulator.arrays:
-                return "UNDIM'D ARRAY"
-            
+                self._auto_dimension(array_name, len(indices))
+
             # Get the nested array structure
             array_data = self.emulator.arrays[array_name]
             
@@ -167,29 +193,6 @@ class VariableManager:
         except Exception as e:
             return f"Error setting array element: {str(e)}"
     
-    def set_variable(self, var_name, value):
-        """Set variable value with type validation"""
-        var_name = var_name.upper()
-        
-        # Type validation
-        if var_name.endswith('$'):
-            # String variable
-            self.emulator.variables[var_name] = str(value)
-        else:
-            # Numeric variable
-            try:
-                if isinstance(value, str):
-                    # Try to convert string to number
-                    if '.' in value or 'E' in value.upper():
-                        self.emulator.variables[var_name] = float(value)
-                    else:
-                        self.emulator.variables[var_name] = int(value)
-                else:
-                    self.emulator.variables[var_name] = value
-            except (ValueError, TypeError):
-                # If conversion fails, set to 0
-                self.emulator.variables[var_name] = 0
-    
     def _create_multidim_array(self, dimensions, init_value):
         """Create nested lists for multi-dimensional array"""
         # Create nested lists for multi-dimensional array
@@ -197,25 +200,6 @@ class VariableManager:
             return [init_value] * (dimensions[0] + 1)  # DIM A(10) creates 11 elements (0-10)
         else:
             return [self._create_multidim_array(dimensions[1:], init_value) for _ in range(dimensions[0] + 1)]
-    
-    def _calculate_linear_index(self, indices, dimensions):
-        """Convert multi-dimensional indices to linear index"""
-        linear_index = 0
-        multiplier = 1
-        
-        # Calculate in reverse order
-        for i in range(len(indices) - 1, -1, -1):
-            linear_index += indices[i] * multiplier
-            multiplier *= (dimensions[i] + 1)
-        
-        return linear_index
-    
-    def _get_default_value(self, var_name):
-        """Get default value for variable based on type"""
-        if var_name.endswith('$'):
-            return ""  # String variables default to empty string
-        else:
-            return 0   # Numeric variables default to 0
     
     def clear_variables(self):
         """Clear all variables and arrays"""

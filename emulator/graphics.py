@@ -6,10 +6,13 @@ GET, PUT, DRAW, COLOR, PCLEAR, PCLS, and GPRINT.
 """
 
 from .text_utils import StatementSplitter
-from .commands import CommandRegistry
 from .error_context import error_response
+from .ast_nodes import format_basic_number
 
 _split_args = StatementSplitter.split_args  # Shared comma-split helper
+
+# How PUT combines the stored block with the screen
+_PUT_ACTIONS = frozenset({'PSET', 'PRESET', 'AND', 'OR', 'NOT'})
 
 
 def _graphics_command(command_name, require_graphics=False):
@@ -23,9 +26,11 @@ def _graphics_command(command_name, require_graphics=False):
             try:
                 return method(self, args)
             except Exception as e:
-                err = self.emulator.error_context.runtime_error(
-                    f"Error in {command_name}: {e}",
-                    self.emulator.current_line)
+                err = self.emulator.error_context.wrapped_error(
+                    f"Error in {command_name}: ", e,
+                    self.emulator.current_line,
+                    suggestions=[f'Type HELP {command_name} for the syntax',
+                                 'Coordinates, colors and modes must be numbers'])
                 return error_response(err)
         wrapper.__name__ = method.__name__
         wrapper.__doc__ = method.__doc__
@@ -40,6 +45,8 @@ class BasicGraphics:
         """Initialize graphics handler with reference to main emulator"""
         self.emulator = emulator
         self.pixel_buffer = {}  # Sparse dict: (x, y) -> color
+        self.clear_color = 0  # Color of undrawn pixels (set by PCLS c)
+        self.last_line_end = (0, 0)  # Start point for LINE -(x,y)
     
     def register_commands(self, registry):
         """Register graphics commands with the command registry"""
@@ -64,11 +71,13 @@ class BasicGraphics:
             message, self.emulator.current_line, suggestions=suggestions)
         return error_response(error)
 
-    def _illegal_function_call(self):
+    def _illegal_function_call(self, detail=None, suggestions=None):
         """Return an ILLEGAL FUNCTION CALL error response."""
+        message = f"ILLEGAL FUNCTION CALL: {detail}" if detail else "ILLEGAL FUNCTION CALL"
         error = self.emulator.error_context.runtime_error(
-            "ILLEGAL FUNCTION CALL",
-            self.emulator.current_line)
+            message, self.emulator.current_line,
+            suggestions=suggestions or ['Check the argument ranges with HELP <command>',
+                                        'Graphics commands need PMODE and SCREEN 1,1 first'])
         return error_response(error)
 
     def _require_graphics_mode(self):
@@ -102,20 +111,76 @@ class BasicGraphics:
         return self.emulator._system_ok()
 
     def execute_pcls(self, args):
-        """Execute PCLS command to clear graphics screen"""
+        """PCLS [color] - clear the graphics screen (to color, if given)"""
+        color = self.emulator.eval_int(args) if args.strip() else None
         self.pixel_buffer.clear()
-        return [{'type': 'pcls'}]
+        self.clear_color = color if color is not None else 0
+        return [{'type': 'pcls', 'color': color}]
+
+    # ── Pixel tracking (for PPOINT) ──────────────────────────────────
+    # The client renders; the server keeps a sparse copy of what was drawn
+    # so PPOINT can answer. Coordinates are clipped to the 256x192 screen.
+    SCREEN_WIDTH, SCREEN_HEIGHT = 256, 192
+    _TRACK_LIMIT = 4096  # lines/circles beyond this are not pixel-tracked
 
     def get_pixel(self, x, y):
-        """Return color at (x, y), or 0 if unset."""
-        return self.pixel_buffer.get((x, y), 0)
+        """Return color at (x, y): what was drawn there, else the clear color."""
+        return self.pixel_buffer.get((x, y), self.clear_color)
 
     def clear_pixel_buffer(self):
         """Clear the pixel buffer."""
         self.pixel_buffer.clear()
+        self.clear_color = 0
+
+    def _plot(self, x, y, color):
+        if 0 <= x < self.SCREEN_WIDTH and 0 <= y < self.SCREEN_HEIGHT:
+            self.pixel_buffer[(x, y)] = color
+
+    def _record_line(self, x1, y1, x2, y2, color):
+        """Record a line's pixels (Bresenham, as the client draws it)."""
+        if max(abs(x1), abs(y1), abs(x2), abs(y2)) > self._TRACK_LIMIT:
+            return  # far off-screen: not worth (or safe) to walk pixel by pixel
+        dx, dy = abs(x2 - x1), -abs(y2 - y1)
+        sx, sy = (1 if x1 < x2 else -1), (1 if y1 < y2 else -1)
+        err = dx + dy
+        for _ in range(self.SCREEN_WIDTH + self.SCREEN_HEIGHT + dx - dy):
+            self._plot(x1, y1, color)
+            if x1 == x2 and y1 == y2:
+                break
+            e2 = 2 * err
+            if e2 >= dy:
+                err += dy
+                x1 += sx
+            if e2 <= dx:
+                err += dx
+                y1 += sy
+
+    def _record_box(self, x1, y1, x2, y2, color, filled):
+        if filled:
+            for y in range(max(0, min(y1, y2)), min(self.SCREEN_HEIGHT, max(y1, y2) + 1)):
+                self._record_line(x1, y, x2, y, color)
+        else:
+            for a, b, c, d in ((x1, y1, x2, y1), (x2, y1, x2, y2), (x2, y2, x1, y2), (x1, y2, x1, y1)):
+                self._record_line(a, b, c, d, color)
+
+    def _record_circle(self, cx, cy, radius, color):
+        """Record a circle outline (midpoint algorithm)."""
+        if max(abs(cx), abs(cy), abs(radius)) > self._TRACK_LIMIT:
+            return
+        x, y, err = radius, 0, 1 - radius
+        while x >= y:
+            for px, py in ((x, y), (y, x), (-y, x), (-x, y), (-x, -y), (-y, -x), (y, -x), (x, -y)):
+                self._plot(cx + px, cy + py, color)
+            y += 1
+            if err < 0:
+                err += 2 * y + 1
+            else:
+                x -= 1
+                err += 2 * (y - x) + 1
 
     def _parse_coord_pair(self, args, command_name):
         """Parse (x,y) from args. Returns (x, y, remainder_after_paren) or error list."""
+        args = args.strip()
         if not (args.startswith('(') and ')' in args):
             return self._syntax_error(
                 f"{command_name} requires parenthesized coordinates",
@@ -165,6 +230,43 @@ class BasicGraphics:
             y = self.emulator.eval_int(parts[1])
             return (x, y, parts[2:])
 
+    def _parse_coord_range(self, args, command_name):
+        """Parse (x1,y1)-(x2,y2) or -(x2,y2) plus trailing ,args.
+
+        Coordinates are matched by parenthesis depth (so C(1), MAX(1,2) or
+        P(1)-(2) inside a coordinate are fine). ``-(x2,y2)`` starts at the
+        end of the previous LINE. Returns (x1, y1, x2, y2, extra_parts) or an
+        error response list.
+        """
+        args = args.strip()
+        if args.startswith('-'):
+            x1, y1 = self.last_line_end
+            rest = args[1:].strip()
+        else:
+            first = self._parse_coord_pair(args, command_name)
+            if isinstance(first, list):
+                return first
+            x1, y1, rest = first
+            if not rest.startswith('-'):
+                return self._syntax_error(
+                    f"{command_name} requires (x1,y1)-(x2,y2)",
+                    [f'Correct syntax: {command_name}(x1,y1)-(x2,y2)',
+                     f'Example: {command_name}(0,0)-(50,50)',
+                     'Put a dash between the two coordinate pairs'])
+            rest = rest[1:].strip()
+        second = self._parse_coord_pair(rest, command_name)
+        if isinstance(second, list):
+            return second
+        x2, y2, remainder = second
+        extra = _split_args(remainder[1:]) if remainder.startswith(',') else []
+        if remainder and not remainder.startswith(','):
+            return self._syntax_error(
+                f"Unexpected text after {command_name} coordinates: {remainder}",
+                [f'Example: {command_name}(0,0)-(50,50),PSET',
+                 'Separate options with commas',
+                 'Check for a missing comma'])
+        return x1, y1, x2, y2, extra
+
     def _parse_optional_int(self, parts, index):
         """Parse an optional integer from parts[index]. Returns int or None."""
         if len(parts) > index and parts[index].strip():
@@ -172,13 +274,19 @@ class BasicGraphics:
         return None
 
     def _find_matching_parenthesis(self, text, start):
-        """Find the matching closing parenthesis for the opening one at start"""
+        """Find the matching closing parenthesis for the opening one at start
+        (parentheses inside quoted strings don't count)."""
         if start >= len(text) or text[start] != '(':
             return -1
-        
+
         paren_count = 0
+        in_quotes = False
         for i in range(start, len(text)):
-            if text[i] == '(':
+            if text[i] == '"':
+                in_quotes = not in_quotes
+            elif in_quotes:
+                continue
+            elif text[i] == '(':
                 paren_count += 1
             elif text[i] == ')':
                 paren_count -= 1
@@ -199,7 +307,13 @@ class BasicGraphics:
             page = self.emulator.eval_int(parts[1])
 
         if mode < 0 or mode > 4:
-            return self._illegal_function_call()
+            return self._illegal_function_call(
+                f"PMODE mode {mode} is outside 0-4",
+                ['PMODE 4,1 is 256x192, two colors', 'PMODE 3,1 is 128x192, four colors'])
+        if page < 1 or page > 8:
+            return self._illegal_function_call(
+                f"PMODE start page {page} is outside 1-8",
+                ['Use PMODE mode,1 unless you are page-flipping', 'Example: PMODE 4,1'])
 
         self.emulator.graphics_mode = mode
 
@@ -208,17 +322,22 @@ class BasicGraphics:
     @_graphics_command('SCREEN')
     def execute_screen(self, args):
         """Execute SCREEN command to set screen/color mode"""
-        # Parse SCREEN mode[,page] parameters
-        if ',' in args:
-            parts = _split_args(args)
-            mode = self.emulator.eval_int(parts[0])
-            page = self.emulator.eval_int(parts[1])
-        else:
-            mode = self.emulator.eval_int(args)
-            page = 1  # Default page
+        # Parse SCREEN mode[,page] parameters (commas inside an argument
+        # expression, e.g. SCREEN X(1,1), don't separate arguments)
+        parts = _split_args(args)
+        if not parts or len(parts) > 2:
+            return self._syntax_error("SCREEN takes a mode and an optional color set",
+                                      ['Correct syntax: SCREEN mode[,colorset]',
+                                       'Example: SCREEN 1,0',
+                                       'Mode 1 is graphics; mode 0 is text'])
+        mode = self.emulator.eval_int(parts[0])
+        # Color set: as on the CoCo, any nonzero value selects set 1
+        page = (1 if self.emulator.eval_int(parts[1]) else 0) if len(parts) > 1 else 1
 
         if mode < 1 or mode > 2:
-            return self._illegal_function_call()
+            return self._illegal_function_call(
+                f"SCREEN mode {mode} is not supported",
+                ['SCREEN 1,1 shows the graphics screen', 'SCREEN 1,0 selects the other color set'])
 
         self.emulator.screen_mode = mode
 
@@ -227,13 +346,15 @@ class BasicGraphics:
     @_graphics_command('COLOR')
     def execute_color(self, args):
         """Execute COLOR command to set foreground/background colors"""
-        if ',' in args:
-            parts = _split_args(args)
-            fg = self.emulator.eval_int(parts[0]) if parts[0] else None
-            bg = self.emulator.eval_int(parts[1]) if len(parts) > 1 and parts[1] else None
-        else:
-            fg = self.emulator.eval_int(args)
-            bg = None
+        parts = _split_args(args, keep_empty=True)
+        fg = self.emulator.eval_int(parts[0]) if parts and parts[0] else None
+        bg = self.emulator.eval_int(parts[1]) if len(parts) > 1 and parts[1] else None
+        for value in (fg, bg):
+            if value is not None and not 0 <= value <= 8:
+                return self._illegal_function_call(
+                    f"color {value} is outside 0-8",
+                    ['Colors are 0-8: 0 black, 1 green, 2 yellow, 3 blue, 4 red, ...',
+                     'Example: COLOR 4,0'])
 
         return [{'type': 'set_color', 'fg': fg, 'bg': bg}]
     
@@ -246,7 +367,7 @@ class BasicGraphics:
         x, y, extra = result
         color = self._parse_optional_int(extra, 0)
         effective_color = color if color is not None else self.emulator.current_draw_color
-        self.pixel_buffer[(x, y)] = effective_color
+        self._plot(x, y, effective_color)
         return [{'type': 'pset', 'x': x, 'y': y, 'color': color}]
     
     @_graphics_command('PRESET', require_graphics=True)
@@ -256,41 +377,44 @@ class BasicGraphics:
         if isinstance(result, list):
             return result
         x, y, _ = result
-        self.pixel_buffer[(x, y)] = 0
+        self._plot(x, y, self.clear_color)
         return [{'type': 'preset', 'x': x, 'y': y}]
     
     @_graphics_command('LINE', require_graphics=True)
     def execute_line_graphics(self, args):
         """Execute LINE command to draw a line"""
 
-        # Parse LINE (x1,y1)-(x2,y2)[,PSET|PRESET|color][,B|BF]
+        # Parse LINE (x1,y1)-(x2,y2)[,PSET|PRESET|color][,B|BF],
+        # LINE -(x2,y2)[,...] (from the previous LINE's end point),
         # or LINE x1,y1,x2,y2[,color]
-        if CommandRegistry.is_coordinate_pair_syntax(args):
-            # Extract coordinate spec and trailing parameters
-            last_paren = args.rfind(')')
-            coord_spec = args[:last_paren + 1]
-            trailing = args[last_paren + 1:].strip().lstrip(',')
-            parts = [p.strip().upper() for p in trailing.split(',') if p.strip()]
+        if args.lstrip().startswith(('(', '-')):
+            result = self._parse_coord_range(args, 'LINE')
+            if isinstance(result, list):
+                return result
+            x1, y1, x2, y2, parts = result
 
             mode = 'PSET'
             color = None
             box_type = None
 
             for part in parts:
-                if part in ('PSET', 'PRESET'):
-                    mode = part
-                elif part in ('B', 'BF'):
-                    box_type = part
-                elif part:
+                keyword = part.strip().upper()
+                if keyword in ('PSET', 'PRESET'):
+                    mode = keyword
+                elif keyword in ('B', 'BF'):
+                    box_type = keyword
+                elif keyword:
                     color = self.emulator.eval_int(part)
 
-            start_coords, end_coords = CommandRegistry.parse_line_coordinates(coord_spec)
-
-            x1 = self.emulator.eval_int(start_coords[0].strip())
-            y1 = self.emulator.eval_int(start_coords[1].strip())
-            x2 = self.emulator.eval_int(end_coords[0].strip())
-            y2 = self.emulator.eval_int(end_coords[1].strip())
-
+            self.last_line_end = (x2, y2)
+            if mode == 'PRESET':
+                pixel_color = self.clear_color
+            else:
+                pixel_color = color if color is not None else self.emulator.current_draw_color
+            if box_type:
+                self._record_box(x1, y1, x2, y2, pixel_color, filled=box_type == 'BF')
+            else:
+                self._record_line(x1, y1, x2, y2, pixel_color)
             return [{'type': 'line', 'x1': x1, 'y1': y1, 'x2': x2, 'y2': y2,
                      'color': color, 'mode': mode, 'box_type': box_type}]
         else:
@@ -326,6 +450,8 @@ class BasicGraphics:
                  'Example: CIRCLE 100,50,25'])
         radius = self.emulator.eval_int(extra[0])
         color = self._parse_optional_int(extra, 1)
+        self._record_circle(x, y, radius,
+                            color if color is not None else self.emulator.current_draw_color)
         return [{'type': 'circle', 'x': x, 'y': y, 'radius': radius, 'color': color}]
     
     @_graphics_command('PAINT', require_graphics=True)
@@ -383,7 +509,8 @@ class BasicGraphics:
 
         text = self.emulator.evaluate_expression(parts[0])
         if not isinstance(text, str):
-            text = str(text)
+            text = format_basic_number(text)
+        text = text.upper()  # the GPRINT font, like the CoCo's, has no lowercase
 
         color = self._parse_optional_int(parts, 1)
         if color is None:
@@ -395,30 +522,17 @@ class BasicGraphics:
     def execute_get(self, args):
         """Execute GET command to capture graphics area"""
 
-        # Parse GET (x1,y1)-(x2,y2), array_name
-        if '-(' in args and ',' in args:
-            coords_part, array_name = args.rsplit(',', 1)
-            array_name = array_name.strip()
-
-            start_coords, end_coords = coords_part.split('-(', 1)
-            if start_coords.startswith('('):
-                start_coords = start_coords[1:]
-
-            end_coords = end_coords.rstrip(')')
-
-            x1_str, y1_str = start_coords.split(',')
-            x2_str, y2_str = end_coords.split(',')
-
-            x1 = self.emulator.eval_int(x1_str.strip())
-            y1 = self.emulator.eval_int(y1_str.strip())
-            x2 = self.emulator.eval_int(x2_str.strip())
-            y2 = self.emulator.eval_int(y2_str.strip())
-
-            return [{'type': 'get', 'x1': x1, 'y1': y1, 'x2': x2, 'y2': y2, 'array': array_name}]
-        else:
-            return self._syntax_error("Invalid GET syntax", ['Correct syntax: GET(x1,y1)-(x2,y2),array_name',
-                    'Example: GET(0,0)-(50,50),A',
-                    'Specify rectangular area and target array'])
+        # Parse GET (x1,y1)-(x2,y2), array_name [,G]
+        result = self._parse_coord_range(args, 'GET') if args.lstrip().startswith('(') else None
+        if result is None or isinstance(result, list) or not result[4]:
+            return result if isinstance(result, list) else self._syntax_error(
+                "Invalid GET syntax",
+                ['Correct syntax: GET(x1,y1)-(x2,y2),array_name',
+                 'Example: GET(0,0)-(50,50),A',
+                 'Specify rectangular area and target array'])
+        x1, y1, x2, y2, extra = result
+        return [{'type': 'get', 'x1': x1, 'y1': y1, 'x2': x2, 'y2': y2,
+                 'array': extra[0].strip().upper()}]
     
     @_graphics_command('PUT', require_graphics=True)
     def execute_put(self, args):
@@ -442,6 +556,10 @@ class BasicGraphics:
             action = 'PSET'  # Default action
             if len(parts) > 1 and parts[1]:
                 action = parts[1].strip().upper()
+            if action not in _PUT_ACTIONS:
+                return self._syntax_error(f"Unknown PUT action: {action}",
+                    ['PUT actions are PSET, PRESET, AND, OR and NOT',
+                     'Example: PUT(100,50),A,PSET'])
 
             return [{'type': 'put', 'x': x, 'y': y, 'array': array_name, 'action': action}]
         else:
@@ -510,14 +628,16 @@ class BasicGraphics:
             if state['blank']:
                 state['blank'] = False
                 # Turtle moved but don't emit draw output
-            elif state['no_update']:
+                continue
+            for segment in result:
+                self._record_line(segment['x1'], segment['y1'], segment['x2'], segment['y2'],
+                                  segment['color'])
+            output.extend(result)
+            if state['no_update']:
                 state['no_update'] = False
-                output.extend(result)
                 # Restore turtle to pre-move position
                 self.emulator.turtle_x = saved_x
                 self.emulator.turtle_y = saved_y
-            else:
-                output.extend(result)
 
         return output
 
@@ -544,16 +664,14 @@ class BasicGraphics:
             old_x, old_y = self.emulator.turtle_x, self.emulator.turtle_y
             self.emulator.turtle_x += dx
             self.emulator.turtle_y += dy
-
-            return [{'type': 'line', 'x1': old_x, 'y1': old_y,
-                    'x2': self.emulator.turtle_x, 'y2': self.emulator.turtle_y,
-                    'color': self.emulator.current_draw_color}]
+            return self._draw_segment(old_x, old_y)
 
         elif cmd_type == 'M':
             x = command.get('x', self.emulator.turtle_x)
             y = command.get('y', self.emulator.turtle_y)
             relative = command.get('relative', False)
 
+            old_x, old_y = self.emulator.turtle_x, self.emulator.turtle_y
             if relative:
                 dx, dy = self._rotate_delta(x * scale // 4, y * scale // 4, angle)
                 self.emulator.turtle_x += dx
@@ -561,5 +679,15 @@ class BasicGraphics:
             else:
                 self.emulator.turtle_x = x
                 self.emulator.turtle_y = y
+            # M draws a line like the other moves (BM moves without drawing;
+            # the caller drops the output for a B-prefixed command)
+            return self._draw_segment(old_x, old_y)
 
         return []
+
+    def _draw_segment(self, old_x, old_y):
+        """Line from (old_x, old_y) to the turtle's position, as DRAW output."""
+        new_x, new_y = self.emulator.turtle_x, self.emulator.turtle_y
+        color = self.emulator.current_draw_color
+        return [{'type': 'line', 'x1': old_x, 'y1': old_y, 'x2': new_x, 'y2': new_y,
+                 'color': color}]

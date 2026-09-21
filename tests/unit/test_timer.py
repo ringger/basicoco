@@ -34,23 +34,30 @@ class TestTimerRead:
         assert output == ['OK']
 
 
+@pytest.fixture
+def clock(monkeypatch):
+    """A controllable clock for TIMER: set clock.now, read exact tick counts
+    (the evaluator reads time.time()), so the tests can't flake under load."""
+    class Clock:
+        now = 1000.0
+    monkeypatch.setattr(time, 'time', lambda: Clock.now)
+    return Clock
+
+
 class TestTimerWrite:
     """Tests for setting the TIMER pseudo-variable."""
 
-    def test_timer_reset_to_zero(self, basic, helpers):
-        time.sleep(0.02)
+    def test_timer_reset_to_zero(self, basic, helpers, clock):
+        clock.now += 5
         basic.process_command('TIMER = 0')
         result = basic.process_command('PRINT TIMER')
-        t = int(helpers.get_text_output(result)[0].strip())
-        # Should be close to 0 (within a few ticks)
-        assert t < 10
+        assert int(helpers.get_text_output(result)[0].strip()) == 0
 
-    def test_timer_set_to_value(self, basic, helpers):
+    def test_timer_set_to_value(self, basic, helpers, clock):
         basic.process_command('TIMER = 600')
+        clock.now += 0.5  # 30 ticks later
         result = basic.process_command('PRINT TIMER')
-        t = int(helpers.get_text_output(result)[0].strip())
-        # Should be close to 600 (10 seconds worth of ticks)
-        assert 598 <= t <= 610
+        assert int(helpers.get_text_output(result)[0].strip()) == 630
 
     def test_timer_set_negative(self, basic, helpers):
         """Setting TIMER to negative is allowed (matches real CoCo)."""

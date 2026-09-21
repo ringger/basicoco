@@ -232,3 +232,27 @@ class TestClearInterpreterState:
         basic.process_command('10 PRINT "HI"')
         basic.clear_interpreter_state(clear_program=False)
         assert len(basic.program) == 1
+
+
+class TestClearCommand:
+    """CLEAR [n]: erase variables and arrays (n, the string space, is accepted
+    and ignored); the program stays."""
+
+    @pytest.mark.parametrize('command', ['CLEAR', 'CLEAR 1000', 'CLEAR 200*5'])
+    def test_clears_variables_and_arrays_keeps_program(self, basic, helpers, command):
+        basic.process_command('10 PRINT "HI"')
+        basic.process_command('A = 5: B$ = "X": DIM C(3)')
+        result = basic.process_command(command)
+        assert helpers.get_error_messages(result) == []
+        assert basic.variables == {} and basic.arrays == {}
+        assert list(basic.program) == [10]
+
+    def test_clear_in_program_prints_nothing(self, basic, helpers):
+        helpers.load_program(basic, ['10 A = 1', '20 CLEAR 500', '30 PRINT A'])
+        results = helpers.run_to_completion(basic)
+        assert helpers.get_error_messages(results) == []
+        assert ' '.join(helpers.get_text_output(results)).split() == ['0']
+
+    def test_non_numeric_argument_is_error(self, basic, helpers):
+        errors = helpers.get_error_messages(basic.process_command('CLEAR "A"'))
+        assert errors

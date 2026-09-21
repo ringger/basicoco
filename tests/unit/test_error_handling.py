@@ -28,8 +28,8 @@ class TestErrorHandling:
 
     def test_array_errors(self, basic, helpers):
         """Test array-related error handling"""
-        # Undimensioned array
-        helpers.assert_error_output(basic, 'PRINT A(5)', 'variables are defined')
+        # Undimensioned array auto-dimensions to 10, so 11 is out of range
+        helpers.assert_error_output(basic, 'PRINT A(11)', 'BAD SUBSCRIPT')
 
         # Bad subscript
         basic.process_command('DIM B(10)')
@@ -46,6 +46,5 @@ class TestErrorHandling:
         # RETURN without GOSUB
         helpers.assert_error_output(basic, 'RETURN', 'RETURN WITHOUT GOSUB')
 
-        # GOSUB to undefined line should produce jump instruction (error occurs at runtime)
-        result = basic.process_command('GOSUB 9999')
-        assert any(item.get('type') == 'jump' for item in result)
+        # GOSUB to an undefined line from the prompt is an UNDEFINED LINE error
+        helpers.assert_error_output(basic, 'GOSUB 9999', 'UNDEFINED LINE')

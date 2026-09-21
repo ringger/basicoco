@@ -231,14 +231,14 @@ class TestProgramManagementCommand:
         # Create a test program
         basic.process_command('10 PRINT "PATH TEST"')
         
-        # Try to save with explicit programs/ path
-        result = basic.process_command('SAVE "programs/pathtest"')
-        
+        # Paths are relative to the programs/ sandbox; subdirectories are created
+        result = basic.process_command('SAVE "sub/pathtest"')
+
         # Should succeed
         assert any('SAVED' in str(r.get('text', '')) for r in result)
-        
-        # Verify file was created in programs directory
-        saved_file = os.path.join(temp_setup, 'pathtest.bas')
+
+        # Verify file was created in the subdirectory of programs/
+        saved_file = os.path.join(temp_setup, 'sub', 'pathtest.bas')
         assert os.path.exists(saved_file)
 
     def test_command_registry_integration(self, basic, helpers):

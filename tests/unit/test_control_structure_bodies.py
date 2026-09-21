@@ -104,7 +104,7 @@ class TestFileIOInIfThenBodies:
         result = parse_and_convert_single_line(
             'IF F>0 THEN PRINT# 1, X: Y=Y+1', self.parser)
         assert 'PRINT# 1, X' in result
-        assert 'LET Y = Y + 1' in result
+        assert 'Y=Y+1' in result
 
     def test_regular_print_still_ast_parsed(self):
         """Regular PRINT should still go through AST for proper formatting"""

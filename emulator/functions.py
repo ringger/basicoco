@@ -16,9 +16,9 @@ available in BASIC programs.
 """
 
 import math
-import random
+import re
 from typing import Any, List, Union
-from .error_context import ErrorContextManager
+from .ast_nodes import format_basic_number
 
 
 def _check_args(evaluator, func_name, args, expected, syntax_example):
@@ -26,7 +26,8 @@ def _check_args(evaluator, func_name, args, expected, syntax_example):
     if len(args) != expected:
         error = evaluator.error_context.syntax_error(
             f"{func_name} requires exactly {expected} argument{'s' if expected != 1 else ''}, got {len(args)}",
-            suggestions=[f"Correct syntax: {syntax_example}"]
+            suggestions=[f"Correct syntax: {syntax_example}",
+                         "Separate arguments with commas"]
         )
         raise ValueError(error.format_detailed())
 
@@ -58,7 +59,8 @@ def _check_non_negative(evaluator, value, param_name, func_name):
     if value < 0:
         error = evaluator.error_context.runtime_error(
             f"{func_name} {param_name} cannot be negative: {value}",
-            suggestions=["Use a positive number or zero"])
+            suggestions=["Use a positive number or zero",
+                         f"Check the value passed as {func_name}'s {param_name}"])
         raise ValueError(error.format_detailed())
 
 
@@ -89,7 +91,8 @@ def fn_mid(evaluator, args: List[Any]) -> str:
     if len(args) < 2 or len(args) > 3:
         error = evaluator.error_context.syntax_error(
             f"MID$ requires 2 or 3 arguments, got {len(args)}",
-            suggestions=["Correct syntax: MID$(string, start[, length])"])
+            suggestions=["Correct syntax: MID$(string, start[, length])",
+                         'Example: MID$("HELLO", 2, 3) is "ELL"'])
         raise ValueError(error.format_detailed())
     string_val = str(args[0])
     start_val = _to_int(evaluator, args[1], 'MID$')
@@ -126,11 +129,10 @@ def fn_chr(evaluator, args: List[Any]) -> str:
 def fn_str(evaluator, args: List[Any]) -> str:
     """STR$(n) - convert number to string"""
     _check_args(evaluator, 'STR$', args, 1, 'STR$(number)')
-    n = _to_float(evaluator, args[0], 'STR$')
-    if isinstance(args[0], int) or (isinstance(args[0], float) and args[0].is_integer()):
-        n = int(n)
-    # BASIC adds leading space for positive numbers
-    return f" {n}" if n >= 0 else str(n)
+    n = args[0] if isinstance(args[0], (int, float)) else _to_float(evaluator, args[0], 'STR$')
+    # Same digits PRINT uses; a leading space holds the sign of positive numbers
+    digits = format_basic_number(n)
+    return digits if n < 0 else f" {digits}"
 
 
 # ============================================================================
@@ -140,8 +142,13 @@ def fn_str(evaluator, args: List[Any]) -> str:
 def fn_len(evaluator, args: List[Any]) -> int:
     """LEN(string) - return string length"""
     _check_args(evaluator, 'LEN', args, 1, 'LEN(string)')
-        
-    return len(str(args[0]))
+    if not isinstance(args[0], str):
+        error = evaluator.error_context.type_error(
+            "TYPE MISMATCH: LEN needs a string", "string", "number",
+            suggestions=['Use LEN(STR$(N)) for the length of a number as text',
+                         'Example: LEN("HELLO") is 5'])
+        raise ValueError(error.format_detailed())
+    return len(args[0])
 
 
 def fn_abs(evaluator, args: List[Any]) -> float:
@@ -151,9 +158,9 @@ def fn_abs(evaluator, args: List[Any]) -> float:
 
 
 def fn_int(evaluator, args: List[Any]) -> int:
-    """INT(n) - return integer part (floor)"""
+    """INT(n) - largest integer <= n (floor: INT(-3.5) = -4)"""
     _check_args(evaluator, 'INT', args, 1, 'INT(number)')
-    return int(_to_float(evaluator, args[0], 'INT'))
+    return math.floor(_to_float(evaluator, args[0], 'INT'))
 
 
 def fn_rnd(evaluator, args: List[Any]) -> float:
@@ -161,22 +168,18 @@ def fn_rnd(evaluator, args: List[Any]) -> float:
 
     CoCo semantics:
       RND(n) where n >= 1: random integer from 1 to INT(n)
-      RND(0): repeat last random number
-      RND(-n): reseed with n, then return float (0 < x < 1)
+      RND(0): random fraction, 0 <= x < 1 (also for 0 < n < 1)
+      RND(-n): reseed with n, then return a fraction (0 <= x < 1)
     """
     _check_args(evaluator, 'RND', args, 1, 'RND(n)')
     n = _to_float(evaluator, args[0], 'RND')
-    if n == 0:
-        return evaluator.last_rnd
+    rng = evaluator.rng  # per-interpreter, so sessions can't reseed each other
     if n < 0:
-        random.seed(int(n))
-        result = random.random()
-        evaluator.last_rnd = result
-        return result
-    # RND(n) where n >= 1: random integer from 1 to INT(n)
-    result = random.randint(1, int(n))
-    evaluator.last_rnd = float(result)
-    return result
+        rng.seed(int(n))
+        return rng.random()
+    if int(n) == 0:
+        return rng.random()
+    return rng.randint(1, int(n))
 
 
 def fn_sgn(evaluator, args: List[Any]) -> int:
@@ -331,17 +334,34 @@ def fn_asc(evaluator, args: List[Any]) -> int:
 def fn_val(evaluator, args: List[Any]) -> Union[int, float]:
     """VAL(string) - convert string to number"""
     _check_args(evaluator, 'VAL', args, 1, 'VAL(string)')
-        
-    s = str(args[0]).strip()
-    
-    try:
-        if '.' in s or 'E' in s.upper():
-            return float(s)
-        else:
-            return int(s)
-    except ValueError:
-        # BASIC returns 0 for non-numeric strings - this is authentic behavior
+    return basic_number_prefix(str(args[0]))
+
+
+_VAL_NUMBER_RE = re.compile(r'[+-]?(\d*\.?\d*)(E[+-]?\d+)?')
+
+
+def basic_number_prefix(text):
+    """Numeric value of the leading number in *text*, Microsoft BASIC style.
+
+    Spaces are ignored ("1 2" -> 12), &H/&O prefixes give hex/octal, and
+    parsing stops at the first character that can't continue the number
+    ("12ABC" -> 12, "1_000" -> 1). No leading number gives 0.
+    """
+    s = text.replace(' ', '').upper()
+    if s.startswith('&H') or s.startswith('&O'):
+        digits = re.match(r'[0-9A-F]*' if s[1] == 'H' else r'[0-7]*', s[2:]).group(0)
+        return int(digits, 16 if s[1] == 'H' else 8) if digits else 0
+    m = _VAL_NUMBER_RE.match(s)
+    mantissa, exponent = m.group(1), m.group(2)
+    if not mantissa.strip('.'):
         return 0
+    text_number = m.group(0)
+    if '.' not in mantissa and not exponent:
+        return int(text_number)
+    value = float(text_number)
+    if math.isinf(value):
+        raise OverflowError('OVERFLOW in VAL')
+    return value
 
 
 # ============================================================================
@@ -461,10 +481,15 @@ def fn_instr(evaluator, args: List[Any]) -> int:
     else:
         error = evaluator.error_context.syntax_error(
             f"INSTR requires 2 or 3 arguments, got {len(args)}",
-            suggestions=["Correct syntax: INSTR([start,] string, search)"])
+            suggestions=["Correct syntax: INSTR([start,] string, search)",
+                         'Example: INSTR("HELLO", "L") is 3'])
         raise ValueError(error.format_detailed())
     if start_pos < 1:
-        start_pos = 1
+        error = evaluator.error_context.runtime_error(
+            f"ILLEGAL FUNCTION CALL: INSTR start position {start_pos} is less than 1",
+            suggestions=['Positions start at 1: INSTR(1, A$, "X")',
+                         'Or leave the start out: INSTR(A$, "X")'])
+        raise ValueError(error.format_detailed())
     pos = string_val.find(search_val, start_pos - 1)
     return pos + 1 if pos >= 0 else 0  # BASIC uses 1-based indexing, 0 = not found
 
@@ -484,7 +509,22 @@ def fn_string(evaluator, args: List[Any]) -> str:
     _check_non_negative(evaluator, n, 'count', 'STRING$')
     char_arg = args[1]
     if isinstance(char_arg, (int, float)):
-        char = chr(int(char_arg))
+        code = int(char_arg)
+        if not 0 <= code <= 255:
+            error = evaluator.error_context.runtime_error(
+                f"ILLEGAL FUNCTION CALL: STRING$ character code {code} is outside 0-255",
+                suggestions=["Use a character code from 0 to 255",
+                             'Example: STRING$(10, 42) gives ten "*"',
+                             'Or pass a string: STRING$(10, "*")'])
+            raise ValueError(error.format_detailed())
+        char = chr(code)
+    elif char_arg:
+        char = str(char_arg)[0]
     else:
-        char = str(char_arg)[0] if char_arg else ""
+        error = evaluator.error_context.runtime_error(
+            "ILLEGAL FUNCTION CALL: STRING$ needs a non-empty string",
+            suggestions=['Example: STRING$(10, "*")',
+                         "Or pass a character code: STRING$(10, 42)",
+                         "Check the string variable is not empty"])
+        raise ValueError(error.format_detailed())
     return char * n

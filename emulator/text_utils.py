@@ -1,8 +1,9 @@
 """
 Text Utilities for TRS-80 Color Computer BASIC Emulator
 
-Static utility methods for splitting BASIC statements on delimiters,
-splitting arguments, and detecting control-flow keywords.
+Static utility methods for splitting BASIC statements on delimiters and
+splitting arguments. (Control-structure detection lives in
+ast_converter.starts_control_structure.)
 """
 
 import re
@@ -11,40 +12,52 @@ import re
 class StatementSplitter:
     """Static utilities for splitting and classifying BASIC text."""
 
-    # Control-flow keywords that trigger AST conversion when colons are present.
-    CONTROL_KEYWORDS = ('IF ', 'FOR ', 'WHILE ', 'DO:', 'DO ')
+    # Commands whose filename argument may be written in single quotes
+    _SINGLE_QUOTE_COMMANDS = frozenset({'SAVE', 'LOAD', 'KILL', 'MERGE', 'CHAIN', 'CD'})
 
     @staticmethod
     def is_rem_line(code: str) -> bool:
-        """Check if a line is a REM comment (should never be split on colons)."""
-        return code.strip().upper().startswith('REM')
+        """Check if a statement is a comment — never split on colons.
 
-    @staticmethod
-    def has_control_keyword(code: str) -> bool:
-        """Check if code starts with a control-flow keyword (IF/FOR/WHILE/DO)."""
-        upper = code.strip().upper()
-        return any(upper.startswith(kw) for kw in StatementSplitter.CONTROL_KEYWORDS)
+        REM matches as a prefix, as on the CoCo (which crunches keywords):
+        REMARK and REMEMBER=5 are comments. ' is the Extended Color BASIC
+        shorthand.
+        """
+        stripped = code.strip()
+        return stripped.upper().startswith('REM') or stripped.startswith("'")
 
     @staticmethod
     def split_on_delimiter(text: str, delimiter: str = ':') -> list:
-        """Split text on delimiter, respecting quoted strings and REM comments.
+        """Split text on delimiter, respecting quoted strings and comments.
 
-        When splitting on colons, a REM segment consumes the rest of the line
-        (colons inside REM comments are not delimiters).
+        When splitting on colons, a comment consumes the rest of the line
+        (colons inside it are not delimiters): a segment starting with REM,
+        or a ' outside quotes, which becomes its own part (``SOUND 100,5 '
+        beep`` gives ``['SOUND 100,5', "' beep"]``). Exception: file
+        commands accept single-quoted names (SAVE 'GAME'), so after SAVE,
+        LOAD, KILL, MERGE, CHAIN or CD a ' quotes instead.
         """
         parts = []
         current = ""
         in_quotes = False
+        in_single_quotes = False
         for pos, char in enumerate(text):
-            if char == '"':
+            if char == '"' and not in_single_quotes:
                 in_quotes = not in_quotes
                 current += char
-            elif char == delimiter and not in_quotes:
+            elif delimiter == ':' and char == "'" and not in_quotes:
+                first_word = current.strip().split(None, 1)[0].upper() if current.strip() else ''
+                if in_single_quotes or first_word in StatementSplitter._SINGLE_QUOTE_COMMANDS:
+                    in_single_quotes = not in_single_quotes
+                    current += char
+                    continue
+                if current.strip():
+                    parts.append(current.strip())
+                parts.append(text[pos:].strip())
+                return parts
+            elif char == delimiter and not in_quotes and not in_single_quotes:
                 # If current segment is REM, it consumes everything to end of line
-                stripped_upper = current.strip().upper()
-                if (delimiter == ':'
-                        and (stripped_upper == 'REM'
-                             or stripped_upper.startswith('REM '))):
+                if delimiter == ':' and StatementSplitter.is_rem_line(current):
                     parts.append((current + text[pos:]).strip())
                     return parts
                 if current.strip():
@@ -57,12 +70,18 @@ class StatementSplitter:
         return parts
 
     @staticmethod
-    def split_args(text: str) -> list:
-        """Split comma-separated arguments, respecting parentheses and quotes."""
-        return StatementSplitter.split_on_delimiter_paren_aware(text, delimiter=',')
+    def split_args(text: str, keep_empty: bool = False) -> list:
+        """Split comma-separated arguments, respecting parentheses and quotes.
+
+        With keep_empty=True, empty items are kept as '' (DATA 1,,3 has three
+        items, the middle one empty); otherwise they are dropped.
+        """
+        return StatementSplitter.split_on_delimiter_paren_aware(
+            text, delimiter=',', keep_empty=keep_empty)
 
     @staticmethod
-    def split_on_delimiter_paren_aware(text: str, delimiter: str = ':') -> list:
+    def split_on_delimiter_paren_aware(text: str, delimiter: str = ':',
+                                       keep_empty: bool = False) -> list:
         """Like split_on_delimiter but also respects parenthesized groups."""
         parts = []
         current = ""
@@ -79,12 +98,12 @@ class StatementSplitter:
                 paren_depth = max(0, paren_depth - 1)
                 current += char
             elif char == delimiter and not in_quotes and paren_depth == 0:
-                if current.strip():
+                if current.strip() or keep_empty:
                     parts.append(current.strip())
                 current = ""
             else:
                 current += char
-        if current.strip():
+        if current.strip() or (keep_empty and text.strip()):
             parts.append(current.strip())
         return parts
 
@@ -96,7 +115,9 @@ class StatementSplitter:
             return None, None
             
         # Check if line starts with a number (with optional code after it)
-        match = re.match(r'^(\d+)(?:\s+(.*))?$', line)
+        # A leading number is a line number even without a space (10PRINT),
+        # as on the CoCo
+        match = re.match(r'^(\d+)\s*(.*)$', line)
         if match:
             line_num = int(match.group(1))
             code = match.group(2) or ""  # Empty string if no code after line number
@@ -105,17 +126,6 @@ class StatementSplitter:
             # Direct command (no line number)
             return None, line
     
-    @staticmethod
-    def expand_line_to_sublines(line_num, code, expanded_program):
-        """Expand a line containing multiple statements into sublines.
-
-        Simple colon-splitting fallback. Control structures (IF, FOR, WHILE, DO)
-        are handled by core.py via AST conversion before reaching this method.
-        """
-        statements = StatementSplitter.split_on_delimiter(code)
-        for i, statement in enumerate(statements):
-            expanded_program[(line_num, i)] = statement
-
     @staticmethod
     def parse_draw_commands(draw_string):
         """Parse DRAW command string into individual drawing commands"""

@@ -8,8 +8,6 @@ replacing the brittle hard-coded pattern matching with a registry-based system.
 import re
 from typing import List, Dict, Callable, Any, Optional
 
-from .text_utils import StatementSplitter
-
 
 class CompiledMultiLineIf:
     """A multi-line IF pre-resolved at store time.
@@ -48,6 +46,7 @@ class CommandRegistry:
             'data': [],         # DATA, READ, RESTORE
             'graphics': [],     # PMODE, PSET, LINE, etc.
             'io': [],          # PRINT, INPUT
+            'file': [],        # OPEN, CLOSE
             'variables': [],    # LET, DIM
             'system': [],      # NEW, LIST, RUN, etc.
             'math': [],        # Functions like SQR, SIN, etc.
@@ -86,9 +85,9 @@ class CommandRegistry:
             'examples': examples or []
         }
         
-        # Add to category
-        if category in self.categories:
-            self.categories[category].append(command_name)
+        # Add to category (a new category is created rather than the command
+        # silently vanishing from HELP)
+        self.categories.setdefault(category, []).append(command_name)
         
         # Register aliases
         if aliases:
@@ -209,50 +208,6 @@ class CommandRegistry:
             tokens.append(current_token)
         
         return tokens
-    
-    @staticmethod 
-    def parse_coordinates(coord_str: str) -> List[int]:
-        """
-        Parse coordinate expressions like "(10,20)" or "10,20"
-        
-        Returns list of evaluated coordinate values
-        """
-        # Remove outer parentheses if present
-        coord_str = coord_str.strip()
-        if coord_str.startswith('(') and coord_str.endswith(')'):
-            coord_str = coord_str[1:-1]
-        
-        # Split by commas, respecting parentheses (for array refs like GX(R,C))
-        return [part.strip() for part in StatementSplitter.split_args(coord_str)]
-    
-    # Pattern matching (x1,y1)-(x2,y2) with optional spaces around the dash
-    _COORD_PAIR_RE = re.compile(r'\)\s*-\s*\(')
-
-    @staticmethod
-    def is_coordinate_pair_syntax(args: str) -> bool:
-        """Check if args use (x1,y1)-(x2,y2) coordinate pair syntax."""
-        return bool(CommandRegistry._COORD_PAIR_RE.search(args))
-
-    @staticmethod
-    def parse_line_coordinates(line_spec: str) -> tuple:
-        """
-        Parse LINE coordinate specification like "(10,20)-(30,40)"
-        or "(10, 20) - (30, 40)" with optional spaces around the dash.
-
-        Returns (start_coords, end_coords) as string tuples for evaluation
-        """
-        match = CommandRegistry._COORD_PAIR_RE.search(line_spec)
-        if not match:
-            raise ValueError("Invalid LINE specification - expected (x1,y1)-(x2,y2)")
-
-        start_part = line_spec[:match.start() + 1]  # up to and including the first ')'
-        end_part = line_spec[match.end() - 1:]       # from the second '(' onward
-
-        # Parse start coordinates
-        start_coords = CommandRegistry.parse_coordinates(start_part)
-        end_coords = CommandRegistry.parse_coordinates(end_part)
-
-        return start_coords, end_coords
     
     def list_commands(self) -> List[str]:
         """List all registered commands"""

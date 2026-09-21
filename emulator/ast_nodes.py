@@ -19,6 +19,38 @@ def basic_truthy(value) -> bool:
     return value != 0
 
 
+SIGNIFICANT_DIGITS = 9  # Color BASIC prints up to 9 significant digits
+
+
+def format_basic_number(value) -> str:
+    """Digits of a number as Color BASIC prints them, without the leading
+    sign-position space: 3, -2.5, .333333333, -.5, 1.26765061E+30, 1E-03.
+
+    Up to 9 significant digits, no leading zero before the decimal point,
+    trailing zeros dropped. Magnitudes from .01 up to 999,999,999 print in
+    fixed notation; anything else in E notation.
+    """
+    if isinstance(value, bool):
+        value = -1 if value else 0
+    if isinstance(value, int) and abs(value) < 10 ** SIGNIFICANT_DIGITS:
+        return str(value)
+    value = float(value)
+    if value == 0:
+        return '0'
+    magnitude = abs(value)
+    rounded = float(f'{magnitude:.{SIGNIFICANT_DIGITS}g}')
+    sign = '-' if value < 0 else ''
+    if 0.01 <= rounded < 10 ** SIGNIFICANT_DIGITS:
+        digits = f'{rounded:.{SIGNIFICANT_DIGITS}f}'.rstrip('0').rstrip('.')
+        if digits.startswith('0.'):
+            digits = digits[1:]
+        return sign + digits
+    mantissa, exponent = f'{rounded:.{SIGNIFICANT_DIGITS - 1}e}'.split('e')
+    mantissa = mantissa.rstrip('0').rstrip('.')
+    exp_value = int(exponent)
+    return f"{sign}{mantissa}E{'+' if exp_value >= 0 else '-'}{abs(exp_value):02d}"
+
+
 class NodeType(Enum):
     """Types of AST nodes"""
     # Literals
@@ -50,7 +82,6 @@ class NodeType(Enum):
 
     # Control Flow
     BLOCK = "block"
-    PROGRAM = "program"
     EXIT_FOR_STATEMENT = "exit_for_statement"
 
 
@@ -264,13 +295,6 @@ class OnErrorGotoNode(ASTNode):
     def __init__(self, target_line: ASTNode, location: Optional[SourceLocation] = None):
         super().__init__(NodeType.ON_ERROR_GOTO, location)
         self.target_line = target_line    # 0 to disable
-
-
-class ProgramNode(ASTNode):
-    """Node for complete BASIC programs"""
-    def __init__(self, statements: List[ASTNode], location: Optional[SourceLocation] = None):
-        super().__init__(NodeType.PROGRAM, location)
-        self.statements = statements
 
 
 class BlockNode(ASTNode):
