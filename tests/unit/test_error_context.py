@@ -275,3 +275,48 @@ class TestErrorContext:
         suggestions = error.suggestions
         assert any("divisor" in suggestion.lower() for suggestion in suggestions)
         assert any("conditional" in suggestion.lower() for suggestion in suggestions)
+
+
+def _first_error(helpers, result):
+    errors = helpers.get_error_messages(result)
+    assert errors, result
+    return errors[0]
+
+
+class TestErrorLineAttribution:
+    """#13: errors name the program line they happened on exactly once;
+    immediate-mode errors name no line; wrapped errors keep one suggestion
+    block and their real category."""
+
+    @pytest.mark.parametrize('code,phrase', [
+        ('X = 1 +', 'SYNTAX ERROR'), ('X=Q(20)', 'BAD SUBSCRIPT'),
+        ('PRINT 1/0', 'Division by zero'), ('PRINT LEN(5)', 'TYPE MISMATCH'),
+    ])
+    def test_program_error_names_its_line_once(self, basic, helpers, code, phrase):
+        helpers.load_program(basic, ['10 PRINT 1', f'40 {code}'])
+        message = _first_error(helpers, helpers.run_to_completion(basic))
+        first = message.splitlines()[0]
+        assert phrase in first
+        assert first.endswith('at line 40'), first
+        assert first.count(' at line ') == 1
+        assert message.count('Suggestions:') == 1
+
+    @pytest.mark.parametrize('code', ['X = 1 +', 'X=Q(20)', 'PRINT 1/0', 'PMODE 9', 'GOTO 999'])
+    def test_immediate_error_names_no_line(self, basic, helpers, code):
+        first = _first_error(helpers, basic.process_command(code)).splitlines()[0]
+        assert ' at line ' not in first, first
+
+    def test_runtime_error_is_not_labelled_syntax_error(self, basic, helpers):
+        first = _first_error(helpers, basic.process_command('X=Q(20)')).splitlines()[0]
+        assert first == 'BAD SUBSCRIPT'
+
+    def test_wrapped_error_keeps_inner_suggestions(self, basic, helpers):
+        message = _first_error(helpers, basic.process_command('PRINT LEN(5)'))
+        assert 'LEN(STR$(N))' in message
+
+    def test_every_error_has_two_suggestions(self, basic, helpers):
+        for code in ['PRINT EOF(3)', 'PRINT MID$("A")', 'PRINT INSTR(1)', 'X=Q(20)',
+                     'PMODE 9', 'PRINT LEN(5)', 'OPEN "Q", #1, "X"']:
+            message = _first_error(helpers, basic.process_command(code))
+            count = sum(1 for l in message.splitlines() if l.startswith('  - '))
+            assert count >= 2, (code, message)
