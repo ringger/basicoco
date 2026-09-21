@@ -3,6 +3,19 @@
  * Revolutionary split-screen interface with persistent REPL and dedicated graphics display
  */
 
+// Per-browser-tab memory that survives a page reload (sessionStorage): the
+// server session id and the tab strip, so a reload reconnects to the same
+// server session within its grace period. Storage can be unavailable
+// (private mode, blocked site data), so failures just mean "start fresh".
+const TabMemory = {
+    get(key) {
+        try { return JSON.parse(sessionStorage.getItem(key)); } catch (e) { return null; }
+    },
+    set(key, value) {
+        try { sessionStorage.setItem(key, JSON.stringify(value)); } catch (e) { /* ignore */ }
+    },
+};
+
 // 4x6 pixel font for GPRINT (4 wide, 6 rows per glyph, MSB-first)
 const GPRINT_FONT = {
     32: [0,0,0,0,0,0],             // space
@@ -1355,9 +1368,10 @@ class TabManager {
             program: {},
             variables: {},
             isDirty: false,
-            hasContent: true
+            hasContent: true,
+            stateFetched: false
         });
-        
+
         // Setup event handlers
         document.getElementById('btn-add-tab').addEventListener('click', async (e) => {
             // Only respond to actual mouse clicks, not keyboard events
@@ -1384,31 +1398,65 @@ class TabManager {
     
     async addTab() {
         const tabId = `prog${this.tabCounter++}`;
-        const tabData = {
+        this.createTab(tabId, `Program ${this.tabCounter}`);
+        this.rememberTabs();
+        await this.switchTab(tabId);
+    }
+
+    // Add a tab to the map and the tab strip (not switching to it). Its
+    // program lives on the server; stateFetched stays false until get_state
+    // has returned it, so a tab restored after a reload never overwrites the
+    // server's copy with an empty one.
+    createTab(tabId, title) {
+        this.tabs.set(tabId, {
             id: tabId,
-            title: `Program ${this.tabCounter}`,
+            title: title,
             program: {},
             variables: {},
             isDirty: false,
-            hasContent: false
-        };
-        
-        this.tabs.set(tabId, tabData);
-        
-        // Create tab element
+            hasContent: false,
+            stateFetched: false
+        });
+
         const tabElement = document.createElement('div');
         tabElement.className = 'tab';
         tabElement.dataset.tabId = tabId;
         tabElement.innerHTML = `
-            <span class="tab-title">${tabData.title}</span>
+            <span class="tab-title">${title}</span>
             <button class="tab-close">×</button>
         `;
-        
+
         // Insert before the add button
         const addButton = document.getElementById('btn-add-tab');
         addButton.parentElement.insertBefore(tabElement, addButton);
-        
-        await this.switchTab(tabId);
+    }
+
+    // Remember the tab strip for a page reload (see TabMemory)
+    rememberTabs() {
+        TabMemory.set('basicoco.tabs', {
+            tabs: Array.from(this.tabs.values()).map(t => ({ id: t.id, title: t.title })),
+            active: this.activeTabId,
+            counter: this.tabCounter
+        });
+    }
+
+    // After a reload reconnected to the old server session: rebuild the tab
+    // strip. Each tab's program is still on the server.
+    async restoreTabs() {
+        const saved = TabMemory.get('basicoco.tabs');
+        if (!saved || !Array.isArray(saved.tabs)) return;
+        for (const tab of saved.tabs) {
+            if (!this.tabs.has(tab.id)) this.createTab(tab.id, tab.title);
+        }
+        // Never hand out a tab id the server may still hold
+        this.tabCounter = Math.max(this.tabCounter, saved.counter || 1);
+        if (saved.active && saved.active !== this.activeTabId && this.tabs.has(saved.active)) {
+            // Land on the tab we were in, keeping the reconnect message on
+            // screen (other restored tabs start with a clean screen)
+            this.tabs.get(saved.active).hasContent = true;
+            await this.switchTab(saved.active);
+        }
+        this.rememberTabs();
     }
     
     async switchTab(tabId) {
@@ -1428,6 +1476,7 @@ class TabManager {
         document.querySelectorAll('.tab').forEach(tab => {
             tab.classList.toggle('active', tab.dataset.tabId === tabId);
         });
+        this.rememberTabs();
         
         // Step 3: Load new tab state
         this.loadTabState(tabId);
@@ -1520,6 +1569,7 @@ class TabManager {
         this.tabs.delete(tabId);
         document.querySelector(`[data-tab-id="${tabId}"]`).remove();
         this.emulator.socket.emit('close_tab', { tabId });
+        this.rememberTabs();
         
         // Switch to main tab if this was active
         if (this.activeTabId === tabId) {
@@ -1541,6 +1591,7 @@ class TabManager {
         this.emulator.socket.emit('get_state', { tabId }, (state) => {
             tabData.program = state.program || {};
             tabData.variables = state.variables || {};
+            tabData.stateFetched = true;
         });
     }
     
@@ -1556,7 +1607,10 @@ class TabManager {
         // Restore graphics display state
         this.emulator.displayManager.graphicsDisplay.restoreState(tabData.graphicsState);
         
-        // Send state to emulator
+        // Send state to emulator -- but only a state we actually fetched: a
+        // tab restored after a reload has an empty cache, and sending that
+        // would wipe its program on the server
+        if (!tabData.stateFetched) return;
         this.emulator.socket.emit('set_state', {
             tabId,
             program: tabData.program,
@@ -1587,9 +1641,10 @@ class DualMonitorEmulator {
         }
         
         console.log('Initializing Socket.IO connection...');
-        // On a reconnect, offer the previous session id so the server can
-        // give back this client's tabs, programs and variables
-        this.sessionId = null;
+        // On a reconnect -- or after a page reload, via sessionStorage --
+        // offer the previous session id so the server can give back this
+        // client's tabs, programs and variables
+        this.sessionId = TabMemory.get('basicoco.sessionId');
         this.socket = io({ auth: (cb) => cb({ session_id: this.sessionId }) });
         this.replContainer = document.getElementById('repl-container');
         this.waitingForInput = false;
@@ -1634,17 +1689,22 @@ class DualMonitorEmulator {
         // Set up session ID handler FIRST, before connection
         this.socket.on('session_id', (data) => {
             this.sessionId = data.session_id;
+            TabMemory.set('basicoco.sessionId', this.sessionId);
             console.log('Session ID received:', this.sessionId);
 
             // Update status
             document.getElementById('program-status').textContent = 'Session Ready';
 
             if (data.resumed) {
-                // Reconnected to our old session: programs are still there
+                // Reconnected to our old session: programs are still there.
+                // After a page reload the tab strip has to be rebuilt too.
                 this.displayManager.textDisplay.printText('\nRECONNECTED - PROGRAMS KEPT\n');
                 this.displayManager.textDisplay.showPrompt();
+                this.tabManager.restoreTabs();
                 return;
             }
+            // A fresh session: forget the tab strip of any expired one
+            TabMemory.set('basicoco.tabs', null);
 
             // Clear the connecting message and show welcome
             this.displayManager.textDisplay.clearScreen();
@@ -1806,11 +1866,6 @@ class DualMonitorEmulator {
         
         document.getElementById('btn-reset-preferences').addEventListener('click', () => {
             this.resetPreferences();
-        });
-        
-        // Session management
-        document.getElementById('btn-save-session').addEventListener('click', () => {
-            this.saveSession();
         });
         
         // Copy text button
@@ -1997,38 +2052,11 @@ class DualMonitorEmulator {
         }, 1000);
     }
     
-    saveSession() {
-        const session = {
-            tabs: Array.from(this.tabManager.tabs.values()),
-            activeTab: this.tabManager.activeTabId,
-            preferences: this.getPreferences(),
-            timestamp: Date.now()
-        };
-        
-        localStorage.setItem('dualMonitor.session', JSON.stringify(session));
-        
-        // Show feedback
-        document.getElementById('program-status').textContent = 'Session saved';
-        setTimeout(() => {
-            document.getElementById('program-status').textContent = 'Ready';
-        }, 2000);
-    }
-    
-    loadSession() {
-        const saved = localStorage.getItem('dualMonitor.session');
-        if (saved) {
-            const session = JSON.parse(saved);
-            // Restore tabs and state
-            // Implementation would restore all tab states
-        }
-    }
-    
     getPreferences() {
         return {
             layout: document.getElementById('pref-layout').value,
             textColor: document.getElementById('pref-text-color').value,
-            crtEffect: document.getElementById('pref-crt-effect').checked,
-            autoSave: document.getElementById('pref-auto-save').checked
+            crtEffect: document.getElementById('pref-crt-effect').checked
         };
     }
     
@@ -2080,7 +2108,6 @@ class DualMonitorEmulator {
         document.getElementById('pref-layout').value = prefs.layout || 'horizontal';
         document.getElementById('pref-text-color').value = prefs.textColor || 'green';
         document.getElementById('pref-crt-effect').checked = prefs.crtEffect !== false;
-        document.getElementById('pref-auto-save').checked = prefs.autoSave !== false;
     }
     
     resetPreferences() {
@@ -2088,8 +2115,7 @@ class DualMonitorEmulator {
         this.applyPreferences({
             layout: 'horizontal',
             textColor: 'green',
-            crtEffect: true,
-            autoSave: true
+            crtEffect: true
         });
         this.savePreferences();
     }
@@ -2098,11 +2124,4 @@ class DualMonitorEmulator {
 // Initialize when DOM is ready
 document.addEventListener('DOMContentLoaded', () => {
     window.dualMonitor = new DualMonitorEmulator();
-    
-    // Auto-save session periodically if enabled
-    setInterval(() => {
-        if (document.getElementById('pref-auto-save').checked) {
-            window.dualMonitor.saveSession();
-        }
-    }, 60000); // Every minute
 });

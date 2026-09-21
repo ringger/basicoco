@@ -15,9 +15,6 @@
                 <button id="btn-export-graphics" class="header-btn" title="Export Graphics">
                     <span>Export Graphics</span>
                 </button>
-                <button id="btn-save-session" class="header-btn" title="Save Session">
-                    <span>Save Session</span>
-                </button>
                 <button id="btn-preferences" class="header-btn" title="Preferences">
                     <span>⚙️</span>
                 </button>
@@ -120,7 +117,7 @@
                         <li>Graphics persist during REPL use</li>
                         <li>Export graphics as PNG</li>
                         <li>Multiple program tabs</li>
-                        <li>Programs survive a reconnect (10-minute grace period)</li>
+                        <li>Reloading the page keeps your tabs and programs (within 10 minutes)</li>
                     </ul>
                 </div>
             </div>
@@ -153,10 +150,6 @@
                 <div class="preference-group">
                     <label>CRT Effect:</label>
                     <input type="checkbox" id="pref-crt-effect" checked>
-                </div>
-                <div class="preference-group">
-                    <label>Auto-save Session:</label>
-                    <input type="checkbox" id="pref-auto-save" checked>
                 </div>
             </div>
             <div class="modal-footer">
