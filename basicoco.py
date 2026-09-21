@@ -56,6 +56,11 @@ def handle_input_request(basic, item):
     except EOFError:
         value = ''
 
+    # KILL confirmation is answered by the file manager, not stored in a variable
+    if item.get('variable') == '_kill_confirm':
+        process_output(basic, basic.process_kill_confirmation(value))
+        return
+
     # Use the variable descriptor from input_variables for proper array support
     if basic.input_variables:
         var_desc = basic.input_variables[basic.current_input_index]

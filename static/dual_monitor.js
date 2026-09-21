@@ -79,12 +79,10 @@ class DisplayManager {
             case 'clear_screen':
                 this.textDisplay.clearScreen();
                 break;
-            case 'clear_graphics':
             case 'pcls':
-                this.graphicsDisplay.clearGraphics();
+                this.graphicsDisplay.clearGraphics(output.color);
                 break;
             case 'pmode':
-            case 'set_pmode':
                 this.graphicsDisplay.setPmode(output.mode, output.page);
                 this.updateGraphicsInfo();
                 break;
@@ -122,9 +120,6 @@ class DisplayManager {
             case 'put':
                 this.graphicsDisplay.putGraphics(output.x, output.y, output.array, output.action, output.data);
                 break;
-            case 'draw':
-                this.graphicsDisplay.executeDraw(output.commands);
-                break;
             case 'gtext':
                 this.graphicsDisplay.drawText(output.x, output.y, output.text, output.color);
                 break;
@@ -139,11 +134,13 @@ class DisplayManager {
         const modeText = mode === 0 ? 'Text' : `PMODE ${mode}`;
         document.getElementById('graphics-mode').textContent = `Mode: ${modeText}`;
         
-        const fg = this.graphicsDisplay.currentDrawColor;
-        const bg = this.graphicsDisplay.backgroundColor;
+        const display = this.graphicsDisplay;
+        const fg = display.currentDrawColor;
+        // backgroundColor is a hex string; look its index up in the palette
+        const bg = Math.max(0, display.colors.indexOf(display.backgroundColor));
         const colorNames = ['Black', 'Green', 'Yellow', 'Blue', 'Red', 'Buff', 'Cyan', 'Magenta', 'Orange'];
-        document.getElementById('graphics-color').textContent = 
-            `Color: ${colorNames[fg]} on ${colorNames[bg === '#000000' ? 0 : 1]}`;
+        document.getElementById('graphics-color').textContent =
+            `Color: ${colorNames[fg]} on ${colorNames[bg]}`;
     }
 }
 
@@ -875,8 +872,11 @@ class GraphicsDisplay {
         this.clearGraphics();
     }
     
-    clearGraphics() {
-        this.ctx.fillStyle = this.backgroundColor;
+    clearGraphics(color) {
+        // PCLS c clears to color c; PCLS alone (or a mode change) to the background
+        const fill = (color !== undefined && color !== null && this.colors[color])
+            ? this.colors[color] : this.backgroundColor;
+        this.ctx.fillStyle = fill;
         this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
     }
     
@@ -1169,29 +1169,6 @@ class GraphicsDisplay {
                 this.ctx.putImageData(sprite, x * res.pixelWidth, y * res.pixelHeight);
             }
             console.log(`PUT array ${arrayName} at (${x},${y}) with action ${action}`);
-        }
-    }
-    
-    executeDraw(commands) {
-        if (this.graphicsMode === 0) return;
-        
-        // Parse and execute DRAW commands
-        // This is a simplified implementation
-        console.log(`DRAW commands: ${commands}`);
-        
-        // Reset to center for demo
-        this.drawX = 128;
-        this.drawY = 96;
-        
-        // Simple command parser (would need full implementation)
-        for (let cmd of commands) {
-            switch (cmd.toUpperCase()) {
-                case 'U': this.drawY -= 10; break;
-                case 'D': this.drawY += 10; break;
-                case 'L': this.drawX -= 10; break;
-                case 'R': this.drawX += 10; break;
-            }
-            this.pset(this.drawX, this.drawY);
         }
     }
     
@@ -1491,9 +1468,10 @@ class TabManager {
             await this.pauseTabForSwitch(tabId);
         }
 
-        // Remove tab
+        // Remove tab, and free its interpreter on the server
         this.tabs.delete(tabId);
         document.querySelector(`[data-tab-id="${tabId}"]`).remove();
+        this.emulator.socket.emit('close_tab', { tabId });
         
         // Switch to main tab if this was active
         if (this.activeTabId === tabId) {
@@ -1561,14 +1539,16 @@ class DualMonitorEmulator {
         }
         
         console.log('Initializing Socket.IO connection...');
-        this.socket = io();
+        // On a reconnect, offer the previous session id so the server can
+        // give back this client's tabs, programs and variables
+        this.sessionId = null;
+        this.socket = io({ auth: (cb) => cb({ session_id: this.sessionId }) });
         this.replContainer = document.getElementById('repl-container');
         this.waitingForInput = false;
         this.currentInputVariable = null;
         this.panelResizer = null;
         this.tabManager = null;
-        this.sessionId = null;  // Store session ID from server
-        
+
         this.initialize();
     }
     
@@ -1607,10 +1587,17 @@ class DualMonitorEmulator {
         this.socket.on('session_id', (data) => {
             this.sessionId = data.session_id;
             console.log('Session ID received:', this.sessionId);
-            
+
             // Update status
             document.getElementById('program-status').textContent = 'Session Ready';
-            
+
+            if (data.resumed) {
+                // Reconnected to our old session: programs are still there
+                this.displayManager.textDisplay.printText('\nRECONNECTED - PROGRAMS KEPT\n');
+                this.displayManager.textDisplay.showPrompt();
+                return;
+            }
+
             // Clear the connecting message and show welcome
             this.displayManager.textDisplay.clearScreen();
             this.displayManager.textDisplay.printText('BASICOCO V1.0\n');
@@ -1634,8 +1621,8 @@ class DualMonitorEmulator {
         
         this.socket.on('disconnect', () => {
             console.log('Disconnected from server');
-            document.getElementById('program-status').textContent = 'Disconnected';
-            this.sessionId = null;
+            document.getElementById('program-status').textContent = 'Disconnected - reconnecting';
+            // Keep this.sessionId: the reconnect offers it to resume the session
         });
         
         this.socket.on('output', (data) => {
@@ -1657,15 +1644,16 @@ class DualMonitorEmulator {
                 !this.displayManager.textDisplay.waitingForInput &&
                 e.key.length === 1 && 
                 !e.ctrlKey && !e.altKey && !e.metaKey) {
-                console.log('Key detected for INKEY$:', e.key);
-                
-                // Send keypress to server for INKEY$ buffer
+                // Send keypress to the running tab's INKEY$ buffer
                 this.socket.emit('keypress', {
                     key: e.key,
                     session_id: this.sessionId,
-                    tabId: this.activeTabId  // Fixed: use tabId not tab
+                    tabId: this.tabManager.activeTabId
                 });
-                console.log('Sent key to server:', e.key);
+                // The key belongs to the program: don't also type it into the
+                // command line (which would redraw over program output)
+                e.stopPropagation();
+                e.preventDefault();
             }
         }, true);  // Use capture phase to get event before other handlers
 
@@ -1740,10 +1728,6 @@ class DualMonitorEmulator {
             this.exportGraphics('png');
         });
         
-        document.getElementById('btn-export-svg').addEventListener('click', () => {
-            this.exportGraphics('svg');
-        });
-        
         // Help panel toggle
         document.getElementById('help-toggle').addEventListener('click', () => {
             const panel = document.getElementById('help-panel');
@@ -1812,10 +1796,10 @@ class DualMonitorEmulator {
         
         console.log('Executing command:', command, 'with session:', this.sessionId);
         
-        // Track if RUN command is starting
-        if (command.trim().toUpperCase() === 'RUN') {
+        // Any immediate command may run the program (RUN, RUN 100, GOTO,
+        // CONT, CHAIN, ...): forward keys to INKEY$ until command_complete
+        if (!/^\s*\d/.test(command)) {
             this.programRunning = true;
-            console.log('Program started running');
         }
         
         // Send to server
@@ -1858,9 +1842,13 @@ class DualMonitorEmulator {
         // Server will send appropriate output and command_complete events
         this.socket.emit('break_execution', { tabId: this.tabManager.activeTabId });
         
-        // Reset local input state immediately (safe to do)
+        // Reset local input state immediately (safe to do). The text display
+        // has its own flag; leaving it set would send the next typed command
+        // as an INPUT answer.
         this.waitingForInput = false;
+        this.displayManager.textDisplay.waitingForInput = false;
         this.currentInputVariable = null;
+        this.audio.stopSound();
     }
     
     handleOutput(outputArray) {
@@ -1945,17 +1933,13 @@ class DualMonitorEmulator {
                 a.click();
                 URL.revokeObjectURL(url);
             });
-        } else if (format === 'svg') {
-            // For SVG, we'd need to recreate the graphics as vector
-            // This is a placeholder for future implementation
-            alert('SVG export coming soon!');
         }
     }
     
     copyTextDisplay() {
-        // Get text content from canvas (would need OCR or text tracking)
-        // For now, just copy a message
-        navigator.clipboard.writeText('Text display content copied!');
+        // lineBuffer holds every line printed since the last CLS
+        const text = this.textDisplay.lineBuffer.map(line => line.trimEnd()).join('\n').trimEnd();
+        navigator.clipboard.writeText(text);
         
         // Show feedback
         const btn = document.getElementById('btn-copy-text');

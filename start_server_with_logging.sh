@@ -60,10 +60,12 @@ if ! python -c "import flask, flask_socketio" 2>/dev/null; then
     exit 1
 fi
 
-# Set environment variables for better logging
-export FLASK_ENV=development
-export FLASK_DEBUG=1
+# Unbuffered output so the log file updates live. (Debug mode is controlled by
+# DEBUG=true; FLASK_ENV/FLASK_DEBUG have no effect with socketio.run.)
 export PYTHONUNBUFFERED=1
+# This script is for debugging: log at DEBUG unless told otherwise
+# (plain `python app.py` defaults to INFO)
+export BASICOCO_LOG_LEVEL="${BASICOCO_LOG_LEVEL:-DEBUG}"
 
 # Create log file with header
 echo "=== TRS-80 BASIC Emulator Server Log ===" > "$LOG_FILE"

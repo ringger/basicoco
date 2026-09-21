@@ -17,7 +17,10 @@ class TRS80CLI:
     def __init__(self, host='localhost', port=DEFAULT_PORT):
         self.host = host
         self.port = port
-        self.sio = socketio.Client()
+        # handle_sigint=False: engine.io's own SIGINT handler disconnects every
+        # client, so Ctrl+C (BREAK) would drop the connection instead of
+        # reaching our KeyboardInterrupt handling
+        self.sio = socketio.Client(handle_sigint=False)
         self.connected = False
         self.waiting_for_input = False
         self.input_prompt = ""
@@ -131,15 +134,12 @@ class TRS80CLI:
                     self.input_variable = item.get('variable', '')
                     # Store any additional metadata (like filename for KILL confirmation)
                     self.input_metadata = {k: v for k, v in item.items() if k not in ['type', 'prompt', 'variable']}
-                elif item['type'] == 'graphics':
-                    # For CLI, just show that graphics command was executed
-                    print(f"[Graphics: {item.get('command', 'unknown')}]")
                 elif item['type'] == 'sound':
                     # For CLI, just show that sound command was executed
                     print(f"[Sound: {item.get('frequency', 'unknown')} Hz]")
-                elif item['type'] == 'clear':
-                    # Clear screen
-                    os.system('clear' if os.name == 'posix' else 'cls')
+                elif item['type'] == 'clear_screen':
+                    # CLS: ANSI clear + cursor home (no subprocess)
+                    print('\033[2J\033[H', end='', flush=True)
                 elif item['type'] == 'pause':
                     # Handle non-blocking pause - schedule continuation after delay
                     duration = item.get('duration', 1.0)
@@ -175,24 +175,26 @@ class TRS80CLI:
             print(f"Failed to connect to server at {self.host}:{self.port}: {e}")
             return False
     
+    def _wait_for_response(self):
+        """Block until the server signals completion, or the connection drops.
+
+        No fixed timeout: any command can run a program (RUN, GOTO 100,
+        CHAIN ...), and output streams in while it runs. Ctrl+C sends BREAK.
+        """
+        while not self.response_received.wait(timeout=0.5):
+            if not self.connected:
+                print("Lost connection to the server")
+                break
+        self.running_program = False
+
     def send_command(self, command: str):
-        """Send a command to the BASIC emulator."""
+        """Send a command to the BASIC emulator and wait for it to finish."""
         if self.connected:
-            # For RUN command, enable streaming mode but still wait for program completion
-            if command.strip().upper() == 'RUN':
-                self.running_program = True
-                self.response_received.clear()
-                self.sio.emit('execute_command', {'command': command})
-                # Wait for program to finish running (with timeout)
-                if not self.response_received.wait(timeout=30):
-                    print("Program execution timed out")
-                    self.running_program = False
-            else:
-                # For other commands, wait for complete response before next prompt
-                self.response_received.clear()  # Reset the event
-                self.sio.emit('execute_command', {'command': command})
-                # Wait for the response to arrive and be processed
-                self.response_received.wait()
+            # Any command may run a program, so Ctrl+C means BREAK while waiting
+            self.running_program = True
+            self.response_received.clear()
+            self.sio.emit('execute_command', {'command': command})
+            self._wait_for_response()
     
     def send_input_response(self, value: str):
         """Send input response to the BASIC emulator."""
@@ -210,8 +212,9 @@ class TRS80CLI:
             self.input_prompt = ""
             self.input_variable = ""
             self.input_metadata = {}
-            # Wait for the response to arrive and be processed
-            self.response_received.wait()
+            # The program resumes after the answer: Ctrl+C means BREAK again
+            self.running_program = True
+            self._wait_for_response()
     
     def send_keypress(self, key: str):
         """Send keypress to the BASIC emulator for INKEY$ support."""

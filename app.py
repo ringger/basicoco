@@ -1,39 +1,71 @@
 from flask import Flask, render_template, request
 from flask_socketio import SocketIO, emit
 from emulator.core import CoCoBasic
-from emulator.config import DEFAULT_PORT, DEFAULT_HOST
+from emulator.config import DEFAULT_PORT, DEFAULT_HOST, CORS_ALLOWED_ORIGINS, LOOPBACK_HOSTS
+import functools
 import glob
 import logging
 import os
 import pprint
+import threading
+import time
 import uuid
 
 logging.basicConfig(
-    level=logging.DEBUG,
+    level=os.environ.get('BASICOCO_LOG_LEVEL', 'INFO').upper(),
     format='%(asctime)s %(levelname)s %(message)s',
     datefmt='%H:%M:%S',
 )
 logger = logging.getLogger(__name__)
 
+
+class _Pretty:
+    """Defer pprint formatting until a log record is actually emitted, so
+    large program output isn't formatted when DEBUG logging is off."""
+
+    def __init__(self, obj):
+        self.obj = obj
+
+    def __str__(self):
+        return pprint.pformat(self.obj)
+
 app = Flask(__name__)
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', os.urandom(24).hex())
-socketio = SocketIO(app, cors_allowed_origins="*")
+# cors_allowed_origins=None means same-origin only (see emulator/config.py)
+socketio = SocketIO(app, cors_allowed_origins=CORS_ALLOWED_ORIGINS)
+
+# Most interpreters (tabs) one connection may create; each holds a program,
+# variables and graphics state in server memory.
+MAX_TABS_PER_CONNECTION = 16
+
 
 # Session management for multiple tabs/programs
 class SessionManager:
     def __init__(self):
         self.sessions = {}
-    
+
     def get_session(self, session_id, tab_id='main'):
-        """Get or create a session for the given session and tab IDs"""
-        if session_id not in self.sessions:
-            self.sessions[session_id] = {}
-        
-        if tab_id not in self.sessions[session_id]:
-            self.sessions[session_id][tab_id] = CoCoBasic()
-        
-        return self.sessions[session_id][tab_id]
-    
+        """Get or create the interpreter for a session's tab.
+
+        Returns None if creating it would exceed MAX_TABS_PER_CONNECTION.
+        Each interpreter carries a ``command_lock``: Socket.IO handlers run
+        in parallel threads, and one interpreter must never execute two
+        commands at once.
+        """
+        tabs = self.sessions.setdefault(session_id, {})
+        if tab_id not in tabs:
+            if len(tabs) >= MAX_TABS_PER_CONNECTION:
+                return None
+            interpreter = CoCoBasic()
+            interpreter.command_lock = threading.Lock()
+            tabs[tab_id] = interpreter
+        return tabs[tab_id]
+
+    def close_tab(self, session_id, tab_id):
+        """Free a tab's interpreter (the main tab is kept)."""
+        if tab_id != 'main':
+            self.sessions.get(session_id, {}).pop(tab_id, None)
+
     def remove_session(self, session_id):
         """Remove a session when client disconnects"""
         if session_id in self.sessions:
@@ -44,6 +76,11 @@ session_manager = SessionManager()
 
 # Track client sessions
 client_sessions = {}
+
+# Sessions whose client disconnected: session_id -> time.monotonic() at
+# disconnect. Kept this long so a reconnecting client gets its programs back.
+SESSION_GRACE_SECONDS = 600
+orphaned_sessions = {}
 
 
 def _emit_command_complete_if_done(output, basic):
@@ -75,26 +112,70 @@ def _get_session(data=None, error_event='output', error_payload=None):
         return None, None, None
     tab_id = data.get('tabId', 'main') if data else 'main'
     basic = session_manager.get_session(session_id, tab_id)
+    if basic is None:
+        if error_event is not None:
+            emit(error_event, [{'type': 'error',
+                                'message': f'TOO MANY TABS (limit {MAX_TABS_PER_CONNECTION})'},
+                               {'type': 'command_complete'}])
+        return None, None, None
     return basic, session_id, tab_id
 
+
+def _exclusive(handler):
+    """Run a Socket.IO handler holding its interpreter's command_lock, so
+    commands, INPUT answers and continuations for one tab run one at a time
+    (a second command waits instead of racing the first)."""
+    @functools.wraps(handler)
+    def wrapper(data=None):
+        basic, _, _ = _get_session(data, error_event=None)
+        if basic is None:
+            return handler(data)
+        with basic.command_lock:
+            return handler(data)
+    return wrapper
+
+def _purge_orphaned_sessions():
+    """Drop sessions whose client has been gone longer than the grace period."""
+    cutoff = time.monotonic() - SESSION_GRACE_SECONDS
+    for session_id, left_at in list(orphaned_sessions.items()):
+        if left_at < cutoff:
+            del orphaned_sessions[session_id]
+            session_manager.remove_session(session_id)
+
+
 @socketio.on('connect')
-def handle_connect():
-    """Handle client connection and assign session ID"""
-    logger.debug("New client connecting: %s", request.sid)
-    session_id = str(uuid.uuid4())
+def handle_connect(auth=None):
+    """Assign a session, or reattach a reconnecting client to its old one.
+
+    A client that lost its connection (network blip, laptop sleep) offers
+    its previous session id; if that session is still in its grace period
+    the client gets its tabs, programs and variables back.
+    """
+    _purge_orphaned_sessions()
+    wanted = auth.get('session_id') if isinstance(auth, dict) else None
+    resumed = bool(wanted) and wanted in orphaned_sessions
+    if resumed:
+        del orphaned_sessions[wanted]
+        session_id = wanted
+    else:
+        session_id = str(uuid.uuid4())
     client_sessions[request.sid] = session_id
-    logger.debug("Client connected: %s with session %s", request.sid, session_id)
-    emit('session_id', {'session_id': session_id})
-    logger.debug("Session ID emitted successfully")
+    logger.debug("Client %s connected with session %s (resumed=%s)", request.sid, session_id, resumed)
+    emit('session_id', {'session_id': session_id, 'resumed': resumed})
 
 @socketio.on('disconnect')
 def handle_disconnect():
-    """Handle client disconnection and cleanup session"""
-    if request.sid in client_sessions:
-        session_id = client_sessions[request.sid]
-        session_manager.remove_session(session_id)
-        del client_sessions[request.sid]
-        logger.debug("Client disconnected: %s", request.sid)
+    """Keep the session for a grace period so a reconnect can resume it."""
+    session_id = client_sessions.pop(request.sid, None)
+    if session_id is None:
+        return
+    orphaned_sessions[session_id] = time.monotonic()
+    # A program still executing for nobody is asked to stop
+    for interpreter in session_manager.sessions.get(session_id, {}).values():
+        if interpreter.command_lock.locked():
+            interpreter.break_requested = True
+    logger.debug("Client disconnected: %s (session %s kept for %ds)",
+                 request.sid, session_id, SESSION_GRACE_SECONDS)
 
 @socketio.on('list_files')
 def handle_list_files():
@@ -119,6 +200,7 @@ def dual_monitor():
     return render_template('dual_monitor.html')
 
 @socketio.on('execute_command')
+@_exclusive
 def handle_command(data):
     """Execute BASIC command with session and tab support"""
     command = data.get('command', '')
@@ -135,20 +217,7 @@ def handle_command(data):
     line_num, code = basic.parse_line(command)
     
     if line_num is not None:
-        # Store program line
-        if code:
-            basic.program[line_num] = code
-            # Also expand into sub-lines for execution
-            basic.expand_line_to_sublines(line_num, code)
-        else:
-            # Delete line if no code
-            if line_num in basic.program:
-                del basic.program[line_num]
-            # Also remove from expanded program
-            keys_to_remove = [key for key in basic.expanded_program.keys() if key[0] == line_num]
-            for key in keys_to_remove:
-                del basic.expanded_program[key]
-        
+        basic.store_program_line(line_num, code)
         emit('output', basic._system_ok())
         emit('output', [{'type': 'command_complete'}])
     else:
@@ -156,7 +225,7 @@ def handle_command(data):
         try:
             logger.debug("About to execute command: %s", command)
             output = basic.process_command(command)
-            logger.debug("Command execution returned:\n%s", pprint.pformat(output))
+            logger.debug("Command execution returned:\n%s", _Pretty(output))
             emit('output', output)
             
             _emit_command_complete_if_done(output, basic)
@@ -167,6 +236,7 @@ def handle_command(data):
             emit('output', [{'type': 'command_complete'}])
 
 @socketio.on('input_response')
+@_exclusive
 def handle_input_response(data):
     """Handle INPUT response with session support"""
     variable = data.get('variable', '')
@@ -178,18 +248,11 @@ def handle_input_response(data):
     
     # Handle special system variables
     if variable == '_kill_confirm':
-        filename = data.get('filename', '')
-        if filename:
-            output = basic.process_kill_confirmation(value, filename)
-            emit('output', output)
-            # Send completion signal after KILL confirmation
-            emit('output', [{'type': 'command_complete'}])
-            return
-        else:
-            emit('output', [{'type': 'error', 'message': 'KILL confirmation error: no filename'}])
-            # Send completion signal even for KILL errors
-            emit('output', [{'type': 'command_complete'}])
-            return
+        # The file to delete was recorded server-side by KILL; any filename
+        # the client sends is ignored.
+        emit('output', basic.process_kill_confirmation(value))
+        emit('output', [{'type': 'command_complete'}])
+        return
     
     # Process the input value and continue program execution
     try:
@@ -225,7 +288,7 @@ def handle_input_response(data):
             # We're in program execution - continue from where we paused for input
             basic.waiting_for_input = False
             output = basic.continue_program_execution()
-            logger.debug("Input continuation returned:\n%s", pprint.pformat(output))
+            logger.debug("Input continuation returned:\n%s", _Pretty(output))
             emit('output', output)
 
             _emit_command_complete_if_done(output, basic)
@@ -267,6 +330,7 @@ def handle_pause_for_tab_switch(data):
     emit('tab_switch_paused', {'success': True, 'wasRunning': was_running})
 
 @socketio.on('resume_from_tab_switch')
+@_exclusive
 def handle_resume_from_tab_switch(data):
     """Resume program execution after returning to tab"""
     basic, session_id, tab_id = _get_session(data)
@@ -277,10 +341,13 @@ def handle_resume_from_tab_switch(data):
     was_paused = hasattr(basic, 'paused_for_tab_switch') and basic.paused_for_tab_switch
     basic.paused_for_tab_switch = False
     if was_paused:
-        if basic.program_counter:
+        # A program waiting for INPUT stays waiting: only a paused (PAUSE /
+        # auto-yield) program is continued, otherwise the INPUT would be
+        # skipped with a default value
+        if basic.program_counter and not basic.waiting_for_input:
             # Continue execution from where we left off
             output = basic.continue_program_execution()
-            logger.debug("Tab resume returned:\n%s", pprint.pformat(output))
+            logger.debug("Tab resume returned:\n%s", _Pretty(output))
             emit('output', output)
 
             _emit_command_complete_if_done(output, basic)
@@ -293,6 +360,14 @@ def handle_switch_tab(data):
         return
     
     # Session is created/retrieved by _get_session; no response needed
+
+@socketio.on('close_tab')
+def handle_close_tab(data):
+    """Free the server-side interpreter of a closed tab."""
+    session_id = client_sessions.get(request.sid)
+    if session_id and data:
+        session_manager.close_tab(session_id, data.get('tabId', 'main'))
+
 
 @socketio.on('get_state')
 def handle_get_state(data):
@@ -316,19 +391,23 @@ def handle_set_state(data):
     if basic is None:
         return
     
-    # Set state
-    basic.program = program
+    # Set state. JSON turns line-number keys into strings, so rebuild the
+    # program line by line with int keys rather than assigning the dict.
+    basic.program = {}
+    basic.expanded_program = {}
+    basic.data_values = {}
+    basic.labels = {}
     basic.variables = variables
-    
-    # Expand program lines
+
     for line_num, code in program.items():
         try:
-            basic.expand_line_to_sublines(int(line_num), code)
+            basic.store_program_line(int(line_num), code)
         except Exception as e:
             logger.error("Error expanding line %s: %s", line_num, e, exc_info=True)
             emit('output', [{'type': 'error', 'message': f'Error restoring line {line_num}: {str(e)}'}])
 
 @socketio.on('continue_execution')
+@_exclusive
 def handle_continue_execution(data=None):
     """Continue program execution after a pause."""
     try:
@@ -339,7 +418,7 @@ def handle_continue_execution(data=None):
         # Continue execution from where we left off
         if basic.program_counter:
             output = basic.continue_program_execution()
-            logger.debug("Pause continuation returned:\n%s", pprint.pformat(output))
+            logger.debug("Pause continuation returned:\n%s", _Pretty(output))
             emit('output', output)
 
             _emit_command_complete_if_done(output, basic)
@@ -360,33 +439,52 @@ def handle_break_execution(data=None):
         if basic is None:
             return
 
-        # Check if there was actually a program running
-        was_running = basic.program_counter is not None or basic.waiting_for_input
-        
-        # Break program execution (safe to do even if nothing is running)
-        basic.program_counter = None
-        basic.waiting_for_input = False
-        if hasattr(basic, 'input_variables'):
-            basic.clear_input_state()
-        
-        # Send appropriate response based on whether something was actually interrupted
-        if was_running:
-            logger.debug("Program execution interrupted with Ctrl+C for session %s, tab %s", session_id, tab_id)
-            emit('output', [
-                {'type': 'text', 'text': '^C'},
-                {'type': 'text', 'text': 'BREAK'},
-                {'type': 'command_complete'}
-            ])
-        else:
-            # Nothing was running, just acknowledge the break signal silently
-            # (Could optionally emit nothing, or a different response)
-            emit('output', [{'type': 'command_complete'}])
-        
+        # A program executing right now (another thread holds the lock) is
+        # asked to stop; that thread emits BREAK IN n and command_complete.
+        # Never block here: Ctrl+C must work while a program is running.
+        if not basic.command_lock.acquire(blocking=False):
+            basic.break_requested = True
+            return
+        try:
+            _break_idle_program(basic, session_id, tab_id)
+        finally:
+            basic.command_lock.release()
     except Exception as e:
         logger.error("Break execution error: %s", e, exc_info=True)
+
+
+def _break_idle_program(basic, session_id, tab_id):
+    """Ctrl+C when no statement is executing: abandon a paused program or a
+    pending INPUT."""
+    was_running = basic.program_counter is not None or basic.waiting_for_input
+
+    # Safe to do even if nothing is running
+    basic.break_requested = False
+    basic.program_counter = None
+    basic.waiting_for_input = False
+    basic.waiting_for_pause_continuation = False
+    basic.clear_input_state()
+
+    if was_running:
+        logger.debug("Program execution interrupted with Ctrl+C for session %s, tab %s", session_id, tab_id)
+        emit('output', [
+            {'type': 'text', 'text': '^C'},
+            {'type': 'text', 'text': 'BREAK'},
+            {'type': 'command_complete'}
+        ])
+    else:
+        # Nothing was running: just acknowledge
+        emit('output', [{'type': 'command_complete'}])
 
 
 if __name__ == '__main__':
     debug = os.environ.get('DEBUG', 'false').lower() == 'true'
     port = int(os.environ.get('PORT', DEFAULT_PORT))
+    if debug and DEFAULT_HOST not in LOOPBACK_HOSTS:
+        # The Werkzeug debugger allows arbitrary code execution; never
+        # expose it beyond this machine.
+        raise SystemExit('Refusing DEBUG=true with a non-loopback BASICOCO_HOST')
+    if DEFAULT_HOST not in LOOPBACK_HOSTS:
+        logger.warning('Listening on %s: the interpreter has no authentication; '
+                       'anyone who can reach port %d can use it', DEFAULT_HOST, port)
     socketio.run(app, debug=debug, host=DEFAULT_HOST, port=port, allow_unsafe_werkzeug=True)
