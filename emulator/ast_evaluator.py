@@ -248,23 +248,40 @@ class ASTEvaluator(ASTVisitor):
 
         return value
 
+    def _loop_frame(self, stack, **fields):
+        """A new WHILE/DO frame for the statement being executed.
+
+        WEND and LOOP jump past their WHILE/DO, so reaching the statement
+        again means the loop was left by GOTO: its old frame, and any frames
+        opened after it, are dropped (as FOR does), so they can't pile up.
+        Frames are matched within the same GOSUB level, so a recursive
+        GOSUB into the same loop keeps its caller's frame.
+        """
+        em = self.emulator
+        here = (em.current_line, em.current_sub_line, len(em.call_stack))
+        for i in range(len(stack) - 1, -1, -1):
+            frame = stack[i]
+            if (frame['line'], frame['sub_line'], frame['gosub_depth']) == here:
+                del stack[i:]
+                break
+        return dict(fields, line=here[0], sub_line=here[1], gosub_depth=here[2])
+
     def visit_while_statement(self, node: WhileStatementNode) -> Any:
         """Visit WHILE statement - evaluate condition, push to stack or skip"""
+        frame = self._loop_frame(self.emulator.while_stack, condition_ast=node.condition)
         condition_result = self.visit(node.condition)
         condition_true = basic_truthy(condition_result)
 
         if condition_true:
-            self.emulator.while_stack.append({
-                'condition_ast': node.condition,
-                'line': self.emulator.current_line,
-                'sub_line': self.emulator.current_sub_line
-            })
+            self.emulator.while_stack.append(frame)
             return []
         else:
             return [{'type': 'skip_while_loop'}]
 
     def visit_do_loop_statement(self, node: DoLoopStatementNode) -> Any:
         """Visit DO statement - evaluate top condition if present, push to stack"""
+        frame = self._loop_frame(self.emulator.do_stack, condition_ast=node.condition,
+                                 condition_type=node.condition_type)
         if node.condition and node.condition_position == 'TOP':
             condition_result = self.visit(node.condition)
             condition_true = basic_truthy(condition_result)
@@ -274,12 +291,7 @@ class ASTEvaluator(ASTVisitor):
             elif node.condition_type == 'UNTIL' and condition_true:
                 return [{'type': 'skip_do_loop'}]
 
-        self.emulator.do_stack.append({
-            'condition_ast': node.condition,
-            'condition_type': node.condition_type,
-            'line': self.emulator.current_line,
-            'sub_line': self.emulator.current_sub_line
-        })
+        self.emulator.do_stack.append(frame)
         return []
 
     def visit_exit_for_statement(self, node: ExitForStatementNode) -> Any:

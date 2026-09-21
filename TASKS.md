@@ -41,9 +41,6 @@ match the session task list, where every entry here is mirrored.
 - [ ] **PPOINT sees PAINT fills and GPRINT text** [#85]
   The server tracks LINE/CIRCLE/DRAW/PSET pixels but not PAINT or GPRINT, so `PPOINT` inside a painted area or on GPRINT text returns 0.
   **Done when:** the server records PAINT fills (same flood-fill rules as the client) and GPRINT glyph pixels, and tests check PPOINT inside a painted box and on a GPRINT stroke.
-- [ ] **Re-entering a WHILE or DO leaks a stack frame** [#100]
-  `FOR K=1 TO 2000: WHILE 1: IF 1 THEN GOTO 40 ... 40 NEXT K` leaves 2000 frames on `while_stack` (DO: `do_stack`). FOR already replaces its frame when the same loop starts again (#43); WHILE and DO push a new one each time.
-  **Done when:** starting a WHILE or DO whose frame (same line and subline) is already on its stack replaces it (dropping frames above it), and the two xfails in `test_robustness.py` pass.
 - [ ] **DRAW: a `;` drops the command before it; the pen starts off-centre** [#101]
   `DRAW "BM100,100;R20"` never moves to (100,100) (`BM100,100R20` does), silently; and the pen starts at (64,48), a leftover of the old per-mode coordinates, not the screen centre (128,96).
   **Done when:** `;` separates DRAW commands everywhere, a malformed DRAW command is an error instead of being skipped, the pen starts (and resets on NEW/PCLS as today) at (128,96), with tests; the xfail in `test_robustness.py` passes.

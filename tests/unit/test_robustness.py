@@ -154,10 +154,8 @@ class TestChainAll:
 
 @pytest.mark.parametrize('inner', [
     pytest.param('FOR J=1 TO 5', id='FOR'),
-    pytest.param('WHILE 1', id='WHILE',
-                 marks=pytest.mark.xfail(reason='#100: re-entered WHILE leaks a frame', strict=True)),
-    pytest.param('DO', id='DO',
-                 marks=pytest.mark.xfail(reason='#100: re-entered DO leaks a frame', strict=True)),
+    pytest.param('WHILE 1', id='WHILE'),   # #100: used to leak a frame per pass
+    pytest.param('DO', id='DO'),
 ])
 def test_goto_out_of_a_loop_many_times_keeps_stacks_bounded(basic, helpers, inner):
     texts, errors = run(basic, helpers, [
@@ -169,6 +167,20 @@ def test_goto_out_of_a_loop_many_times_keeps_stacks_bounded(basic, helpers, inne
     assert errors == [] and texts == ['DONE']
     depth = len(basic.for_stack) + len(basic.while_stack) + len(basic.do_stack) + len(basic.if_stack)
     assert depth <= 2, (basic.for_stack, basic.while_stack, basic.do_stack, basic.if_stack)
+
+
+def test_a_recursive_gosub_into_the_same_while_keeps_each_levels_loop(basic, helpers):
+    """#100: re-entering a WHILE drops its old frame only within one GOSUB
+    level; a recursive call's loop must not end its caller's."""
+    texts, errors = run(basic, helpers, [
+        '10 D=0: GOSUB 100: PRINT "DONE": END',
+        '100 D=D+1: LOCAL I: I=0',
+        '110 WHILE I<2: I=I+1: PRINT D;I;: IF D<2 THEN GOSUB 100',
+        '120 WEND: D=D-1: RETURN'])
+    assert errors == [], errors
+    # Depth 1 loops twice and recurses each time; depth 2 loops twice
+    assert ''.join(texts).split() == ['1', '1', '2', '1', '2', '2',
+                                      '1', '2', '2', '1', '2', '2', 'DONE']
 
 
 # -- strings -----------------------------------------------------------------------
