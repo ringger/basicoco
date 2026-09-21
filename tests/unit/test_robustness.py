@@ -251,9 +251,10 @@ def test_draw_crossing_the_screen_edge_draws_the_visible_part(basic, helpers):
     assert errors == [] and texts == [' 1  1 ']
 
 
-def test_switching_pmode_mid_drawing_keeps_earlier_pixels(basic, helpers):
+def test_switching_pmode_mid_drawing_clears_like_the_canvas(basic, helpers):
+    # The client clears its canvas on PMODE, so PPOINT forgets earlier pixels (#124)
     texts, errors = run(basic, helpers, [
         '10 PMODE 4,1: PCLS: PSET(10,10)',
         '20 PMODE 1,1: PSET(51,51)',       # 2x2 pixels in PMODE 1: lands on (50,50)
         '30 PRINT PPOINT(10,10);PPOINT(50,50)'])
-    assert errors == [] and texts == [' 1  1 ']
+    assert errors == [] and texts == [' 0  1 ']

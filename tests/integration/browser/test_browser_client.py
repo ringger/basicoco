@@ -45,6 +45,37 @@ def test_circle_is_crisp_and_paint_stays_inside(basic_page):
     assert around <= PALETTE, around - PALETTE
 
 
+CANVAS_COLOR_INDEX_JS = """([x, y]) => {
+    const g = window.dualMonitor.displayManager.graphicsDisplay;
+    const d = g.ctx.getImageData(x * 2, y * 2, 1, 1).data;
+    const hex = '#' + [d[0], d[1], d[2]].map(v => v.toString(16).padStart(2, '0')).join('');
+    return g.colors.indexOf(hex);
+}"""
+
+
+@pytest.mark.parametrize('commands', [
+    ['COLOR 4,3', 'PSET(10,10): LINE(0,30)-(40,40),PSET: LINE(0,20)-(40,20),PRESET',
+     'CIRCLE(100,100),20: PAINT(100,100),2,4: PRESET(100,100)', 'GPRINT(150,50),"HI",1'],
+    ['COLOR 2,1', 'PCLS 6', 'LINE(10,10)-(60,60),PSET,BF: LINE(20,20)-(50,50),PRESET,B'],
+    ['PSET(10,10)', 'PMODE 4,1', 'COLOR 7', 'PSET(30,30): PCLS: PSET(40,40)'],
+], ids=['draw-and-preset', 'pcls-colour-and-boxes', 'pmode-and-pcls'])
+def test_ppoint_matches_the_canvas(basic_page, commands):
+    """#124: PPOINT (the server's record) and the canvas (what the client
+    drew) agree after COLOR, PRESET, LINE...PRESET, PCLS and PMODE."""
+    basic_page.run('PMODE 4,1: SCREEN 1,1')
+    for command in commands:
+        basic_page.run(command)
+    points = [(x, y) for x in (0, 10, 20, 25, 35, 40, 55, 100, 105, 120, 150, 151, 200)
+              for y in (10, 20, 25, 30, 35, 40, 50, 100, 105, 150)]
+    canvas = [basic_page.page.evaluate(CANVAS_COLOR_INDEX_JS, [x, y]) for x, y in points]
+    for start in range(0, len(points), 10):
+        chunk = points[start:start + 10]
+        basic_page.run('PRINT ' + ';'.join(f'PPOINT({x},{y})' for x, y in chunk))
+        ppoint = [int(v) for v in basic_page.lines()[-2].split()]
+        for (x, y), server, shown in zip(chunk, ppoint, canvas[start:start + 10]):
+            assert server == shown, f'({x},{y}): PPOINT {server}, canvas {shown}'
+
+
 def test_circle_ratio_and_arc_on_the_canvas(basic_page):
     """#84: an ellipse (ratio .5) and the lower half of a circle, and the
     canvas agrees with PPOINT."""

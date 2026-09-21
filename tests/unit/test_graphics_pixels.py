@@ -55,7 +55,7 @@ def test_pcls_color(gfx):
     assert result[0] == {'type': 'pcls', 'color': 3}
     assert ppoint(gfx, 1, 1) == 3
     gfx.process_command('PRESET(1,1)')
-    assert ppoint(gfx, 1, 1) == 3  # PRESET restores the clear color
+    assert ppoint(gfx, 1, 1) == 0  # PRESET sets the background colour, not PCLS's (#124)
 
 
 def test_huge_coordinates_are_fast(gfx):
@@ -111,6 +111,37 @@ class TestPaintAndGprint:
         assert font[65] == [6, 9, 15, 9, 9, 0]
         assert all(len(rows) == 6 for rows in font.values())
         assert set(range(ord('A'), ord('Z') + 1)) <= set(font)
+
+
+class TestColourState:
+    """#124: the server's pixel record follows the same colour rules as the
+    canvas: COLOR sets the drawing and background colours, PRESET uses the
+    background, and clearing the screen fills with the background unless a
+    colour is given."""
+
+    def test_color_sets_the_drawing_colour(self, gfx):
+        gfx.process_command('COLOR 4')
+        gfx.process_command('PSET(10,10): LINE(0,20)-(5,20),PSET: CIRCLE(50,50),5')
+        assert ppoint(gfx, 10, 10) == 4 and ppoint(gfx, 2, 20) == 4 and ppoint(gfx, 55, 50) == 4
+
+    def test_color_with_a_background_clears_to_it(self, gfx):
+        gfx.process_command('PSET(10,10)')
+        gfx.process_command('COLOR 2,3')
+        assert ppoint(gfx, 10, 10) == 3 and ppoint(gfx, 100, 100) == 3
+
+    def test_preset_uses_the_background(self, gfx):
+        gfx.process_command('COLOR 1,3')
+        gfx.process_command('PCLS 2: PRESET(10,10): LINE(0,20)-(5,20),PRESET')
+        assert ppoint(gfx, 10, 10) == 3 and ppoint(gfx, 2, 20) == 3
+        assert ppoint(gfx, 50, 50) == 2
+
+    def test_pcls_without_a_colour_clears_to_the_background(self, gfx):
+        gfx.process_command('COLOR 1,4: PSET(10,10): PCLS')
+        assert ppoint(gfx, 10, 10) == 4
+
+    def test_pmode_clears_the_screen(self, gfx):
+        gfx.process_command('PSET(10,10): PMODE 4,1')
+        assert ppoint(gfx, 10, 10) == 0
 
 
 class TestCircleRatioAndArcs:

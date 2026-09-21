@@ -126,15 +126,19 @@ class DisplayManager {
             case 'preset':
                 this.graphicsDisplay.preset(output.x, output.y);
                 break;
-            case 'line':
+            case 'line': {
+                // LINE ...,PRESET draws in the background colour
+                const color = output.mode === 'PRESET'
+                    ? this.graphicsDisplay.backgroundIndex() : output.color;
                 if (output.box_type === 'BF') {
-                    this.graphicsDisplay.drawFilledBox(output.x1, output.y1, output.x2, output.y2, output.color);
+                    this.graphicsDisplay.drawFilledBox(output.x1, output.y1, output.x2, output.y2, color);
                 } else if (output.box_type === 'B') {
-                    this.graphicsDisplay.drawBox(output.x1, output.y1, output.x2, output.y2, output.color);
+                    this.graphicsDisplay.drawBox(output.x1, output.y1, output.x2, output.y2, color);
                 } else {
-                    this.graphicsDisplay.drawLine(output.x1, output.y1, output.x2, output.y2, output.color);
+                    this.graphicsDisplay.drawLine(output.x1, output.y1, output.x2, output.y2, color);
                 }
                 break;
+            }
             case 'circle': {
                 const ratio = output.ratio ?? 1, start = output.start ?? 0, end = output.end ?? 1;
                 if (ratio === 1 && start === 0 && end === 1) {
@@ -984,8 +988,13 @@ class GraphicsDisplay {
         this.plot(x, y);
     }
     
+    // PRESET resets a point to the background colour (COLOR's second argument)
+    backgroundIndex() {
+        return Math.max(0, this.colors.indexOf(this.backgroundColor));
+    }
+
     preset(x, y) {
-        this.pset(x, y, 0);
+        this.pset(x, y, this.backgroundIndex());
     }
     
     drawLine(x1, y1, x2, y2, color = null) {

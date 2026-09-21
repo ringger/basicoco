@@ -94,7 +94,8 @@ class BasicGraphics:
         """Initialize graphics handler with reference to main emulator"""
         self.emulator = emulator
         self.pixel_buffer = {}  # Sparse dict: (x, y) -> color
-        self.clear_color = 0  # Color of undrawn pixels (set by PCLS c)
+        self.clear_color = 0  # Color of undrawn pixels (the last clear's fill)
+        self.background = 0   # COLOR's background: PRESET's colour, PCLS's default
         self.last_line_end = (0, 0)  # Start point for LINE -(x,y)
     
     def register_commands(self, registry):
@@ -162,9 +163,14 @@ class BasicGraphics:
     def execute_pcls(self, args):
         """PCLS [color] - clear the graphics screen (to color, if given)"""
         color = self.emulator.eval_int(args) if args.strip() else None
-        self.pixel_buffer.clear()
-        self.clear_color = color if color is not None else 0
+        self._clear_screen(color)
         return [{'type': 'pcls', 'color': color}]
+
+    def _clear_screen(self, color=None):
+        """Forget drawn pixels; the screen is now `color`, or the background
+        (as the client's clearGraphics fills it)."""
+        self.pixel_buffer.clear()
+        self.clear_color = color if color is not None else self.background
 
     # ── Pixel tracking (for PPOINT) ──────────────────────────────────
     # The client renders; the server keeps a sparse copy of what was drawn
@@ -186,9 +192,10 @@ class BasicGraphics:
         return self.pixel_buffer.get(self._snap(x, y), self.clear_color)
 
     def clear_pixel_buffer(self):
-        """Clear the pixel buffer."""
+        """Clear the pixel buffer and reset the background (NEW, RUN)."""
         self.pixel_buffer.clear()
         self.clear_color = 0
+        self.background = 0
 
     def _plot(self, x, y, color):
         if 0 <= x < self.SCREEN_WIDTH and 0 <= y < self.SCREEN_HEIGHT:
@@ -430,6 +437,7 @@ class BasicGraphics:
                 ['Use PMODE mode,1 unless you are page-flipping', 'Example: PMODE 4,1'])
 
         self.emulator.graphics_mode = mode
+        self._clear_screen()   # the client clears its canvas on PMODE too
 
         return [{'type': 'pmode', 'mode': mode, 'page': page}]
     
@@ -470,6 +478,13 @@ class BasicGraphics:
                     ['Colors are 0-8: 0 black, 1 green, 2 yellow, 3 blue, 4 red, ...',
                      'Example: COLOR 4,0'])
 
+        # Mirror the client's setColor: the foreground becomes the drawing
+        # colour; a new background also clears the screen to it
+        if fg is not None:
+            self.emulator.current_draw_color = fg
+        if bg is not None:
+            self.background = bg
+            self._clear_screen()
         return [{'type': 'set_color', 'fg': fg, 'bg': bg}]
     
     @_graphics_command('PSET', require_graphics=True)
@@ -491,7 +506,7 @@ class BasicGraphics:
         if isinstance(result, list):
             return result
         x, y, _ = result
-        self._plot(x, y, self.clear_color)
+        self._plot(x, y, self.background)
         return [{'type': 'preset', 'x': x, 'y': y}]
     
     @_graphics_command('LINE', require_graphics=True)
@@ -522,7 +537,7 @@ class BasicGraphics:
 
             self.last_line_end = (x2, y2)
             if mode == 'PRESET':
-                pixel_color = self.clear_color
+                pixel_color = self.background
             else:
                 pixel_color = color if color is not None else self.emulator.current_draw_color
             if box_type:
