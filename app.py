@@ -368,44 +368,6 @@ def handle_close_tab(data):
     if session_id and data:
         session_manager.close_tab(session_id, data.get('tabId', 'main'))
 
-
-@socketio.on('get_state')
-def handle_get_state(data):
-    """Get current state for a tab"""
-    basic, session_id, tab_id = _get_session(data, error_event=None)
-    if basic is None:
-        return {'program': {}, 'variables': {}}
-    
-    return {
-        'program': dict(basic.program),
-        'variables': dict(basic.variables)
-    }
-
-@socketio.on('set_state')
-def handle_set_state(data):
-    """Set state for a tab"""
-    program = data.get('program', {})
-    variables = data.get('variables', {})
-
-    basic, session_id, tab_id = _get_session(data, error_event=None)
-    if basic is None:
-        return
-    
-    # Set state. JSON turns line-number keys into strings, so rebuild the
-    # program line by line with int keys rather than assigning the dict.
-    basic.program = {}
-    basic.expanded_program = {}
-    basic.data_values = {}
-    basic.labels = {}
-    basic.variables = variables
-
-    for line_num, code in program.items():
-        try:
-            basic.store_program_line(int(line_num), code)
-        except Exception as e:
-            logger.error("Error expanding line %s: %s", line_num, e, exc_info=True)
-            emit('output', [{'type': 'error', 'message': f'Error restoring line {line_num}: {str(e)}'}])
-
 @socketio.on('continue_execution')
 @_exclusive
 def handle_continue_execution(data=None):

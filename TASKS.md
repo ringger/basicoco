@@ -41,9 +41,6 @@ match the session task list, where every entry here is mirrored.
 - [ ] **PPOINT sees PAINT fills and GPRINT text** [#85]
   The server tracks LINE/CIRCLE/DRAW/PSET pixels but not PAINT or GPRINT, so `PPOINT` inside a painted area or on GPRINT text returns 0.
   **Done when:** the server records PAINT fills (same flood-fill rules as the client) and GPRINT glyph pixels, and tests check PPOINT inside a painted box and on a GPRINT stroke.
-- [ ] **Stop round-tripping tab state on every tab switch** [#83]
-  The server keeps a separate interpreter per tab, yet the client fetches each tab's program and variables (`get_state`) when leaving it and pushes them back (`set_state`) when returning. That is redundant, and because `get_state` answers asynchronously, a quick switch can push back a stale copy and overwrite newer work (e.g. lines typed just before switching). Tabs restored after a reload already skip the push (`stateFetched`).
-  **Done when:** tab switches no longer send `set_state` (and `get_state` is dropped if nothing else needs it), with a browser test that types a line, switches away and back immediately, and still LISTs it.
 - [ ] **Robustness test sweep** [#86]
   These areas work but haven't been tested with awkward inputs. Write the tests; any bug found becomes its own task.
   - File I/O: several files open at once; EOF exactly at the last record; a file of thousands of lines; closing a file mid-read.

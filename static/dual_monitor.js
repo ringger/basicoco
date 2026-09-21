@@ -1365,11 +1365,8 @@ class TabManager {
         this.tabs.set('main', {
             id: 'main',
             title: 'Main',
-            program: {},
-            variables: {},
             isDirty: false,
-            hasContent: true,
-            stateFetched: false
+            hasContent: true
         });
 
         // Setup event handlers
@@ -1404,18 +1401,14 @@ class TabManager {
     }
 
     // Add a tab to the map and the tab strip (not switching to it). Its
-    // program lives on the server; stateFetched stays false until get_state
-    // has returned it, so a tab restored after a reload never overwrites the
-    // server's copy with an empty one.
+    // program and variables live in the tab's own interpreter on the server;
+    // the client keeps only what the screens showed.
     createTab(tabId, title) {
         this.tabs.set(tabId, {
             id: tabId,
             title: title,
-            program: {},
-            variables: {},
             isDirty: false,
-            hasContent: false,
-            stateFetched: false
+            hasContent: false
         });
 
         const tabElement = document.createElement('div');
@@ -1586,13 +1579,6 @@ class TabManager {
         
         // Save graphics display state
         tabData.graphicsState = this.emulator.displayManager.graphicsDisplay.saveState();
-        
-        // Request current state from emulator
-        this.emulator.socket.emit('get_state', { tabId }, (state) => {
-            tabData.program = state.program || {};
-            tabData.variables = state.variables || {};
-            tabData.stateFetched = true;
-        });
     }
     
     loadTabState(tabId) {
@@ -1606,16 +1592,6 @@ class TabManager {
         
         // Restore graphics display state
         this.emulator.displayManager.graphicsDisplay.restoreState(tabData.graphicsState);
-        
-        // Send state to emulator -- but only a state we actually fetched: a
-        // tab restored after a reload has an empty cache, and sending that
-        // would wipe its program on the server
-        if (!tabData.stateFetched) return;
-        this.emulator.socket.emit('set_state', {
-            tabId,
-            program: tabData.program,
-            variables: tabData.variables
-        });
     }
     
     markDirty(isDirty = true) {

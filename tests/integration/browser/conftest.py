@@ -96,6 +96,66 @@ def open_basic_page(chrome, url, init_script=None, **context_options):
     return BasicPage(page), context, errors
 
 
+# -- tab and listing helpers ---------------------------------------------
+
+PAGE_STATE_JS = """() => {
+    const dm = window.dualMonitor;
+    if (!dm) return 'page not initialized';
+    return {
+        tabs: Array.from(dm.tabManager.tabs.keys()),
+        active: dm.tabManager.activeTabId,
+        counter: dm.tabManager.tabCounter,
+        session: dm.sessionId,
+        remembered: sessionStorage.getItem('basicoco.tabs'),
+        lastLines: dm.displayManager.textDisplay.lineBuffer.slice(-6),
+    };
+}"""
+
+
+def wait_for(page, expression, what, arg=None, timeout=COMMAND_TIMEOUT_MS):
+    """page.wait_for_function, but a timeout says what was awaited and
+    what the page looked like."""
+    try:
+        page.wait_for_function(expression, arg=arg, timeout=timeout)
+    except playwright_api.TimeoutError:
+        pytest.fail(f'Timed out waiting for {what}; page state: {page.evaluate(PAGE_STATE_JS)}')
+
+
+def listing(basic_page):
+    """The program as LIST prints it."""
+    basic_page.run('LIST')
+    lines = [l.rstrip() for l in basic_page.lines()]
+    start = len(lines) - 1 - lines[::-1].index('> LIST')
+    return [l for l in lines[start + 1:] if l and l != '>']
+
+
+def tab_ids(basic_page):
+    return basic_page.page.eval_on_selector_all('.tab', 'els => els.map(e => e.dataset.tabId)')
+
+
+def switch_to(basic_page, tab_id):
+    basic_page.page.click(f'.tab[data-tab-id="{tab_id}"] .tab-title')
+    wait_for(basic_page.page, "(id) => window.dualMonitor.tabManager.activeTabId === id",
+             f'tab {tab_id} to become active', arg=tab_id)
+    basic_page.run('')
+
+
+def add_tab(basic_page, expected_count):
+    """Click + and wait until the switch has finished: the new tab is active
+    and its cleared screen shows a prompt."""
+    basic_page.page.click('#btn-add-tab')
+    wait_for(basic_page.page,
+             """(n) => {
+                 const dm = window.dualMonitor, tm = dm.tabManager;
+                 const buf = dm.displayManager.textDisplay.lineBuffer;
+                 return tm.tabs.size === n && tm.activeTabId !== 'main'
+                     && tm.tabs.get(tm.activeTabId).hasContent
+                     && buf.length === 1 && buf[0] === '> ';
+             }""",
+             f'the new tab (of {expected_count}) to be active with a prompt', arg=expected_count)
+    return basic_page.page.evaluate('window.dualMonitor.tabManager.activeTabId')
+
+
 @pytest.fixture
 def basic_page(chrome, live_server):
     page, context, errors = open_basic_page(chrome, live_server.url)

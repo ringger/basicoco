@@ -109,7 +109,7 @@ A `GOTO`/`GOSUB` jump typed at the prompt is followed by `_follow_immediate_jump
 
 ### Program storage flow
 
-All program-line edits (typed lines, DELETE, LOAD/MERGE, RENUM, app.py's tab restore) go through `store_program_line(line_num, code)`, which first removes the line's old sublines, DATA values and labels via `_remove_expanded_lines()`. `expand_line_to_sublines()` then compiles the line once: comment lines become a no-op; labels register; everything else goes through `expand_statements()` (colon split + one-line IF expansion). Each subline is then pre-compiled by `_store_subline()`:
+All program-line edits (typed lines, DELETE, LOAD/MERGE, RENUM) go through `store_program_line(line_num, code)`, which first removes the line's old sublines, DATA values and labels via `_remove_expanded_lines()`. `expand_line_to_sublines()` then compiles the line once: comment lines become a no-op; labels register; everything else goes through `expand_statements()` (colon split + one-line IF expansion). Each subline is then pre-compiled by `_store_subline()`:
 
 1. **Comment** (REM / `'`) → shared no-op `CompiledCommand` (`self._COMMENT`)
 2. **DATA** (also crunched `DATA"A"`) → values pre-collected into `data_values` inline, then compiled as `CompiledCommand` (handler is a no-op at runtime)

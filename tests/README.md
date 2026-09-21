@@ -77,6 +77,8 @@ Tests multiple components working together:
 - `test_browser_client.py` - the web client in headless Google Chrome (Playwright): commands typed into the real REPL, output and scrollback read back, graphics checked pixel by pixel on the real canvas
 - `test_browser_ui.py` - Ctrl+C, INKEY$ key forwarding, the Copy button, the graphics info labels, PCLS with a color, SOUND note queueing
 - `test_browser_reload.py` - reloading the page reconnects to the same session with every tab
+- `test_browser_tabs.py` - switching tabs keeps each tab's program and variables (nothing is copied back to the server)
+- Shared helpers (`open_basic_page`, `wait_for`, `listing`, `add_tab`, `switch_to`) are in `browser/conftest.py`
 - Marked `browser` and `slow`; they use the installed Chrome (`channel='chrome'`) and are skipped, with the launch error as the reason, if Chrome can't start. Run just these with `python -m pytest -m browser`
 - `tests/client/dual_monitor_harness.js` (run by `unit/test_client_rendering.py`) checks the same client code in Node on a fake canvas, with no browser needed
 
