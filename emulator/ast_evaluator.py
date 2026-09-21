@@ -696,6 +696,12 @@ class ASTEvaluator(ASTVisitor):
         if saved_for_depth is not None:
             while len(self.emulator.for_stack) > saved_for_depth:
                 self.emulator.for_stack.pop()
+        # WHILE/DO loops the subroutine left open end with it: their frames
+        # record the GOSUB depth they were opened at (#115)
+        depth = len(self.emulator.call_stack)
+        for stack in (self.emulator.while_stack, self.emulator.do_stack):
+            while stack and stack[-1]['gosub_depth'] > depth:
+                stack.pop()
         return [{'type': 'jump_return', 'line': return_line, 'sub_line': return_sub_line}]
 
     def visit_for_statement(self, node: ForStatementNode) -> Any:

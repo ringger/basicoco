@@ -183,6 +183,18 @@ def test_goto_out_of_a_loop_many_times_keeps_stacks_bounded(basic, helpers, inne
     assert depth <= 2, (basic.for_stack, basic.while_stack, basic.do_stack, basic.if_stack)
 
 
+@pytest.mark.parametrize('loop, close', [('WHILE 1', 'WEND'), ('DO', 'LOOP'), ('FOR J=1 TO 9', 'NEXT J')])
+def test_return_from_inside_a_loop_keeps_stacks_bounded(basic, helpers, loop, close):
+    """#115: RETURN out of a loop the subroutine opened must not leave its frame."""
+    texts, errors = run(basic, helpers, [
+        '10 FOR K=1 TO 2000: GOSUB 100: NEXT K: PRINT "DONE": END',
+        f'100 {loop}',
+        '110 RETURN',
+        f'120 {close}'])
+    assert errors == [] and texts == ['DONE']
+    assert (len(basic.for_stack), len(basic.while_stack), len(basic.do_stack)) == (0, 0, 0)
+
+
 def test_a_recursive_gosub_into_the_same_while_keeps_each_levels_loop(basic, helpers):
     """#100: re-entering a WHILE drops its old frame only within one GOSUB
     level; a recursive call's loop must not end its caller's."""
