@@ -139,21 +139,7 @@ def helpers():
     return TestHelpers
 
 
-# Pytest hooks and configuration
-def pytest_configure(config):
-    """Configure pytest with custom settings"""
-    # Register custom markers
-    config.addinivalue_line("markers", "unit: Unit tests for individual components")
-    config.addinivalue_line("markers", "integration: Integration tests for component interactions")
-    config.addinivalue_line("markers", "e2e: End-to-end tests")
-    config.addinivalue_line("markers", "slow: Tests that take longer than 1 second")
-    config.addinivalue_line("markers", "graphics: Tests that involve graphics operations")
-    config.addinivalue_line("markers", "io: Tests that involve input/output operations")
-    config.addinivalue_line("markers", "cli: Tests that involve CLI interactions")
-    config.addinivalue_line("markers", "websocket: Tests that involve WebSocket functionality")
-    config.addinivalue_line("markers", "regression: Regression tests for specific bugs")
-
-
+# Pytest hooks (markers are registered in pytest.ini)
 def pytest_collection_modifyitems(config, items):
     """Modify test items during collection"""
     # Add markers based on test file paths

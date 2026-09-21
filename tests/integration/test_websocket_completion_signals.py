@@ -9,14 +9,10 @@ import sys
 import os
 import time
 import threading
-import tempfile
-import shutil
 import pytest
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..'))
 
 import socketio
-
-from emulator.config import DEFAULT_PORT
 
 
 @pytest.mark.slow
@@ -24,33 +20,26 @@ class TestWebSocketCompletionSignals:
     """Test WebSocket completion signal behavior for all command types"""
 
     @pytest.fixture(autouse=True)
-    def setup_websocket_test(self):
-        """Set up WebSocket client and test environment"""
+    def setup_websocket_test(self, live_server):
+        """Set up a WebSocket client against the session's live server.
+
+        The server runs in a temp directory (see tests/integration/conftest.py),
+        so files created here live in live_server.programs_dir, never the repo.
+        """
+        self.server = live_server
         self.sio = socketio.Client()
         self.messages = []
         self.completion_received = threading.Event()
 
-        # Create temporary directory for file operations
-        self.test_dir = tempfile.mkdtemp(prefix='trs80_websocket_test_')
-        self.original_cwd = os.getcwd()
-        os.chdir(self.test_dir)
-        os.makedirs('programs', exist_ok=True)
-
         yield  # This is where the test runs
 
-        # Teardown
-        if hasattr(self, 'sio') and self.sio.connected:
+        if self.sio.connected:
             self.sio.disconnect()
-
-        # Restore directory and clean up
-        os.chdir(self.original_cwd)
-        if os.path.exists(self.test_dir):
-            shutil.rmtree(self.test_dir)
 
     def connect_websocket(self):
         """Connect to WebSocket server with message handlers"""
         try:
-            self.sio.connect(f'http://localhost:{DEFAULT_PORT}', wait_timeout=5)
+            self.sio.connect(self.server.url, wait_timeout=5)
 
             @self.sio.event
             def output(data):
@@ -72,9 +61,7 @@ class TestWebSocketCompletionSignals:
 
             return True
         except Exception as e:
-            print(f"Failed to connect to WebSocket server: {e}")
-            pytest.skip(f"WebSocket server not available on localhost:{DEFAULT_PORT}: {e}")
-            return False
+            pytest.fail(f"Could not connect to live server at {self.server.url}: {e}")
 
     def send_command_and_wait(self, command, timeout=5):
         """Send command and wait for completion signal"""
@@ -212,8 +199,7 @@ class TestWebSocketCompletionSignals:
             self.skip_test("Cannot connect to WebSocket server")
             return
 
-        server_programs_dir = os.path.join(os.path.dirname(__file__), '..', '..', 'programs')
-        filepath = os.path.join(server_programs_dir, 'test_save.bas')
+        filepath = os.path.join(self.server.programs_dir, 'test_save.bas')
         try:
             # Create a program to save
             _, _ = self.send_command_and_wait('10 PRINT "SAVE TEST"')
@@ -246,7 +232,7 @@ class TestWebSocketCompletionSignals:
             self.skip_test("Cannot connect to WebSocket server")
             return
 
-        filepath = os.path.join(os.path.dirname(__file__), '..', '..', 'programs', 'load_test.bas')
+        filepath = os.path.join(self.server.programs_dir, 'load_test.bas')
         try:
             # Create a file to load
             with open(filepath, 'w') as f:
@@ -268,9 +254,7 @@ class TestWebSocketCompletionSignals:
             self.skip_test("Cannot connect to WebSocket server")
             return
 
-        # Create file to kill in server's working directory (not test temp directory)
-        server_programs_dir = os.path.join(os.path.dirname(__file__), '..', '..', 'programs')
-        os.makedirs(server_programs_dir, exist_ok=True)
+        server_programs_dir = self.server.programs_dir
         with open(f'{server_programs_dir}/kill_test.bas', 'w') as f:
             f.write('10 PRINT "DELETE ME"\n')
 
@@ -299,10 +283,7 @@ class TestWebSocketCompletionSignals:
             self.skip_test("Cannot connect to WebSocket server")
             return
 
-        # Create file to kill in server's working directory
-        server_programs_dir = os.path.join(os.path.dirname(__file__), '..', '..', 'programs')
-        os.makedirs(server_programs_dir, exist_ok=True)
-        filepath = f'{server_programs_dir}/cancel_test.bas'
+        filepath = os.path.join(self.server.programs_dir, 'cancel_test.bas')
         try:
             with open(filepath, 'w') as f:
                 f.write('10 PRINT "DONT DELETE"\n')
@@ -331,10 +312,7 @@ class TestWebSocketCompletionSignals:
             self.skip_test("Cannot connect to WebSocket server")
             return
 
-        # Create file to kill in server's working directory
-        server_programs_dir = os.path.join(os.path.dirname(__file__), '..', '..', 'programs')
-        os.makedirs(server_programs_dir, exist_ok=True)
-        filepath = f'{server_programs_dir}/delete_test.bas'
+        filepath = os.path.join(self.server.programs_dir, 'delete_test.bas')
         with open(filepath, 'w') as f:
             f.write('10 PRINT "DELETE THIS"\n')
 
@@ -632,8 +610,9 @@ class TestWebSocketCompletionSignals:
             "CLEAR command should send completion signal"
 
     def skip_test(self, reason):
-        """Skip test with reason"""
-        print(f"SKIPPED: {reason}")
+        """Fail loudly: the live_server fixture guarantees a server, so an
+        unreachable one is a real failure, not a reason to pass silently."""
+        pytest.fail(reason)
 
 
 if __name__ == '__main__':

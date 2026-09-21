@@ -11,21 +11,30 @@ outcome since they block in real-time delays.
 import pexpect
 import pytest
 import os
-import tempfile
+import sys
 
 BASICOCO = os.path.join(os.path.dirname(__file__), '..', '..', 'basicoco.py')
-BASEDIR = os.path.join(os.path.dirname(__file__), '..', '..')
 PROMPT = '> '
 TIMEOUT = 10
 
+# Working directory for spawned sessions; set per test by _isolated_workdir so
+# programs that write files (graph_chart, address_book) never touch the repo.
+# LOAD still finds the bundled programs via the project programs/ fallback.
+WORKDIR = None
 
-def spawn_basic(cwd=None):
-    """Start a fresh basicoco.py REPL session."""
+
+@pytest.fixture(autouse=True)
+def _isolated_workdir(tmp_path, monkeypatch):
+    monkeypatch.setattr(sys.modules[__name__], 'WORKDIR', str(tmp_path))
+
+
+def spawn_basic():
+    """Start a fresh basicoco.py REPL session in the test's temp directory."""
     child = pexpect.spawn(
-        f'python {BASICOCO}',
+        f'{sys.executable} {BASICOCO}',
         encoding='utf-8',
         timeout=TIMEOUT,
-        cwd=cwd or BASEDIR,
+        cwd=WORKDIR,
     )
     child.expect('INSPIRED BY TANDY/RADIO SHACK')
     child.expect(PROMPT)
@@ -202,7 +211,7 @@ class TestInteractivePrograms:
         child.close()
 
     def test_graph_chart(self):
-        child = spawn_basic(cwd=tempfile.mkdtemp())
+        child = spawn_basic()
         load_and_run(child, 'graph_chart')
         child.expect('CHOOSE')
         child.sendline('5')  # Create sample file
