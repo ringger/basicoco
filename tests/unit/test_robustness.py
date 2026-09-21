@@ -218,7 +218,6 @@ def test_line_crossing_the_screen_edge_draws_the_visible_part(basic, helpers):
     assert errors == [] and texts == [' 1  1  1  0 ']
 
 
-@pytest.mark.xfail(reason='#101: DRAW ignores a command followed by ;', strict=True)
 def test_draw_crossing_the_screen_edge_draws_the_visible_part(basic, helpers):
     texts, errors = run(basic, helpers, [
         '10 PMODE 4,1: PCLS: DRAW "BM250,100;R20;L40"',

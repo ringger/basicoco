@@ -598,8 +598,17 @@ class BasicGraphics:
                                       ['DRAW takes a string of drawing commands',
                                        'Example: DRAW "U10R10D10L10"'])
 
-        commands = StatementSplitter.parse_draw_commands(draw_string)
-        return self._execute_draw_commands(commands)
+        try:
+            commands = StatementSplitter.parse_draw_commands(draw_string)
+            return self._execute_draw_commands(commands)
+        except ValueError as e:
+            if not str(e).startswith('DRAW: '):
+                raise
+            # A bad command in the string (or in an X substring)
+            return self._syntax_error(str(e), [
+                'DRAW commands: U D L R E F G H n, M x,y, B, N, S n, C n, A n, X var$;',
+                'Separate commands with ; or spaces',
+                'Example: DRAW "BM100,100;R20;D20"'])
 
     def _execute_draw_commands(self, commands, state=None):
         """Execute a list of parsed DRAW commands with shared state."""

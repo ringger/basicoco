@@ -41,9 +41,9 @@ match the session task list, where every entry here is mirrored.
 - [ ] **PPOINT sees PAINT fills and GPRINT text** [#85]
   The server tracks LINE/CIRCLE/DRAW/PSET pixels but not PAINT or GPRINT, so `PPOINT` inside a painted area or on GPRINT text returns 0.
   **Done when:** the server records PAINT fills (same flood-fill rules as the client) and GPRINT glyph pixels, and tests check PPOINT inside a painted box and on a GPRINT stroke.
-- [ ] **DRAW: a `;` drops the command before it; the pen starts off-centre** [#101]
-  `DRAW "BM100,100;R20"` never moves to (100,100) (`BM100,100R20` does), silently; and the pen starts at (64,48), a leftover of the old per-mode coordinates, not the screen centre (128,96).
-  **Done when:** `;` separates DRAW commands everywhere, a malformed DRAW command is an error instead of being skipped, the pen starts (and resets on NEW/PCLS as today) at (128,96), with tests; the xfail in `test_robustness.py` passes.
+- [ ] **math_plotter.bas: the DRAW star isn't where its comments say** [#104]
+  Menu option 6 does `PSET (128, 40)` to "position" the star, but PSET doesn't move the DRAW pen, so the star starts wherever the pen was (now the screen centre). The path isn't a five-pointed star, and `PAINT (128, 80), 1` may not be inside a closed region.
+  **Done when:** the routine positions with `BM`, draws a closed star, paints its inside, and a browser test checks the painted area stays inside the star.
 - [ ] **Decide ERR's numbering** [#102]
   `_ERROR_CODES` (program_executor.py) mixes schemes: SYNTAX 1, OUT OF DATA 4, ILLEGAL FUNCTION CALL 5, OVERFLOW 6, UNDEFINED LINE 7, BAD SUBSCRIPT 9, TYPE MISMATCH 13, STRING TOO LONG 14, division by zero 99. Color BASIC has no ERR; Microsoft BASIC numbers them SN 2, OD 4, FC 5, OV 6, UL 8, BS 9, /0 11, TM 13, LS 15.
   **Done when:** one scheme is chosen (Microsoft's is the natural fit for an ERR extension) and recorded in docs/audit_decisions.md, the table and tests follow it, and the xfail in `test_robustness.py` passes.

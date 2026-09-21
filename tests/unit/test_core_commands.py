@@ -200,8 +200,8 @@ class TestClearInterpreterState:
         basic.current_draw_color = 3
         basic.screen_mode = 2
         basic.clear_interpreter_state()
-        assert basic.turtle_x == 64
-        assert basic.turtle_y == 48
+        assert basic.turtle_x == 128   # centre of the 256x192 screen (#101)
+        assert basic.turtle_y == 96
         assert basic.current_draw_color == 1
         assert basic.screen_mode == 1
 

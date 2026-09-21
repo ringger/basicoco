@@ -600,3 +600,43 @@ class TestDrawMoveSign:
         basic.process_command('DRAW "M50,50"')
         assert basic.turtle_x == 50
         assert basic.turtle_y == 50
+
+
+class TestDrawSeparatorsAndErrors:
+    """#101: ';' and spaces separate DRAW commands; anything unknown is an
+    error, not silently skipped; the pen starts at the screen centre."""
+
+    @pytest.fixture(autouse=True)
+    def setup_graphics(self, basic):
+        basic.process_command('PMODE 4,1')
+
+    @pytest.mark.parametrize('draw', ['BM100,100;R20', 'BM100,100 R20', 'BM 100 , 100;R20;',
+                                      'BM100,100R20'])
+    def test_separators_between_commands(self, basic, helpers, draw):
+        result = basic.process_command(f'DRAW "{draw}"')
+        assert not helpers.get_error_messages(result)
+        assert (basic.turtle_x, basic.turtle_y) == (120, 100)
+        assert helpers.get_text_output(basic.process_command('PRINT PPOINT(110,100)')) == [' 1 ']
+
+    @pytest.mark.parametrize('draw, bad', [('U10Q5', 'Q'), ('R5?', '?')])
+    def test_an_unknown_command_is_an_error(self, basic, helpers, draw, bad):
+        errors = helpers.get_error_messages(basic.process_command(f'DRAW "{draw}"'))
+        assert len(errors) == 1 and f"DRAW: unknown command '{bad}'" in errors[0], errors
+
+    @pytest.mark.parametrize('draw', ['M10', 'M10,', 'MA,5', 'M1O,5'])
+    def test_a_malformed_move_is_an_error(self, basic, helpers, draw):
+        errors = helpers.get_error_messages(basic.process_command(f'DRAW "{draw}"'))
+        assert len(errors) == 1 and 'DRAW: M needs x,y' in errors[0], errors
+
+    def test_the_pen_starts_at_the_screen_centre(self, helpers):
+        from emulator.core import CoCoBasic
+        fresh = CoCoBasic()
+        assert (fresh.turtle_x, fresh.turtle_y) == (128, 96)
+        fresh.process_command('PMODE 4,1')
+        fresh.process_command('DRAW "R10"')
+        assert (fresh.turtle_x, fresh.turtle_y) == (138, 96)
+
+    def test_new_puts_the_pen_back_at_the_centre(self, basic, helpers):
+        basic.process_command('DRAW "BM10,10"')
+        basic.process_command('NEW')
+        assert (basic.turtle_x, basic.turtle_y) == (128, 96)

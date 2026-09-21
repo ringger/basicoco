@@ -94,8 +94,8 @@ class CoCoBasic:
         self.print_column = 0  # Current PRINT cursor column (for comma zones)
         self.rng = random.Random()  # Per-interpreter RNG (RND, RANDOMIZE)
         self.current_draw_color = 1  # Default drawing color
-        self.turtle_x = 64  # Turtle graphics X position (center of default screen)
-        self.turtle_y = 48  # Turtle graphics Y position (center of default screen)
+        self.turtle_x = 128  # DRAW pen position: the centre of the 256x192 screen
+        self.turtle_y = 96
         
         # Initialize graphics, variables, and I/O modules
         self.graphics = BasicGraphics(self)
@@ -865,8 +865,8 @@ class CoCoBasic:
         self.graphics_mode = None  # No PMODE yet: graphics off
         self.screen_mode = 1  # Reset screen/color mode
         self.current_draw_color = 1  # Reset drawing color
-        self.turtle_x = 64  # Reset turtle to center
-        self.turtle_y = 48
+        self.turtle_x = 128  # Reset the DRAW pen to the screen centre
+        self.turtle_y = 96
         self.print_column = 0  # Reset print cursor
 
     def execute_new(self):

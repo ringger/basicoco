@@ -126,9 +126,16 @@ class StatementSplitter:
             # Direct command (no line number)
             return None, line
     
+    _DRAW_LETTERS = 'UDLREFGHMBNSCAX'
+
     @staticmethod
     def parse_draw_commands(draw_string):
-        """Parse DRAW command string into individual drawing commands"""
+        """Parse DRAW command string into individual drawing commands.
+
+        ';' and spaces separate commands. Anything else that isn't a DRAW
+        command raises ValueError (a message starting "DRAW: "), rather
+        than being skipped.
+        """
         commands = []
         i = 0
         while i < len(draw_string):
@@ -149,25 +156,20 @@ class StatementSplitter:
             
             # Move without drawing
             elif char == 'M':
-                # M+X,Y or M-X,Y or MX,Y format
+                # M+X,Y or M-X,Y or MX,Y; the coordinates end at a ';' or
+                # the next command letter
                 i += 1
-                coord_str = ""
-                while i < len(draw_string) and draw_string[i].upper() not in ['U', 'D', 'L', 'R', 'E', 'F', 'G', 'H', 'M', 'B', 'N', 'S', 'C', 'A', 'X']:
-                    coord_str += draw_string[i]
+                start = i
+                while (i < len(draw_string) and draw_string[i] != ';'
+                       and draw_string[i].upper() not in StatementSplitter._DRAW_LETTERS):
                     i += 1
-
-                # Parse coordinates — +/- prefix indicates relative mode
-                relative = coord_str.startswith('+') or coord_str.startswith('-')
-
-                if ',' in coord_str:
-                    x_str, y_str = coord_str.split(',', 1)
-                    try:
-                        x = int(x_str)
-                        y = int(y_str)
-                        commands.append({'command': 'M', 'x': x, 'y': y, 'relative': relative})
-                    except ValueError:
-                        # Invalid coordinates, skip
-                        pass
+                coord_str = draw_string[start:i].replace(' ', '')
+                if not re.fullmatch(r'[+-]?\d+,[+-]?\d+', coord_str):
+                    raise ValueError(f"DRAW: M needs x,y (got M{coord_str})")
+                x_str, y_str = coord_str.split(',')
+                # A +/- prefix on X means a relative move
+                commands.append({'command': 'M', 'x': int(x_str), 'y': int(y_str),
+                                 'relative': coord_str[0] in '+-'})
                 continue
             
             # Pen up/down
@@ -226,8 +228,9 @@ class StatementSplitter:
                 commands.append({'command': 'X', 'variable': var_name.upper().strip()})
                 continue
 
+            elif char in '; ':
+                i += 1   # command separators
             else:
-                # Unknown command, skip
-                i += 1
-        
+                raise ValueError(f"DRAW: unknown command '{draw_string[i]}'")
+
         return commands
