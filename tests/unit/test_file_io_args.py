@@ -43,3 +43,27 @@ def test_line_input_into_array_element(basic, helpers):
     basic.clear_input_state()
     output = basic.continue_program_execution()
     assert helpers.get_text_output(output) == ['HELLO, WORLD']
+
+
+def test_file_line_input_needs_a_string_variable(basic, helpers, temp_programs_dir):
+    """#94: LINE INPUT #1, A used to set A to 0 without complaint."""
+    texts, errors = run(basic, helpers, [
+        '10 OPEN "O",#1,"T.TXT": PRINT #1,"HI": CLOSE #1',
+        '20 OPEN "I",#1,"T.TXT"',
+        '30 ON ERROR GOTO 100',
+        '40 LINE INPUT #1, A',
+        '50 END',
+        '100 LINE INPUT #1, A$: PRINT "KEPT ";A$',   # the refused read took no line
+    ])
+    assert errors == [], errors
+    assert texts == ['KEPT HI']
+    assert basic.variables.get('A', 0) == 0
+
+
+def test_file_line_input_type_mismatch_message(basic, helpers, temp_programs_dir):
+    basic.process_command('OPEN "O",#1,"T.TXT"')
+    basic.process_command('PRINT #1,"HI"')
+    basic.process_command('CLOSE #1')
+    basic.process_command('OPEN "I",#1,"T.TXT"')
+    errors = helpers.get_error_messages(basic.process_command('LINE INPUT #1, A(2)'))
+    assert 'TYPE MISMATCH: LINE INPUT needs a string variable, not A' in errors[0]

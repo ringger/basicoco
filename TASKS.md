@@ -56,9 +56,6 @@ match the session task list, where every entry here is mirrored.
 - [ ] **Enforce the fast/slow test boundary** [#91]
   `slow` means "over 1 second", but nothing checks it: `test_lunar_lander` (3.2 s) and `test_simple_lunar` (1.2 s) run in the default suite, and slow marking is spread over file markers, class markers and conftest path rules.
   **Done when:** a conftest check flags any unmarked test over the budget, the offenders are marked or sped up, and the rule is in tests/README.
-- [ ] **LINE INPUT # into a numeric variable silently stores 0** [#94]
-  `LINE INPUT #1, A` reads the line and sets A to 0 with no error. LINE INPUT only takes string variables.
-  **Done when:** it gives TYPE MISMATCH (file and console LINE INPUT alike), with tests.
 
 ## Low priority — not implemented from Extended Color BASIC
 

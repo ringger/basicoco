@@ -498,6 +498,11 @@ class FileIOManager:
         err = self._require_open(file_num, 'I')
         if err:
             return err
+        # Check the target before reading, so a refused read takes no line
+        var_desc = self._parse_var_descriptor(var_str)
+        err = self._require_string_target(var_desc)
+        if err:
+            return err
 
         handle = self.open_files[file_num]['handle']
         line = handle.readline()
@@ -508,11 +513,20 @@ class FileIOManager:
                  "Example: WHILE NOT EOF(1): LINE INPUT #1, L$: WEND"])
 
         value = line.rstrip('\n').rstrip('\r')
-        var_desc = self._parse_var_descriptor(var_str)
         err = self.emulator.store_input_value(var_desc, value)
         if err:
             return self._store_error(err, var_str)
         return []
+
+    def _require_string_target(self, var_desc):
+        """LINE INPUT (console or file) reads text: only a string variable
+        or string array element can take it."""
+        if var_desc['name'].endswith('$'):
+            return None
+        return self._runtime_error(
+            f"TYPE MISMATCH: LINE INPUT needs a string variable, not {var_desc['name']}",
+            [f"Use a string variable: LINE INPUT {var_desc['name']}$",
+             "Then VAL() it if you need a number"])
 
     def _line_input_console(self, args):
         """LINE INPUT ["prompt";] var$"""
@@ -541,11 +555,9 @@ class FileIOManager:
         # Set up input state (similar to regular INPUT but with line_input
         # flag); the target may be an array element, LINE INPUT A$(3)
         var_desc = self._parse_var_descriptor(var_str)
-        if not var_desc['name'].endswith('$'):
-            return self._runtime_error(
-                f"TYPE MISMATCH: LINE INPUT needs a string variable, not {var_desc['name']}",
-                [f"Use a string variable: LINE INPUT {var_desc['name']}$",
-                 "Then VAL() it if you need a number"])
+        err = self._require_string_target(var_desc)
+        if err:
+            return err
         self.emulator.input_variables = [var_desc]
         self.emulator.input_prompt = prompt_text
         self.emulator.current_input_index = 0
