@@ -12,10 +12,14 @@ import tempfile
 import shutil
 from typing import Dict, List, Any
 
-# Add project root to Python path
+# Add project root to Python path, and the test plugins
 sys.path.insert(0, os.path.dirname(__file__))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'tests', 'plugins'))
 
 from emulator.core import CoCoBasic
+
+# Flags tests not marked slow that take longer than slow_test_budget (pytest.ini)
+pytest_plugins = ['slow_budget']
 
 
 @pytest.fixture

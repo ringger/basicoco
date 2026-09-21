@@ -128,6 +128,7 @@ class TestInteractivePrograms:
         check_no_error(child.before)
         child.close()
 
+    @pytest.mark.slow   # plays 15 turns through the CLI (~1.3 s)
     def test_simple_lunar(self):
         child = spawn_basic()
         load_and_run(child, 'simple_lunar')
@@ -140,6 +141,7 @@ class TestInteractivePrograms:
         check_no_error(child.before)
         child.close()
 
+    @pytest.mark.slow   # PAUSE 0.5 on every turn (~3.3 s)
     def test_lunar_lander(self):
         child = spawn_basic()
         load_and_run(child, 'lunar_lander')

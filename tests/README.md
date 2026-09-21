@@ -5,7 +5,7 @@ This directory contains the comprehensive test suite for BasiCoCo, organized int
 ## Running Tests
 
 ```bash
-# Default run: everything except tests marked `slow` (~12 s)
+# Default run: everything except tests marked `slow` (~8 s)
 python -m pytest
 
 # Everything, including slow tests (Rubik's solver, live-server, pexpect audits; ~3.5 min)
@@ -82,6 +82,10 @@ Tests multiple components working together:
 
 #### Live server fixture
 `tests/integration/conftest.py` provides `live_server`: it starts `app.py` on a free localhost port with its working directory set to a fresh temp directory, so anything the server writes stays out of the repo's `programs/`. Tests get `live_server.url`, `.port` and `.programs_dir`. A server that fails to start fails the test — nothing is silently skipped.
+
+## Fast and slow tests
+
+A test that takes longer than `slow_test_budget` (pytest.ini, 1 s) must be marked `@pytest.mark.slow`, which keeps it out of the default run. `tests/plugins/slow_budget.py` enforces this: an unmarked test over budget gets a PytestWarning in the run's summary naming it (the check is off while coverage traces). Tests are marked slow by a `pytestmark` line in the file, a marker on the class or test, or, for everything under `integration/e2e/` and `integration/cli/`, by the path rules in the root `conftest.py`.
 
 ## Coverage
 
