@@ -79,17 +79,26 @@ class BasicPage:
             }""", [x0, y0, x1, y1])}
 
 
-@pytest.fixture
-def basic_page(chrome, live_server):
-    context = chrome.new_context(viewport={'width': 1400, 'height': 900})
+def open_basic_page(chrome, url, init_script=None, **context_options):
+    """Open the app in a new browser context and wait for its first prompt.
+    Returns (BasicPage, context, errors) where errors collects page errors."""
+    context = chrome.new_context(viewport={'width': 1400, 'height': 900}, **context_options)
+    if init_script:
+        context.add_init_script(init_script)
     page = context.new_page()
     errors = []
     page.on('pageerror', lambda e: errors.append(str(e)))
-    page.goto(live_server.url)
+    page.goto(url)
     # Connected once the first prompt is shown
     page.wait_for_function(
         "window.dualMonitor && window.dualMonitor.displayManager.textDisplay"
         ".lineBuffer.some(l => l.startsWith('> '))", timeout=COMMAND_TIMEOUT_MS)
-    yield BasicPage(page)
+    return BasicPage(page), context, errors
+
+
+@pytest.fixture
+def basic_page(chrome, live_server):
+    page, context, errors = open_basic_page(chrome, live_server.url)
+    yield page
     context.close()
     assert errors == [], f'JavaScript errors on the page: {errors}'

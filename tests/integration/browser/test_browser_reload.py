@@ -110,6 +110,15 @@ def test_new_tab_after_reload_does_not_reuse_an_old_tab(basic_page):
     assert listing(basic_page) == []
 
 
+def test_a_closed_tab_stays_closed_after_reload(basic_page):
+    second = add_tab(basic_page, 2)
+    basic_page.page.click(f'.tab[data-tab-id="{second}"] .tab-close')
+    wait_for(basic_page.page, "window.dualMonitor.tabManager.tabs.size === 1",
+             'the tab to close')
+    reload(basic_page)
+    assert tab_ids(basic_page) == ['main']
+
+
 def test_a_new_browser_session_starts_fresh(chrome, live_server, basic_page):
     basic_page.run('10 PRINT "PRIVATE"')
     other = chrome.new_context().new_page()

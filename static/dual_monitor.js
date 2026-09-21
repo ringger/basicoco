@@ -2040,16 +2040,16 @@ class DualMonitorEmulator {
     
     copyTextDisplay() {
         // lineBuffer holds every line printed since the last CLS
-        const text = this.textDisplay.lineBuffer.map(line => line.trimEnd()).join('\n').trimEnd();
-        navigator.clipboard.writeText(text);
-        
-        // Show feedback
+        const buffer = this.displayManager.textDisplay.lineBuffer;
+        const text = buffer.map(line => line.trimEnd()).join('\n').trimEnd();
         const btn = document.getElementById('btn-copy-text');
-        const originalText = btn.textContent;
-        btn.textContent = 'Copied!';
-        setTimeout(() => {
-            btn.textContent = originalText;
-        }, 1000);
+        const flash = (label) => {
+            btn.textContent = label;
+            setTimeout(() => { btn.textContent = 'Copy'; }, 1000);
+        };
+        navigator.clipboard.writeText(text).then(
+            () => flash('Copied!'),
+            () => flash('Copy failed'));
     }
     
     getPreferences() {
