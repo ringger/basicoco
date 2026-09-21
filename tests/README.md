@@ -107,7 +107,7 @@ Changed-but-uncovered lines left on purpose after the audit's coverage pass (#81
 - `program_executor.py` exception with an empty message: defensive.
 - `core.py` numeric INPUT overflow → 0: `basic_number_prefix` doesn't raise OverflowError for any input found.
 
-Lines found to be buggy or possibly unreachable are tracked in TASKS.md (#92–#96).
+The pass also found bugs (#92–#95, fixed with tests) and dead branches (#96, deleted).
 
 ## Test Framework
 

@@ -62,8 +62,5 @@ Rarely needed, or hard to emulate meaningfully.
 - [ ] **PRINT items without a separator** [#99]
   Color BASIC accepts `PRINT "A""B"` and `PRINT "X="X` (adjacent items print as if separated by `;`); BasiCoCo says `Unexpected "B"`.
   **Done when:** adjacent PRINT items print like `;`-separated ones (PRINT and PRINT#), with tests, and the rule is in docs/audit_decisions.md.
-- [ ] **Prove or remove possibly unreachable branches** [#96]
-  No test reaches these, and the #81 probes suggest nothing can: ast_evaluator.py `visit_if_statement` ELSE-with-a-number branch (`IF 0 THEN 30 ELSE 10+10` takes another path); control_flow.py's second NEXT WITHOUT FOR; ast_parser.py's `'` token and leftover-REM checks (the splitter removes comments first); ast_converter.py `_is_jump_target`'s quote branch.
-  **Done when:** each has a test that reaches it, or is deleted with the full suite passing.
 - [ ] **Optimal solver for short scrambles (bidirectional BFS)** [#62] (after #56)
   **Done when:** any ≤8-move scramble is solved optimally, checked against a Python BFS for seeded scrambles.

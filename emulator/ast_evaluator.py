@@ -320,35 +320,16 @@ class ASTEvaluator(ASTVisitor):
         """Visit IF statement - evaluate condition and execute appropriate branch"""
         condition_result = self.visit(node.condition)
 
-        condition_true = basic_truthy(condition_result)
-
-        if condition_true:
-            result = self.visit(node.then_branch)
-            # THEN with number = GOTO
-            if isinstance(result, (int, float)) and not isinstance(result, bool):
-                line_num = int(result)
-                err = self._validate_line_number(line_num)
-                if err:
-                    return err
-                return [{'type': 'jump', 'line': line_num}]
-            # None means visitor couldn't handle it — fall back to registry
-            if result is None:
-                return None
-            return result if isinstance(result, list) else []
-        elif node.else_branch:
-            result = self.visit(node.else_branch)
-            # ELSE with number = GOTO
-            if isinstance(result, (int, float)) and not isinstance(result, bool):
-                line_num = int(result)
-                err = self._validate_line_number(line_num)
-                if err:
-                    return err
-                return [{'type': 'jump', 'line': line_num}]
-            if result is None:
-                return None
-            return result if isinstance(result, list) else []
-        else:
+        branch = node.then_branch if basic_truthy(condition_result) else node.else_branch
+        if branch is None:
             return []
+        # A branch is always a statement: a bare line number (THEN 100,
+        # ELSE 200) was parsed as a GOTO, which checks its own target
+        result = self.visit(branch)
+        # None means visitor couldn't handle it — fall back to registry
+        if result is None:
+            return None
+        return result if isinstance(result, list) else []
 
     def visit_block(self, node: BlockNode) -> Any:
         """Visit block statement - execute all statements in sequence"""

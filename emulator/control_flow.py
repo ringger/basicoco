@@ -118,12 +118,7 @@ class ControlFlowCommands:
                         "Check that FOR and NEXT statements are properly paired"
                     ])
                 del em.for_stack[depth + 1:]
-            elif not em.for_stack:
-                return self._runtime_error("NEXT WITHOUT FOR", [
-                    "NEXT must be preceded by a FOR statement",
-                    "Example: FOR I = 1 TO 10: ... : NEXT I",
-                    "Check that FOR and NEXT statements are properly paired"
-                ])
+            # (A bare NEXT runs this loop once, and the stack was checked above)
 
             for_info = em.for_stack[-1]
             var_name = for_info['var']

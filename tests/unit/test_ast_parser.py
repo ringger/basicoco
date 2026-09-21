@@ -561,3 +561,11 @@ class TestASTParser:
             assert False, "Should have raised error for malformed INPUT prompt"
         except ValueError as e:
             assert "Expected ';' or ','" in str(e)
+
+    @pytest.mark.parametrize('text', ["X=5 ' set X", "X=5 'X=6: Y=7"])
+    def test_apostrophe_comment_ends_the_statement(self, text):
+        """#96: the program path strips comments before parsing, but the
+        parser itself must treat ' as REM for its other callers."""
+        ast = self.parser.parse_statement(text)
+        assert isinstance(ast, AssignmentNode)
+        assert ast.value.value == 5
