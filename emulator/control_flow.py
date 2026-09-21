@@ -345,12 +345,11 @@ class ControlFlowCommands:
                 "RESUME can only be used inside an ON ERROR GOTO handler",
                 "Use ON ERROR GOTO line to set up an error handler first"
             ])
-        em.in_error_handler = False
         args = args.strip().upper()
         if args == '' or args == '0':
-            return [{'type': 'resume', 'position': em.error_resume_position}]
+            directive = {'type': 'resume', 'position': em.error_resume_position}
         elif args == 'NEXT':
-            return [{'type': 'resume_next', 'position': em.error_resume_position}]
+            directive = {'type': 'resume_next', 'position': em.error_resume_position}
         else:
             # Labels take precedence over same-named variables, as in GOTO
             line = em.resolve_label(args)
@@ -358,7 +357,11 @@ class ControlFlowCommands:
                 try:
                     line = em.eval_int(args, em.current_line)
                 except (ValueError, TypeError):
+                    # Still in the handler, so this error isn't trapped by it
                     return self._syntax_error(f"Invalid RESUME target: {args}",
                         ["Use RESUME, RESUME NEXT, RESUME line or RESUME label",
                          "Example: RESUME 100"])
-            return [{'type': 'jump', 'line': line}]
+            directive = {'type': 'jump', 'line': line}
+        # Leave the handler only once RESUME itself has succeeded
+        em.in_error_handler = False
+        return [directive]

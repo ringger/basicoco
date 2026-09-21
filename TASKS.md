@@ -56,9 +56,6 @@ match the session task list, where every entry here is mirrored.
 - [ ] **Enforce the fast/slow test boundary** [#91]
   `slow` means "over 1 second", but nothing checks it: `test_lunar_lander` (3.2 s) and `test_simple_lunar` (1.2 s) run in the default suite, and slow marking is spread over file markers, class markers and conftest path rules.
   **Done when:** a conftest check flags any unmarked test over the budget, the offenders are marked or sped up, and the rule is in tests/README.
-- [ ] **A failing RESUME re-enters the error handler forever** [#92]
-  `10 ON ERROR GOTO 30 / 20 X=1/0 / 30 PRINT "HANDLER" / 40 RESUME "A"`: RESUME's own error is trapped by the same handler, which runs again, until the runaway guard stops the program (found in the #81 pass). An error raised inside the handler should stop the program with that error, as CoCo does.
-  **Done when:** a test shows the program above prints HANDLER once and stops with the RESUME error.
 - [ ] **LINE INPUT # into a numeric variable silently stores 0** [#94]
   `LINE INPUT #1, A` reads the line and sets A to 0 with no error. LINE INPUT only takes string variables.
   **Done when:** it gives TYPE MISMATCH (file and console LINE INPUT alike), with tests.

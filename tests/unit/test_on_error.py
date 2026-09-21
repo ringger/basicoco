@@ -161,6 +161,16 @@ class TestResumeErrors:
         errors = helpers.get_error_messages(result)
         assert any('RESUME WITHOUT ERROR' in e for e in errors)
 
+    def test_bad_resume_target_stops_instead_of_reentering_the_handler(self, basic, helpers):
+        """#92: RESUME's own error used to be trapped by the handler it was
+        leaving, which ran again until the runaway guard stopped it."""
+        result = helpers.execute_program(basic, [
+            '10 ON ERROR GOTO 30', '20 X=1/0', '25 END',
+            '30 PRINT "HANDLER"', '40 RESUME "A"'])
+        assert helpers.get_text_output(result) == ['HANDLER']
+        errors = helpers.get_error_messages(result)
+        assert len(errors) == 1 and 'Invalid RESUME target' in errors[0], errors
+
 
 class TestOnErrorSyntax:
     """Test ON ERROR GOTO syntax parsing."""
