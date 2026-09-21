@@ -61,7 +61,7 @@ class CoCoBasic:
         self.if_stack = []
         self.while_stack = []
         self.do_stack = []
-        self.graphics_mode = 0  # 0 = text mode, 1-4 = PMODE graphics
+        self.graphics_mode = None  # None until PMODE; then 0-4 (PMODE 0 is graphics)
         self.screen_mode = 1    # Screen/color mode
         self.iteration_count = 0  # Safety counter for infinite loops
         self.max_iterations = 50000  # Maximum iterations to prevent infinite loops
@@ -863,7 +863,7 @@ class CoCoBasic:
         self.current_sub_line = 0
         self.iteration_count = 0
         self.keyboard_buffer.clear()
-        self.graphics_mode = 0  # Reset to text mode
+        self.graphics_mode = None  # No PMODE yet: graphics off
         self.screen_mode = 1  # Reset screen/color mode
         self.current_draw_color = 1  # Reset drawing color
         self.turtle_x = 64  # Reset turtle to center

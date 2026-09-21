@@ -390,7 +390,7 @@ def fn_ppoint(evaluator, args: List[Any]) -> int:
     _check_args(evaluator, 'PPOINT', args, 2, 'PPOINT(x, y)')
     x = _to_int(evaluator, args[0], 'PPOINT')
     y = _to_int(evaluator, args[1], 'PPOINT')
-    if evaluator.graphics_mode == 0:
+    if evaluator.graphics_mode is None:
         error = evaluator.error_context.runtime_error(
             "PPOINT requires graphics mode",
             suggestions=["Use PMODE to enter graphics mode first",

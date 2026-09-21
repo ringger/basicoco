@@ -188,10 +188,10 @@ class TestClearInterpreterState:
         assert len(basic.arrays) == 0
 
     def test_resets_graphics_mode(self, basic):
-        """State clear resets graphics mode to text"""
+        """State clear turns graphics off (no PMODE; PMODE 0 is a real mode)"""
         basic.graphics_mode = 4
         basic.clear_interpreter_state()
-        assert basic.graphics_mode == 0
+        assert basic.graphics_mode is None
 
     def test_resets_drawing_state(self, basic):
         """State clear resets turtle position and draw color"""

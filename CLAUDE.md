@@ -137,6 +137,8 @@ Every file a BASIC program names resolves through `FileManager.resolve_writable(
 - Graphics commands go in `graphics.py`, DIM/arrays in `variables.py`, control-flow closing commands in `control_flow.py`, DATA/READ/RESTORE in `data_commands.py`
 - `GPRINT(x,y),"text"[,color]` draws text on the graphics screen using a 4x6 pixel font. Implemented as registry command in `graphics.py` (server emits `{'type': 'gtext', ...}`), rendered client-side by `drawText()` using `GPRINT_FONT` bitmap data in `dual_monitor.js`
 - Graphics helpers: `self.emulator.eval_int(expr)` for expression→int, `_syntax_error(msg, suggestions)` for error responses
+- PMODE: every mode uses 0-255 x 0-191 coordinates; lower modes have coarser pixels (`_MODE_PIXEL` in graphics.py, `modePixel` in dual_monitor.js — keep them in step). `graphics_mode is None` means no PMODE yet; PMODE 0 is a real graphics mode. The client draws through `block()`/`plot()`/`area()` — never multiply coordinates by a per-mode factor
+- Client rendering is tested two ways: `tests/client/dual_monitor_harness.js` (Node, fake canvas, fast) and `tests/integration/browser/` (headless Chrome via Playwright, marker `browser`)
 - Coordinate syntax: `_parse_coord_pair()` / `_parse_coord_range()` in `graphics.py` handle `(x,y)` and `(x1,y1)-(x2,y2)` (or `-(x2,y2)` from the last LINE end) by parenthesis depth, so array refs and function calls inside coordinates work. All graphics commands use them — don't add regex coordinate parsing
 - System OK messages use `_system_ok()` (tagged with `'source': 'system'`)
 - File-creating tests must use autouse temp directory fixtures — never write to real `programs/`

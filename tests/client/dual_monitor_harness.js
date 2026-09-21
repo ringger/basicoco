@@ -250,5 +250,92 @@ check('GPRINT draws lowercase with the uppercase glyphs', () => {
     assert.deepStrictEqual([...lit(a, a.colors[1])].sort(), [...lit(b, b.colors[1])].sort());
 });
 
+// 6. PMODE coordinates (#79): every mode uses 0-255 x 0-191; lower modes
+// have coarser pixels (PMODE 0/1: 2x2 coordinates, 2/3: 2x1, 4: 1x1),
+// drawn on the 512x384 canvas as 4x4, 4x2 and 2x2 blocks
+const cpx = (g, cx, cy) => {
+    const d = g.canvas.pixels, i = (cy * 512 + cx) * 4;
+    return '#' + [d[i], d[i + 1], d[i + 2]].map(v => v.toString(16).padStart(2, '0')).join('');
+};
+const litCanvas = (g, color) => {
+    let n = 0;
+    for (let i = 0; i < 512 * 384; i++) if (cpx(g, i % 512, Math.floor(i / 512)) === color) n++;
+    return n;
+};
+const inMode = (mode) => {
+    canvases['graphics-display'] = makeCanvas(512, 384);
+    const g = new GraphicsDisplay('graphics-display');
+    g.setPmode(mode, 1);
+    return g;
+};
+for (const mode of [0, 1, 2, 3, 4]) {
+    check(`PMODE ${mode}: corners of the 256x192 screen land on the canvas`, () => {
+        const g = inMode(mode);
+        g.pset(0, 0, 1);
+        g.pset(255, 191, 1);
+        assert.strictEqual(cpx(g, 0, 0), g.colors[1]);
+        assert.strictEqual(cpx(g, 511, 383), g.colors[1]);
+    });
+}
+for (const [mode, w, h] of [[0, 4, 4], [1, 4, 4], [2, 4, 2], [3, 4, 2], [4, 2, 2]]) {
+    check(`PMODE ${mode}: one pixel is a ${w}x${h} canvas block`, () => {
+        const g = inMode(mode);
+        g.pset(201, 51, 1);
+        assert.strictEqual(litCanvas(g, g.colors[1]), w * h);
+        // The mode pixel holding (201,51) starts at (200,50) in PMODE 0/1,
+        // (200,51) in PMODE 2/3 and (201,51) in PMODE 4; canvas = 2x that
+        const bx = mode === 4 ? 402 : 400, by = mode <= 1 ? 100 : 102;
+        assert.strictEqual(cpx(g, bx, by), g.colors[1]);
+        assert.strictEqual(cpx(g, bx + w - 1, by + h - 1), g.colors[1]);
+        assert.notStrictEqual(cpx(g, bx + w, by), g.colors[1]);
+        assert.notStrictEqual(cpx(g, bx, by + h), g.colors[1]);
+    });
+}
+check('before any PMODE nothing is drawn; PMODE 0 draws', () => {
+    canvases['graphics-display'] = makeCanvas(512, 384);
+    const g = new GraphicsDisplay('graphics-display');
+    g.pset(10, 10, 1);
+    assert.strictEqual(litCanvas(g, g.colors[1]), 0);
+    g.setPmode(0, 1);
+    g.pset(10, 10, 1);
+    assert.ok(litCanvas(g, g.colors[1]) > 0);
+});
+check('PMODE 1: CIRCLE is centred on the screen and PAINT stays inside', () => {
+    const g = inMode(1);
+    g.drawCircle(128, 96, 40, 1);
+    assert.strictEqual(cpx(g, 168 * 2, 96 * 2), g.colors[1]);   // right edge
+    assert.strictEqual(cpx(g, 88 * 2, 96 * 2), g.colors[1]);    // left edge
+    g.paint(128, 96, 4, 1);
+    assert.strictEqual(cpx(g, 256, 192), g.colors[4]);          // centre filled
+    assert.strictEqual(cpx(g, 2, 2), g.colors[0]);              // outside untouched
+    assert.strictEqual(cpx(g, 190 * 2, 96 * 2), g.colors[0]);
+});
+check('PMODE 2: a LINE across the screen spans the whole canvas', () => {
+    const g = inMode(2);
+    g.drawLine(0, 100, 255, 100, 1);
+    assert.strictEqual(cpx(g, 0, 200), g.colors[1]);
+    assert.strictEqual(cpx(g, 511, 200), g.colors[1]);
+});
+check('PMODE 1: GET/PUT move a block to the right place', () => {
+    const g = inMode(1);
+    g.pset(20, 20, 1);
+    g.getGraphics(20, 20, 21, 21, 'S');
+    g.putGraphics(100, 100, 'S', 'PSET');
+    assert.strictEqual(cpx(g, 200, 200), g.colors[1]);
+    assert.strictEqual(cpx(g, 203, 203), g.colors[1]);
+});
+check('PMODE 1: a filled box covers whole mode pixels', () => {
+    const g = inMode(1);
+    g.drawFilledBox(11, 11, 12, 12, 1);   // mode pixels (10,10) and (12,12)
+    assert.strictEqual(cpx(g, 20, 20), g.colors[1]);
+    assert.strictEqual(cpx(g, 27, 27), g.colors[1]);
+    assert.strictEqual(litCanvas(g, g.colors[1]), 8 * 8);
+});
+check('new tab: no PMODE until the program sets one', () => {
+    const g = inMode(1);
+    g.restoreState(null);
+    assert.strictEqual(g.graphicsMode, null);
+});
+
 console.log(`\n${passed} checks passed, ${failed} failed`);
 process.exitCode = failed ? 1 : 0;

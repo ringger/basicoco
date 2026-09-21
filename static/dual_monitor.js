@@ -145,7 +145,7 @@ class DisplayManager {
     
     updateGraphicsInfo() {
         const mode = this.graphicsDisplay.graphicsMode;
-        const modeText = mode === 0 ? 'Text' : `PMODE ${mode}`;
+        const modeText = mode === null ? 'Text' : `PMODE ${mode}`;
         document.getElementById('graphics-mode').textContent = `Mode: ${modeText}`;
         
         const display = this.graphicsDisplay;
@@ -869,8 +869,8 @@ class GraphicsDisplay {
         this.canvas = document.getElementById(canvasId);
         this.ctx = this.canvas.getContext('2d');
         
-        // Graphics mode properties
-        this.graphicsMode = 0;
+        // Graphics mode properties: null until a PMODE (PMODE 0 is a real mode)
+        this.graphicsMode = null;
         this.screenMode = 1;
         this.currentDrawColor = 1;
         
@@ -883,14 +883,15 @@ class GraphicsDisplay {
         this.currentColor = this.colors[1];
         this.backgroundColor = this.colors[0];
         
-        // PMODE resolutions
-        this.pmodeResolutions = {
-            0: { width: 32, height: 16, pixelWidth: 16, pixelHeight: 24 },
-            1: { width: 128, height: 96, pixelWidth: 4, pixelHeight: 4 },
-            2: { width: 128, height: 96, pixelWidth: 4, pixelHeight: 4 },
-            3: { width: 128, height: 192, pixelWidth: 4, pixelHeight: 2 },
-            4: { width: 256, height: 192, pixelWidth: 2, pixelHeight: 2 }
-        };
+        // Every PMODE uses the CoCo's 0-255 x 0-191 coordinates; lower modes
+        // only have coarser pixels, each covering [width, height] coordinates
+        // (PMODE 0/1: 128x96 pixels, 2/3: 128x192, 4: 256x192). The canvas
+        // shows each coordinate as SCALE x SCALE canvas pixels. The server
+        // snaps PPOINT to the same grid (graphics.py _MODE_PIXEL).
+        this.modePixel = { 0: [2, 2], 1: [2, 2], 2: [2, 1], 3: [2, 1], 4: [1, 1] };
+        this.SCALE = 2;
+        this.WIDTH = 256;
+        this.HEIGHT = 192;
         
         // Sprite storage for GET/PUT
         this.spriteStorage = {};
@@ -936,19 +937,31 @@ class GraphicsDisplay {
         }
     }
     
+    // Canvas rectangle [x, y, width, height] of the mode pixel holding
+    // coordinate (x, y)
+    block(x, y) {
+        const [gx, gy] = this.modePixel[this.graphicsMode];
+        return [Math.floor(x / gx) * gx * this.SCALE, Math.floor(y / gy) * gy * this.SCALE,
+                gx * this.SCALE, gy * this.SCALE];
+    }
+
+    // Fill the mode pixel holding (x, y) with the current fillStyle
+    plot(x, y) {
+        const [bx, by, w, h] = this.block(x, y);
+        this.ctx.fillRect(bx, by, w, h);
+    }
+
+    // Canvas rectangle covering coordinates (x1,y1)-(x2,y2), whole mode pixels
+    area(x1, y1, x2, y2) {
+        const [ax, ay] = this.block(Math.min(x1, x2), Math.min(y1, y2));
+        const [bx, by, w, h] = this.block(Math.max(x1, x2), Math.max(y1, y2));
+        return [ax, ay, bx + w - ax, by + h - ay];
+    }
+
     pset(x, y, color = null) {
-        if (this.graphicsMode === 0) return;
-
-        const res = this.pmodeResolutions[this.graphicsMode];
-        const pixelColor = color !== null ? this.colors[color % this.colors.length] : this.currentColor;
-
-        this.ctx.fillStyle = pixelColor;
-        this.ctx.fillRect(
-            x * res.pixelWidth,
-            y * res.pixelHeight,
-            res.pixelWidth,
-            res.pixelHeight
-        );
+        if (this.graphicsMode === null) return;
+        this.ctx.fillStyle = color !== null ? this.colors[color % this.colors.length] : this.currentColor;
+        this.plot(x, y);
     }
     
     preset(x, y) {
@@ -956,10 +969,9 @@ class GraphicsDisplay {
     }
     
     drawLine(x1, y1, x2, y2, color = null) {
-        if (this.graphicsMode === 0) return;
+        if (this.graphicsMode === null) return;
 
-        const res = this.pmodeResolutions[this.graphicsMode];
-        const lineColor = color !== null ? this.colors[color % this.colors.length] : this.currentColor;
+        this.ctx.fillStyle = color !== null ? this.colors[color % this.colors.length] : this.currentColor;
 
         // Bresenham's line algorithm for pixel-perfect lines
         const dx = Math.abs(x2 - x1);
@@ -969,13 +981,7 @@ class GraphicsDisplay {
         let err = dx - dy;
 
         while (true) {
-            this.ctx.fillStyle = lineColor;
-            this.ctx.fillRect(
-                x1 * res.pixelWidth,
-                y1 * res.pixelHeight,
-                res.pixelWidth,
-                res.pixelHeight
-            );
+            this.plot(x1, y1);
 
             if (x1 === x2 && y1 === y2) break;
 
@@ -1000,42 +1006,26 @@ class GraphicsDisplay {
     }
 
     drawFilledBox(x1, y1, x2, y2, color = null) {
-        if (this.graphicsMode === 0) return;
+        if (this.graphicsMode === null) return;
 
-        const res = this.pmodeResolutions[this.graphicsMode];
-        const fillColor = color !== null ? this.colors[color % this.colors.length] : this.currentColor;
-
-        const minX = Math.min(x1, x2);
-        const maxX = Math.max(x1, x2);
-        const minY = Math.min(y1, y2);
-        const maxY = Math.max(y1, y2);
-
-        this.ctx.fillStyle = fillColor;
-        this.ctx.fillRect(
-            minX * res.pixelWidth,
-            minY * res.pixelHeight,
-            (maxX - minX + 1) * res.pixelWidth,
-            (maxY - minY + 1) * res.pixelHeight
-        );
+        this.ctx.fillStyle = color !== null ? this.colors[color % this.colors.length] : this.currentColor;
+        this.ctx.fillRect(...this.area(x1, y1, x2, y2));
     }
 
     drawCircle(x, y, radius, color = null) {
-        if (this.graphicsMode === 0) return;
+        if (this.graphicsMode === null) return;
 
-        const res = this.pmodeResolutions[this.graphicsMode];
         this.ctx.fillStyle = color !== null ? this.colors[color % this.colors.length] : this.currentColor;
 
         // Midpoint circle in whole BASIC pixels -- the same algorithm the
         // server uses to track pixels (graphics.py _record_circle), so PPOINT
         // and PAINT see exactly what is drawn. (An antialiased ctx.arc left
         // blended edge blocks that PAINT could leak through.)
-        const plot = (px, py) => this.ctx.fillRect(
-            px * res.pixelWidth, py * res.pixelHeight, res.pixelWidth, res.pixelHeight);
         let dx = radius, dy = 0, err = 1 - radius;
         while (dx >= dy) {
             for (const [ox, oy] of [[dx, dy], [dy, dx], [-dy, dx], [-dx, dy],
                                     [-dx, -dy], [-dy, -dx], [dy, -dx], [dx, -dy]]) {
-                plot(x + ox, y + oy);
+                this.plot(x + ox, y + oy);
             }
             dy++;
             if (err < 0) {
@@ -1048,18 +1038,19 @@ class GraphicsDisplay {
     }
     
     paint(x, y, paintColor, borderColor) {
-        if (this.graphicsMode === 0) return;
+        if (this.graphicsMode === null) return;
 
-        const res = this.pmodeResolutions[this.graphicsMode];
         const fillColor = this.colors[paintColor % this.colors.length];
         const stopColor = borderColor !== undefined && borderColor !== null ?
             this.colors[borderColor % this.colors.length] : null;
 
-        // Work at BASIC pixel granularity to match LINE drawing (which fills
-        // pixelWidth x pixelHeight blocks). Operating at canvas pixel level
-        // would leak through diagonal gaps between adjacent BASIC pixels.
-        const pw = res.pixelWidth;
-        const ph = res.pixelHeight;
+        // Work at mode-pixel granularity to match LINE drawing (which fills
+        // whole mode pixels). Operating at canvas pixel level would leak
+        // through diagonal gaps between adjacent mode pixels. bx/by below
+        // index mode pixels; pw x ph is one mode pixel on the canvas.
+        const [gx, gy] = this.modePixel[this.graphicsMode];
+        const pw = gx * this.SCALE;
+        const ph = gy * this.SCALE;
         const bWidth = Math.floor(this.canvas.width / pw);
         const bHeight = Math.floor(this.canvas.height / ph);
 
@@ -1085,8 +1076,8 @@ class GraphicsDisplay {
             }
         };
 
-        const startBX = Math.floor(x);
-        const startBY = Math.floor(y);
+        const startBX = Math.floor(x / gx);
+        const startBY = Math.floor(y / gy);
 
         if (startBX < 0 || startBX >= bWidth || startBY < 0 || startBY >= bHeight) return;
 
@@ -1152,20 +1143,16 @@ class GraphicsDisplay {
     }
     
     drawText(x, y, text, color) {
-        if (this.graphicsMode === 0) return;
+        if (this.graphicsMode === null) return;
 
-        const res = this.pmodeResolutions[this.graphicsMode];
-        const textColor = this.colors[color % this.colors.length];
+        // A small pixel font: 4 pixels wide, 6 tall, 5-pixel character cells.
+        // Each font pixel is one mode pixel, so text stays legible (just
+        // larger) in the coarser modes.
+        const [gx, gy] = this.modePixel[this.graphicsMode];
+        const charW = 4;  // font pixels per glyph width
+        const charStep = 5; // font pixels per character cell (4 + 1 spacing)
 
-        // Render using a small pixel font scaled to BASIC pixel size.
-        // Each character is 4 BASIC pixels wide, 6 tall (fits CoCo style).
-        const pw = res.pixelWidth;
-        const ph = res.pixelHeight;
-        const charW = 4;  // BASIC pixels per glyph width
-        const charStep = 5; // BASIC pixels per character cell (4 + 1 spacing)
-        const charH = 6;  // BASIC pixels per character height
-
-        this.ctx.fillStyle = textColor;
+        this.ctx.fillStyle = this.colors[color % this.colors.length];
 
         // No lowercase glyphs (the server uppercases GPRINT text as well)
         text = text.toUpperCase();
@@ -1176,9 +1163,7 @@ class GraphicsDisplay {
                 const bits = glyph[row];
                 for (let col = 0; col < charW; col++) {
                     if (bits & (1 << (charW - 1 - col))) {
-                        const px = (x + ci * charStep + col) * pw;
-                        const py = (y + row) * ph;
-                        this.ctx.fillRect(px, py, pw, ph);
+                        this.plot(x + (ci * charStep + col) * gx, y + row * gy);
                     }
                 }
             }
@@ -1186,28 +1171,17 @@ class GraphicsDisplay {
     }
 
     getGraphics(x1, y1, x2, y2, arrayName) {
-        if (this.graphicsMode === 0) return;
-        
-        const res = this.pmodeResolutions[this.graphicsMode];
-        const imageData = this.ctx.getImageData(
-            Math.min(x1, x2) * res.pixelWidth,
-            Math.min(y1, y2) * res.pixelHeight,
-            (Math.abs(x2 - x1) + 1) * res.pixelWidth,
-            (Math.abs(y2 - y1) + 1) * res.pixelHeight
-        );
-        
-        this.spriteStorage[arrayName] = imageData;
-        console.log(`GET graphics stored in array ${arrayName}`);
+        if (this.graphicsMode === null) return;
+        this.spriteStorage[arrayName] = this.ctx.getImageData(...this.area(x1, y1, x2, y2));
     }
-    
+
     putGraphics(x, y, arrayName, action = 'pset', data = null) {
-        if (this.graphicsMode === 0) return;
-        
-        const res = this.pmodeResolutions[this.graphicsMode];
+        if (this.graphicsMode === null) return;
+
         const sprite = this.spriteStorage[arrayName];
         
         if (!sprite) return;
-        const left = x * res.pixelWidth, top = y * res.pixelHeight;
+        const [left, top] = this.block(x, y);
         const op = action.toUpperCase();
         if (op === 'PSET') {
             this.ctx.putImageData(sprite, left, top);
@@ -1257,8 +1231,8 @@ class GraphicsDisplay {
 
     restoreState(state) {
         if (!state) {
-            // New tab: the same defaults as a fresh display
-            this.graphicsMode = 0;
+            // New tab: the same defaults as a fresh display (no PMODE yet)
+            this.graphicsMode = null;
             this.screenMode = 1;
             this.currentDrawColor = 1;
             this.currentColor = this.colors[1];
@@ -1847,13 +1821,12 @@ class DualMonitorEmulator {
         // Track mouse position for graphics info
         document.getElementById('graphics-display').addEventListener('mousemove', (e) => {
             const rect = e.target.getBoundingClientRect();
-            const res = this.displayManager.graphicsDisplay.pmodeResolutions[
-                this.displayManager.graphicsDisplay.graphicsMode
-            ];
-            
-            if (res && this.displayManager.graphicsDisplay.graphicsMode > 0) {
-                const x = Math.floor((e.clientX - rect.left) / rect.width * res.width);
-                const y = Math.floor((e.clientY - rect.top) / rect.height * res.height);
+            const gd = this.displayManager.graphicsDisplay;
+
+            // BASIC coordinates are 0-255 x 0-191 in every PMODE (including 0)
+            if (gd.graphicsMode !== null) {
+                const x = Math.floor((e.clientX - rect.left) / rect.width * gd.WIDTH);
+                const y = Math.floor((e.clientY - rect.top) / rect.height * gd.HEIGHT);
                 document.getElementById('graphics-coords').textContent = `X: ${x}, Y: ${y}`;
             }
         });

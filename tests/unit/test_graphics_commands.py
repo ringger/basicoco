@@ -188,7 +188,7 @@ class TestGraphicsCommand:
         basic.process_command('PMODE 4,1')
         assert basic.graphics_mode == 4
         
-        basic.process_command('PMODE 0,1')  # Back to text mode
+        basic.process_command('PMODE 0,1')  # PMODE 0 is a graphics mode too (#79)
         assert basic.graphics_mode == 0
 
     def test_graphics_coordinate_systems(self, basic, helpers):

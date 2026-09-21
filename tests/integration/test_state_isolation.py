@@ -177,4 +177,4 @@ class TestStateIsolation:
         
         # NEW should reset graphics mode
         basic.process_command('NEW')
-        assert basic.graphics_mode == 0  # Reset to text mode
+        assert basic.graphics_mode is None  # Graphics off until the next PMODE

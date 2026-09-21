@@ -45,6 +45,23 @@ def test_circle_is_crisp_and_paint_stays_inside(basic_page):
     assert around <= PALETTE, around - PALETTE
 
 
+@pytest.mark.parametrize('mode,block', [(0, (4, 4)), (1, (4, 4)), (3, (4, 2)), (4, (2, 2))])
+def test_pmode_pixels_land_where_the_coco_puts_them(basic_page, mode, block):
+    """#79: every PMODE uses 0-255 x 0-191; lower modes draw coarser pixels
+    on the same screen, and the server's PPOINT sees the same pixel."""
+    basic_page.run(f'PMODE {mode},1: SCREEN 1,1: PCLS')
+    basic_page.run('PSET(200,50),4: PSET(255,191),4')
+    w, h = block
+    assert basic_page.canvas_pixel(400, 100) == RED
+    assert basic_page.canvas_pixel(400 + w - 1, 100 + h - 1) == RED
+    assert basic_page.canvas_pixel(400 + w, 100) == BLACK
+    assert basic_page.canvas_pixel(511, 383) == RED          # bottom-right corner is on screen
+    basic_page.run('PRINT PPOINT(201,50)')
+    lines = [l.rstrip() for l in basic_page.lines()]
+    expected = ' 4' if mode != 4 else ' 0'   # (201,50) shares (200,50)'s pixel below PMODE 4
+    assert lines[lines.index('> PRINT PPOINT(201,50)') + 1] == expected
+
+
 def test_gprint_symbols_are_not_question_marks(basic_page):
     basic_page.run('PMODE 4,1: SCREEN 1,1: PCLS')
     basic_page.run('GPRINT(10,10),"#": GPRINT(20,10),"?"')

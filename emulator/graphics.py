@@ -81,8 +81,8 @@ class BasicGraphics:
         return error_response(error)
 
     def _require_graphics_mode(self):
-        """Return error response if not in graphics mode, else None."""
-        if self.emulator.graphics_mode == 0:
+        """Return error response if no PMODE has been set, else None."""
+        if self.emulator.graphics_mode is None:
             return self._illegal_function_call()
         return None
 
@@ -123,9 +123,18 @@ class BasicGraphics:
     SCREEN_WIDTH, SCREEN_HEIGHT = 256, 192
     _TRACK_LIMIT = 4096  # lines/circles beyond this are not pixel-tracked
 
+    # Every PMODE uses 0-255 x 0-191 coordinates; lower modes have coarser
+    # pixels, each covering (width, height) coordinates.
+    _MODE_PIXEL = {0: (2, 2), 1: (2, 2), 2: (2, 1), 3: (2, 1), 4: (1, 1)}
+
+    def _snap(self, x, y):
+        """The coordinates of the top-left of the mode pixel holding (x, y)."""
+        gx, gy = self._MODE_PIXEL.get(self.emulator.graphics_mode, (1, 1))
+        return x - x % gx, y - y % gy
+
     def get_pixel(self, x, y):
         """Return color at (x, y): what was drawn there, else the clear color."""
-        return self.pixel_buffer.get((x, y), self.clear_color)
+        return self.pixel_buffer.get(self._snap(x, y), self.clear_color)
 
     def clear_pixel_buffer(self):
         """Clear the pixel buffer."""
@@ -134,7 +143,7 @@ class BasicGraphics:
 
     def _plot(self, x, y, color):
         if 0 <= x < self.SCREEN_WIDTH and 0 <= y < self.SCREEN_HEIGHT:
-            self.pixel_buffer[(x, y)] = color
+            self.pixel_buffer[self._snap(x, y)] = color
 
     def _record_line(self, x1, y1, x2, y2, color):
         """Record a line's pixels (Bresenham, as the client draws it)."""
