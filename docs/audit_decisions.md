@@ -130,5 +130,6 @@ Task numbers (#N) refer to the audit task list.
 | 48 | `testpaths = tests` (was `tests/unit`). | auto | |
 | 49 | 8 old e2e/cli files removed (`git rm`); replaced by `tests/integration/e2e/test_cli_sessions.py` + a `live_server` fixture that starts app.py in a temp dir on a free port. | user approved removal | |
 | 50, 33 | `pycuber`, `pytest-timeout` added to requirements.txt. | auto | |
-| 33 | `Werkzeug==3.1.6` and `simple-websocket==1.1.0` pinned at the versions installed and tested (Werkzeug was unpinned; Flask 2.3 accepts anything ≥ 2.3.7). The Flask 2.3 / Flask-SocketIO 5.3 stack was **not** upgraded: that needs package installs, so it waits for approval. | auto | Review: upgrade to current Flask 3.x / Flask-SocketIO 5.4+? |
+| 33 | `Werkzeug==3.1.6` and `simple-websocket==1.1.0` pinned at the versions installed and tested (Werkzeug was unpinned; Flask 2.3 accepts anything ≥ 2.3.7). The Flask 2.3 / Flask-SocketIO 5.3 stack was **not** upgraded: that needs package installs, so it waits for approval. | auto | |
+| 33 | **Upgraded (user, 2026-09-21)** to Flask 3.1.3, Flask-SocketIO 5.6.1, python-socketio 5.17.0, python-engineio 4.14.0, Werkzeug 3.1.8. No code changes were needed; the full suite (1948 tests, including live-server, websocket and CLI e2e) passes. | user | Previous environment saved as a `pip freeze` in the session scratchpad. |
 | — | `tests/unit/test_utilities.py` removed; stray `programs/CHARTDATA.DAT` removed (backed up to the session scratchpad). | user | |
