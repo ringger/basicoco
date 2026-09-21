@@ -41,9 +41,6 @@ match the session task list, where every entry here is mirrored.
 - [ ] **PPOINT sees PAINT fills and GPRINT text** [#85]
   The server tracks LINE/CIRCLE/DRAW/PSET pixels but not PAINT or GPRINT, so `PPOINT` inside a painted area or on GPRINT text returns 0.
   **Done when:** the server records PAINT fills (same flood-fill rules as the client) and GPRINT glyph pixels, and tests check PPOINT inside a painted box and on a GPRINT stroke.
-- [ ] **PRINT# writes numbers without PRINT's spaces** [#103]
-  `PRINT #1,5;6;-3` writes `56-3`, so INPUT # reads back one wrong number; PRINT writes ` 5  6 -3 `. PRINT# has its own item tokenizer instead of PRINT's formatting. Also decide commas: PRINT# writes `A,B` for `PRINT #1,"A","B"` (INPUT # then reads two fields), where Color BASIC pads to the next print zone.
-  **Done when:** PRINT# formats items exactly like PRINT (xfail in `test_robustness.py` passes), the comma choice is recorded in docs/audit_decisions.md, and the bundled programs that write files still read them back.
 - [ ] **Re-entering a WHILE or DO leaks a stack frame** [#100]
   `FOR K=1 TO 2000: WHILE 1: IF 1 THEN GOTO 40 ... 40 NEXT K` leaves 2000 frames on `while_stack` (DO: `do_stack`). FOR already replaces its frame when the same loop starts again (#43); WHILE and DO push a new one each time.
   **Done when:** starting a WHILE or DO whose frame (same line and subline) is already on its stack replaces it (dropping frames above it), and the two xfails in `test_robustness.py` pass.

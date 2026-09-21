@@ -51,6 +51,18 @@ def format_basic_number(value) -> str:
     return f"{sign}{mantissa}E{'+' if exp_value >= 0 else '-'}{abs(exp_value):02d}"
 
 
+def format_print_item(value) -> str:
+    """A value as PRINT and PRINT# write it: strings as they are; numbers
+    with a sign position (space or '-') in front and a space after,
+    so ' 5 ', '-3 ', ' .5 '."""
+    if isinstance(value, str):
+        return value
+    if isinstance(value, (int, float)):
+        digits = format_basic_number(value)
+        return digits + ' ' if value < 0 else ' ' + digits + ' '
+    return str(value)
+
+
 class NodeType(Enum):
     """Types of AST nodes"""
     # Literals

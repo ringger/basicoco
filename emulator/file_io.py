@@ -7,8 +7,8 @@ CoCo BASIC supports file numbers 1-15 with modes I (input), O (output), A (appen
 
 import os
 
-from .ast_nodes import format_basic_number
-from .error_context import error_response, text_response
+from .ast_nodes import format_print_item
+from .error_context import BASIC_RUNTIME_ERRORS, error_response, text_response
 from .program_files import FileManager, SandboxError
 from .text_utils import StatementSplitter
 
@@ -254,13 +254,10 @@ class FileIOManager:
                 trailing_separator = None
                 try:
                     value = self.emulator.evaluate_expression(token_value)
-                    if isinstance(value, str):
-                        output_parts.append(value)
-                    elif isinstance(value, (int, float)):
-                        output_parts.append(format_basic_number(value))
-                    else:
-                        output_parts.append(str(value))
-                except Exception as e:
+                    # Same text PRINT shows, so numbers keep their spaces and
+                    # INPUT # reads 5;6 back as two numbers
+                    output_parts.append(format_print_item(value))
+                except BASIC_RUNTIME_ERRORS as e:
                     return error_response(self.emulator.error_context.wrapped_error(
                         "Error evaluating PRINT# expression: ", e, self.emulator.current_line,
                         ["Check expression syntax", "Example: PRINT #1, X, Y"]))
@@ -359,7 +356,8 @@ class FileIOManager:
             # Check for array element: A(1)
             var_desc = self._parse_var_descriptor(var_str)
 
-            value = self._read_next_value(handle, file_num)
+            value = self._read_next_value(handle, file_num,
+                                          numeric=not var_desc['name'].endswith('$'))
             if value is None:
                 return self._runtime_error(
                     f"INPUT PAST END OF FILE: #{file_num}",
@@ -414,10 +412,12 @@ class FileIOManager:
             return {'name': array_name, 'array': True, 'indices': indices}
         return {'name': var_str, 'array': False}
 
-    def _read_next_value(self, handle, file_num):
+    def _read_next_value(self, handle, file_num, numeric=False):
         """Read the next comma-or-newline-delimited value from a file.
         Returns the value as a string, or None at EOF.
-        Handles quoted strings.
+        Handles quoted strings. A *numeric* item also ends at a space, as in
+        Microsoft BASIC, so what PRINT #n,5;6 writes (" 5  6 ") reads back
+        as two numbers.
         """
         # Use a per-file read buffer for partial-line reads
         file_info = self.open_files[file_num]
@@ -450,6 +450,21 @@ class FileIOManager:
                     buf = buf[end + 1:]
                 # Skip trailing comma
                 buf = buf.lstrip()
+                if buf.startswith(','):
+                    buf = buf[1:]
+            elif numeric:
+                # A number ends at a space, comma or end of line; the spaces
+                # and one comma after it belong to the separator
+                buf = buf.lstrip(' ')
+                if not buf:
+                    continue   # only blanks left on this line
+                end = len(buf)
+                for i, ch in enumerate(buf):
+                    if ch in ' ,':
+                        end = i
+                        break
+                value = buf[:end]
+                buf = buf[end:].lstrip(' ')
                 if buf.startswith(','):
                     buf = buf[1:]
             else:

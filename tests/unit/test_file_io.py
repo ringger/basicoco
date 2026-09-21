@@ -145,11 +145,28 @@ class TestPrintFile:
         assert self._read_file('TEST.DAT').strip() == '100'
 
     def test_print_comma_separator(self, basic):
+        # A comma writes a literal comma, so INPUT # reads the items back
+        # separately; numbers keep PRINT's spaces (#103)
         basic.process_command('OPEN "O", #1, "TEST.DAT"')
         basic.process_command('PRINT #1, 1, 2, 3')
         basic.process_command('CLOSE #1')
-        content = self._read_file('TEST.DAT').strip()
-        assert content == '1,2,3'
+        assert self._read_file('TEST.DAT') == ' 1 , 2 , 3 \n'
+
+    @pytest.mark.parametrize('items, written', [
+        ('42', ' 42 \n'),
+        ('-3', '-3 \n'),
+        ('5;6;-3', ' 5  6 -3 \n'),
+        ('"X=";.5', 'X= .5 \n'),
+        ('"A";"B"', 'AB\n'),
+    ])
+    def test_print_formats_items_like_print(self, basic, helpers, items, written):
+        """#103: PRINT# wrote 5;6 as 56 (read back as one number)."""
+        basic.process_command('OPEN "O", #1, "TEST.DAT"')
+        basic.process_command(f'PRINT #1, {items}')
+        basic.process_command('CLOSE #1')
+        assert self._read_file('TEST.DAT') == written
+        on_screen = helpers.get_text_output(basic.process_command(f'PRINT {items}'))
+        assert on_screen == [written[:-1]]
 
     def test_print_semicolon_separator(self, basic):
         basic.process_command('OPEN "O", #1, "TEST.DAT"')

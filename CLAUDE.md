@@ -128,7 +128,7 @@ CoCo Color BASIC semantics for shared features, keeping the modern extensions (M
 
 - Precedence (loosest → tightest): OR < AND < NOT < relational (one level, left-to-right) < + − < MOD < * / < unary − < ^ (left-associative). `NOT A=5` is `NOT (A=5)`; `-2^2` = −4; `2^3^2` = 64.
 - `^` is computed in floating point; overflow → OVERFLOW error; negative base to a fractional power → ILLEGAL FUNCTION CALL.
-- Numbers print CoCo-style via `format_basic_number()` (ast_nodes.py): up to 9 significant digits, `.5` not `0.5`, E notation outside .01 ≤ |x| < 1e9. PRINT, STR$ and PRINT# share it.
+- Numbers print CoCo-style via `format_basic_number()` (ast_nodes.py): up to 9 significant digits, `.5` not `0.5`, E notation outside .01 ≤ |x| < 1e9. PRINT and PRINT# write items through `format_print_item()` (sign space before, space after: ` 5 `), so a file reads back what the screen shows; INPUT # ends a numeric item at a space.
 - INT is floor; RND(0) is a fresh fraction; each interpreter has its own RNG (`CoCoBasic.rng`); VAL/numeric INPUT use `basic_number_prefix()` (functions.py).
 - Undimensioned arrays auto-dimension to 10; DIM A(0) is legal; arrays are capped at `MAX_ARRAY_ELEMENTS`.
 

@@ -17,7 +17,7 @@ from .ast_nodes import (
     PrintStatementNode, GosubStatementNode, ReturnStatementNode,
     InputStatementNode, OnBranchStatementNode, OnErrorGotoNode,
     BlockNode,
-    Operator, basic_truthy, format_basic_number
+    Operator, basic_truthy, format_print_item
 )
 from .error_context import error_response, text_message, BASIC_RUNTIME_ERRORS
 
@@ -80,25 +80,6 @@ class ASTEvaluator(ASTVisitor):
                 and result.is_integer() and abs(result) < 2 ** 53):
             return int(result)
         return result
-
-    @staticmethod
-    def _format_print_value(value):
-        """Format a value for PRINT output.
-
-        CoCo BASIC numeric formatting: a leading space for the sign position
-        (positive numbers get a space, negative get '-') and a trailing space;
-        digits as format_basic_number (9 significant digits, ' .5 ').
-        """
-        if isinstance(value, str):
-            return value
-        elif isinstance(value, (int, float)):
-            num_str = format_basic_number(value)
-            if value < 0:
-                return num_str + ' '
-            else:
-                return ' ' + num_str + ' '
-        else:
-            return str(value)
 
     def visit_number(self, node: LiteralNode) -> Union[int, float]:
         """Visit number literal"""
@@ -367,7 +348,7 @@ class ASTEvaluator(ASTVisitor):
             # Evaluate expression
             try:
                 value = self.visit(expr)
-                formatted = self._format_print_value(value)
+                formatted = format_print_item(value)
                 output_parts.append(formatted)
                 col += len(formatted)
             except BASIC_RUNTIME_ERRORS as e:

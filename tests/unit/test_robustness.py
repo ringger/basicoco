@@ -45,13 +45,24 @@ class TestFiles:
             '40 PRINT N;L$'])
         assert errors == [] and texts == [' 5000 LINE 5000']
 
-    @pytest.mark.xfail(reason='#103: PRINT# drops the spaces PRINT puts around numbers', strict=True)
     def test_numbers_written_with_semicolons_read_back_separately(self, basic, helpers):
         texts, errors = run(basic, helpers, [
             '10 OPEN "O",#1,"N": PRINT #1,5;6;-3: CLOSE #1',
             '20 OPEN "I",#1,"N": INPUT #1,A,B,C: CLOSE #1',
             '30 PRINT A;B;C'])
         assert errors == [] and texts == [' 5  6 -3 ']
+
+    def test_graph_chart_save_and_load_round_trip(self, basic, helpers):
+        """graph_chart.bas's own save (830-850) and load (440-480) lines."""
+        texts, errors = run(basic, helpers, [
+            '10 NC=2: DIM LB$(2),VL(2): LB$(1)="APPLES": VL(1)=120: LB$(2)="PEARS": VL(2)=-6.5',
+            '20 OPEN "O",#1,"CHART": PRINT #1, NC',
+            '30 FOR I=1 TO NC: PRINT #1, LB$(I); ","; VL(I): NEXT: CLOSE #1',
+            '40 NC=0: LB$(1)="": VL(1)=0: LB$(2)="": VL(2)=0',
+            '50 OPEN "I",#1,"CHART": INPUT #1, NC',
+            '60 FOR I=1 TO NC: INPUT #1, LB$(I), VL(I): NEXT: CLOSE #1',
+            '70 PRINT NC;LB$(1);VL(1);LB$(2);VL(2)'])
+        assert errors == [] and texts == [' 2 APPLES 120 PEARS-6.5 ']
 
     def test_reading_after_close_is_an_error(self, basic, helpers):
         texts, errors = run(basic, helpers, [
