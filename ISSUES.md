@@ -27,11 +27,10 @@ Areas that work but haven't been stress-tested with adversarial or exotic inputs
 
 ## Known Bugs
 
-- [ ] **Rubik's cube z-sorting artifacts** — DrawCube in `lib_rubiks_engine.bas` uses a painter's algorithm with per-subcube depth sorting. This produces visible artifacts:
-  - **Static render**: at boundaries between the three visible faces (front, right, top), stickers from back subcubes bleed through — e.g., yellow on the front face, blue on the top face in the "CUBE SOLVED!" view.
-  - **Animation**: during face rotation, rotating subcubes' corners get occluded by static faces, and stickers appear to change colors mid-turn.
-  - **Root cause**: per-subcube average depth doesn't correctly resolve overlap ordering between faces from adjacent subcubes that extend in different directions. The cross-product cull alone isn't sufficient. Fixed iteration order (back→front) was tried but made animation worse.
-  - **Possible approaches**: (1) Only paint the three camera-visible face orientations (front/right/top) for non-rotating subcubes, with special handling during rotation when back/left/bottom faces can rotate into view. (2) Render static and rotating layers separately with different strategies. (3) Rethink depth metric — e.g., per-face depth for the rotating layer only. The internal 4D CL array is verified correct by sticker-stability tests against pycuber.
+- [ ] **Rubik's cube static render artifacts (unverified)** — reported: at boundaries between the three visible faces, stickers from back subcubes bleed through in the static "CUBE SOLVED!" view.
+  - **Sept 2026 audit**: the per-subcube painter's-algorithm depth sort was compared against a true per-pixel z-buffer for every move type at 15/45/75° and matched (0 wrong interior pixels), and a Python replica of the client's LINE/PAINT rasterization differed from an ideal polygon fill by at most 16 px per frame. The bleed-through could **not** be reproduced outside the browser. Next step: check in the real browser; if it persists, suspect the client's canvas rasterization (antialiased strokes vs. the BASIC-pixel PAINT fill) rather than the depth sort.
+- [x] **Stickers change colors mid-turn** — FIXED Sept 2026 (task #67): not a depth-sort problem. R and L animated in the wrong direction and then snapped when the permutation applied. The animation rotation signs for R/L were swapped; a test now checks every move's last animation frame against the static redraw.
+- [x] **Rubik's cube shrinks momentarily during solver** — FIXED Sept 2026 (task #51): `AlignMidEdge` used `PRIVATE SC` as scratch, clobbering the engine's render scale `SC` while DoMoves animated. Renamed to `SK`; a test checks every animated frame's size.
 
 ## Known Behavioral Limitations
 

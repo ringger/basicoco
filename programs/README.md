@@ -25,7 +25,20 @@ This directory contains BASIC programs for BasiCoCo.
 - **blue_circle.bas** - Graphics circle demo
 - **qix_beam.bas** - QIX-style beam animation
 - **spiral.bas** - Spiral graphics pattern
-- **rubiks_cube.bas** - 3D Rubik's cube in isometric projection (LINE, PSET, PMODE)
+
+### Rubik's Cube
+- **rubiks_cube.bas** - 3D Rubik's cube in isometric projection (MERGEs `lib_rubiks_faces.bas`)
+- **rubiks_cube_rotate.bas**, **rubiks_subcubes.bas** - self-contained rotation / subcube rendering demos
+- **rubiks_scramble.bas** - animated scramble (MERGEs `lib_rubiks_engine.bas`)
+- **rubiks_interactive.bas** - turn faces from the keyboard (MERGEs `lib_rubiks_engine.bas`)
+- **rubiks_solve.bas** - scrambles, then solves with the 7-step beginner's method, animated (MERGEs the engine and `lib_rubiks_solver.bas`)
+- **rubiks_test_moves.bas** - move-engine test harness
+
+### Libraries (`lib_*`)
+Shared code that other programs pull in with `MERGE`. Libraries use labels (`DrawCube:`) and no line numbers — LOAD/MERGE/CHAIN auto-number unnumbered lines — and are not meant to be RUN on their own.
+- **lib_rubiks_faces.bas** - face drawing
+- **lib_rubiks_engine.bas** - cube state, moves, `DoMoves`, animation
+- **lib_rubiks_solver.bas** - solver steps (see `docs/rubiks_solver_plan.md`)
 
 ## Loading Programs
 
@@ -40,16 +53,16 @@ RUN                        # Execute the program
 
 ## File Search Order
 
-The LOAD command searches for programs in this order:
-1. Current working directory
-2. `programs/` subdirectory
-3. Project root directory
-4. Project root `programs/` directory
+File commands are sandboxed: names are resolved inside the `programs/` directory (absolute paths, `~` and `..` are rejected). LOAD, MERGE and CHAIN look in:
+1. The current `CD` directory inside the writable `programs/` directory
+2. The bundled project `programs/` directory
+
+SAVE, KILL and OPEN-for-output only ever touch the writable directory.
 
 ## Creating New Programs
 
 1. Create a new `.bas` file in this directory
-2. Use line numbers (10, 20, 30, etc.)
+2. Use line numbers (10, 20, 30, etc.), or omit them and use labels — unnumbered lines are auto-numbered on load
 3. Save and load with the `LOAD` command
 
 Or use the SAVE command from the emulator:

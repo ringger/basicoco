@@ -287,6 +287,21 @@ The pycuber validation gate held throughout: every algorithm (`F R U R' U' F'`, 
 
 The recurring theme across all seven steps was cycle direction confusion. The U move's piece cycle (TFR→TFL→TBL→TBR) is a simple fact, but it's easy to reverse when reasoning about "which U rotation brings corner X to position Y." Steps 2, 6, and 7 all had plan errors related to this. The fix was always the same: stop reasoning, run the code, observe which piece actually ends up where.
 
+## Phase 7: The Audit (September 2026)
+
+With the solver "complete," the next request was different in kind: audit the whole project top to bottom, flag every issue, and put each on a task list for the human to prioritize. Parallel review agents swept the interpreter, the web server, the client, the tests and the Rubik's programs; a separate agent looked at a graph-theory view of the cube (from The Math Flow) and turned it into tooling ideas. The sweep produced 69 tasks, and several of the HIGH ones were uncomfortable:
+
+- **The test suite was quietly narrower than it looked.** `pytest.ini` pointed only at `tests/unit`, so 182 integration tests never ran. The e2e/CLI tests passed with no server running, because a blanket `except` swallowed every failure.
+- **"16/16 scrambles pass" was not the same as "the solver works."** A 100-seed random-scramble test solved only 73%. Step 6's net U rotation broke edge alignment, two flipped-edge insertions in Step 1 were wrong, and the program's own Scramble used whole-cube rotations the solver didn't expect. The fixed scramble lists had simply not reached those cases.
+- **Two long-standing Rubik's "rendering bugs" had other causes.** The "cube shrinks during solve" bug was a `PRIVATE SC` scratch variable clobbering the global render scale. "Stickers change color mid-turn" wasn't depth sorting at all: R and L animated in the wrong direction and snapped into place when the permutation applied.
+- **The server was reachable, and dangerous, from the network.** It bound to 0.0.0.0 with CORS `*`, file commands accepted absolute paths, and KILL deleted whatever filename the client sent back.
+
+The human set the order ("lead with fixing and augmenting tests, then get to a green state"), made the dialect calls (CoCo semantics plus the project's extensions, RND(0) as a fresh fraction, auto-DIM to 10, a filesystem sandbox everywhere), and then handed over the night: *keep going, take your recommended options, record the decisions for review in the morning.* That last instruction shaped the work. Every judgment call went into `docs/audit_decisions.md`, marked **user** or **auto**, so the review could happen afterwards without re-deriving anything.
+
+The pattern from Phase 6 held: write the failing test first, then fix. About 110 regression tests went in before the fixes. The Rubik's regression suite replays each solver's output in pycuber, and the web tests start a real server in a temp directory and fail loudly if it doesn't come up. A late request to find "places where the AST parser can be used for better correctness" produced a second wave. Keyword scanning, comment handling, RENUM, graphics coordinate parsing and file-number parsing all moved from string heuristics (`' THEN '` with spaces, `str.find(' ELSE ')`, regexes over whole lines) to one quote- and REM-aware scanner.
+
+The meta-lesson this time is about evidence rather than reasoning: *a green suite only means something if you know what it runs.* Fixed scramble lists, tests that could never fail, and a test path that left out half the suite all looked like coverage.
+
 ## By the Numbers
 
 - **140+ commits** over 6 months (September 2025 — March 2026)
@@ -295,3 +310,5 @@ The recurring theme across all seven steps was cycle direction confusion. The U 
 - **24 BASIC programs** in the programs directory
 - **4 documentation files** (plan, reference algorithms, project evolution, bitwise operators)
 - **1 validation tool** (`tools/validate_moves.py`) — the pycuber gate
+
+After the September 2026 audit: **~1,850 tests** in total (about 1,490 in the default run, the rest marked `slow`), 24 BASIC programs, 100 random scrambles solved and replayed in pycuber, and a decisions log (`docs/audit_decisions.md`) covering every judgment call made during the fixes.

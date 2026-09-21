@@ -5,8 +5,14 @@ This directory contains the comprehensive test suite for BasiCoCo, organized int
 ## Running Tests
 
 ```bash
-# Run all tests
+# Default run: everything except tests marked `slow` (~12 s)
 python -m pytest
+
+# Everything, including slow tests (Rubik's solver, live-server, pexpect audits; ~3.5 min)
+python -m pytest -m ""
+
+# Slow tests only
+python -m pytest -m slow
 
 # Run with coverage
 python -m pytest --cov=emulator --cov-report=term-missing
@@ -35,12 +41,18 @@ Tests individual components in isolation using pytest fixtures:
 - `test_variables.py` - Variable management
 - `test_error_*.py` - Error handling and context management
 - `test_graphics_commands.py` - Graphics system components
-- `test_direct_emulator.py` - Direct emulator unit testing
 - `test_program_management_commands.py` - DIR, FILES, DRIVE, SAVE, CLOAD, CSAVE commands
 - `test_renum_command.py` - RENUM line renumbering functionality
 - `test_on_commands.py` - ON GOTO and ON GOSUB multi-way branching
 - `test_if_then_comprehensive.py` - IF THEN statement variations
 - `test_file_commands.py` - File system command testing
+- `test_regressions_executor.py`, `test_regressions_parser.py`, `test_regressions_builtins.py` - regression tests for the Sept 2026 audit findings (each test names its task number)
+- `test_line_expansion.py` - one-line IF/loop expansion (`ast_converter.expand_statements`)
+- `test_numeric_semantics.py` - CoCo number formatting, VAL, operator precedence, `^` edge cases
+- `test_sandbox.py` - filesystem sandbox, KILL protocol, per-session CD
+- `test_comments_and_crunching.py` - `'`/REM comments, block-IF detection, crunched spacing, ERR codes
+- `test_immediate_mode.py`, `test_chain_directive.py`, `test_renum_references.py`, `test_graphics_arguments.py`, `test_graphics_pixels.py`, `test_file_io_args.py`, `test_help_listing.py`, `test_app_sessions.py`
+- `test_rubiks_*.py` - Rubik's cube engine and solver (slow); `test_rubiks_regressions.py` solves 100 seeded random scrambles and checks each solution in pycuber
 - And more...
 
 ### Integration Tests (`integration/`)
@@ -52,26 +64,25 @@ Tests multiple components working together:
 - `test_for_loops.py` - Loop execution testing
 - `test_program_execution_flow.py` - Program flow control
 - `test_state_isolation.py` - State management between sessions
-- `test_websocket_completion_signals.py` - WebSocket communication
+- `test_websocket_completion_signals.py` - WebSocket communication (live server)
+- `test_websocket_security.py` - origin checks, KILL protocol, Ctrl+C, command serialization, reconnect (live server)
 - `test_complex_if_then.py` - Complex conditional logic
-
-#### CLI Tests (`integration/cli/`)
-- `test_cli_with_pexpect.py` - Interactive CLI testing
-- `test_cli_logged.py` - CLI with logging verification
+- `test_program_audit.py` - runs every bundled program via pexpect (in a temp working directory)
+- `test_input_resume.py`, `test_array_combinations.py`, `test_single_line_control_structures.py`
 
 #### End-to-End Tests (`integration/e2e/`)
-- `test_minimal.py` - Basic functionality verification
-- `test_step_by_step.py` - Step-by-step execution testing
-- `test_manual_lunar.py` - Complex lunar lander program
-- `test_complete_lunar.py` - Full lunar lander execution
-- `test_complex_lunar.py` - Advanced lunar lander scenarios
-- `test_complex_lunar_fixed.py` - Lunar lander with fixes
+- `test_cli_sessions.py` - drives `cli_client.py` with pexpect against a live server: store/run, INPUT round trip, and a full lunar lander game
+
+#### Live server fixture
+`tests/integration/conftest.py` provides `live_server`: it starts `app.py` on a free localhost port with its working directory set to a fresh temp directory, so anything the server writes stays out of the repo's `programs/`. Tests get `live_server.url`, `.port` and `.programs_dir`. A server that fails to start fails the test — nothing is silently skipped.
 
 ## Test Framework
 
 Tests use **pytest** with shared fixtures defined in `conftest.py`:
 - `basic` fixture — provides a fresh `CoCoBasic` emulator instance
-- `helpers` fixture — provides `TestHelpers` with utility methods for executing programs and checking output
+- `graphics_basic` fixture — an emulator already in graphics mode
+- `helpers` fixture — provides `TestHelpers` with utility methods for executing programs and checking output (`load_program`, `run_to_completion`, `get_text_output`, `get_error_messages`, ...)
+- `temp_programs_dir` fixture — chdir into a temp directory with a `programs/` subdirectory; **any test that creates files must use it** (never write to the real `programs/`)
 
 ### Example Test Structure
 ```python

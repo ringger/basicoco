@@ -4,7 +4,7 @@ An educational BASIC programming environment inspired by the TRS-80 Color Comput
 
 This is not a hardware emulator. If you want to run real CoCo software, see [Related Projects](#related-projects). This project is for learning BASIC in a CoCo-flavored dialect with a modern interface and helpful feedback.
 
-![Python](https://img.shields.io/badge/Python-3.8%2B-blue)
+![Python](https://img.shields.io/badge/Python-3.9%2B-blue)
 ![License](https://img.shields.io/badge/License-MIT-blue)
 
 ## Why This Exists
@@ -43,6 +43,8 @@ python app.py
 ```
 
 Then open `http://localhost:5002` for the dual monitor interface.
+
+The server listens on `127.0.0.1` only. It has no authentication, so exposing it to other machines is an explicit opt-in: `BASICOCO_HOST=0.0.0.0 python app.py`. BASIC programs can only read and write files inside `programs/`.
 
 For a standalone terminal REPL (no server needed): `python basicoco.py`
 
@@ -87,7 +89,7 @@ Programs can be saved as `.bas` files in the `programs/` directory and loaded wi
 The dialect is based on Extended Color BASIC as shipped with the CoCo 1 and CoCo 2, with modern quality-of-life additions.
 
 ### From Extended Color BASIC
-- **Core**: NEW, RUN, LIST, END, STOP, CONT, CLEAR, LOAD, SAVE, MERGE, CHAIN, FILES, KILL, TRON/TROFF
+- **Core**: NEW, RUN, LIST, END, STOP, CONT, CLEAR, LOAD, SAVE, MERGE, CHAIN, FILES, KILL, TRON/TROFF, RENUM, DELETE, MEM/FRE
 - **I/O**: PRINT (with separators), INPUT (with prompts, multi-variable), CLS, INKEY$
 - **Variables**: Numeric and string variables, operators (+, -, *, /, ^, comparisons)
 - **Control Flow**: FOR/NEXT (with STEP), IF/THEN, GOTO, GOSUB/RETURN, ON GOTO/GOSUB, ON ERROR GOTO/RESUME
@@ -100,13 +102,16 @@ The dialect is based on Extended Color BASIC as shipped with the CoCo 1 and CoCo
 - **Sound**: SOUND command (note: accepts frequency in Hz rather than the CoCo's 1-255 pitch table)
 
 ### Modern Extensions
-These were not in Extended Color BASIC but make the environment more learner-friendly. Any program that runs on a real CoCo will run here; these additions extend the dialect without breaking compatibility.
+These were not in Extended Color BASIC but make the environment more learner-friendly. They extend the dialect; shared features follow Color BASIC semantics (operator precedence, INT, RND, number printing, auto-dimensioned arrays, TYPE MISMATCH when strings and numbers are mixed). Most CoCo BASIC programs run unchanged, but not all — see [Differences from Real Hardware](#differences-from-real-hardware).
 
 - **MOD** operator for modular arithmetic
 - **EXIT FOR** to break out of FOR/NEXT loops early
 - **WHILE/WEND** and **DO/LOOP** (with WHILE/UNTIL) structured loop constructs
 - **IF/THEN/ELSE/ENDIF** multi-line conditional blocks
 - **LOCAL** *var1, var2, ...* — save variables in GOSUB, restore on RETURN (prevents subroutine variable collisions)
+- **PRIVATE** *var1, var2, ...* — like LOCAL, but the variables also start at 0 / "" (clean scratch space)
+- **SAFETY ON/OFF** — the runaway-loop guard (on by default)
+- **HELP** — list commands, or `HELP command` for syntax and examples
 - **PAUSE** *n* — delay execution for *n* seconds (real CoCo used busy loops)
 - **Single-line compound statements** like `IF A=1 THEN FOR I=1 TO 3: PRINT I: NEXT I`
 - **Labels** as GOTO/GOSUB targets (`MyLabel:` on its own line, used as `GOTO MyLabel`)
@@ -130,8 +135,10 @@ This is a BASIC interpreter, not a hardware emulator. It doesn't emulate the 680
 - **Error messages** are educational rather than authentic (`?SN ERROR`)
 - **Graphics** are VDG-inspired but simplified — no CSS-based 4-color set switching, approximate PMODE 0/2 resolutions
 - **SOUND** accepts frequency in Hz (1-4095) rather than the CoCo's pitch table values (1-255)
-- **PRINT** spacing doesn't exactly match hardware behavior (number padding, 16-column comma zones)
-- **Modern extensions** (MOD, EXIT FOR, WHILE/WEND, DO/LOOP, LOCAL, PAUSE, labels) are additions beyond the original ROM
+- **PRINT** formats numbers like Color BASIC (9 significant digits, `.5`), but comma zones and some spacing don't exactly match hardware
+- **Keywords must be separated from names**: `FORI=1TO10` (crunched listings) is not understood, though `10PRINT`, `IFA$="X"THEN` and `DATA"A"` are
+- **No PEEK/POKE/USR/EXEC** (see [ISSUES.md](ISSUES.md)), so programs relying on machine language or memory tricks won't run
+- **Modern extensions** (MOD, EXIT FOR, WHILE/WEND, DO/LOOP, LOCAL, PRIVATE, PAUSE, labels) are additions beyond the original ROM
 - Can't run real CoCo binaries, cassette images, or disk images
 
 ## Related Projects
@@ -166,7 +173,7 @@ basicoco/
 │   ├── ast_nodes.py        # AST node types, enums, and visitor base class
 │   ├── ast_parser.py       # AST parser (tokenizer and recursive descent)
 │   ├── ast_evaluator.py    # AST evaluator (visitor pattern execution)
-│   ├── ast_converter.py    # Single-line to multi-line control structure conversion
+│   ├── ast_converter.py    # Splits lines into sublines; expands one-line IFs into blocks
 │   ├── function_registry.py # Function registry
 │   ├── functions.py        # BASIC function implementations (all registered here)
 │   ├── commands.py         # Command registry
@@ -177,12 +184,14 @@ basicoco/
 │   ├── variables.py        # Variable/array management (DIM, array access)
 │   ├── error_context.py    # Educational error reporting
 │   └── config.py           # Configuration constants
-├── programs/               # BASIC program files (.bas)
+├── programs/               # BASIC program files (.bas) — also the file sandbox root
 ├── templates/              # HTML templates (dual monitor interface)
 ├── static/                 # CSS, JavaScript, audio support
+├── tools/                  # Developer tools (e.g. validate_moves.py: Rubik's moves vs pycuber)
+├── docs/                   # Design notes, solver plan, audit decisions log
 └── tests/
     ├── unit/               # Unit tests
-    └── integration/        # Integration and e2e tests
+    └── integration/        # Integration tests; e2e/ drives cli_client.py against a live server
 ```
 
 The interpreter is implemented in Python and is designed to be readable. If you're interested in how interpreters work — AST parsing, expression evaluation, control flow stacks — the codebase is a working example at a manageable scale.
@@ -195,11 +204,11 @@ BASIC's syntax is deeply context-dependent — `A(5)` could be an array or a fun
 2. **AST parsing** handles the core control flow and I/O commands (IF, FOR, WHILE, DO, GOTO, GOSUB, PRINT, INPUT, LET, END) — these are fully parsed into typed AST nodes and executed by the evaluator.
 3. **Command registry** handles everything else — loop closers (NEXT, WEND, LOOP), data commands (DATA, READ, RESTORE), graphics, sound, and system commands. These use string-based argument splitting before passing to `evaluate_expression()`.
 
-Single-line compound statements like `IF A=1 THEN B=2: C=3` are expanded into multi-line form at store-time by the AST converter, then executed as multi-line code.
+Single-line compound statements like `IF A=1 THEN B=2: C=3` are expanded at store-time into multi-line form (keeping each statement's source text), then executed as multi-line code.
 
 ## Testing
 
-1250+ tests. Slow tests (e2e, CLI, websocket) are excluded by default.
+About 1,850 tests. The default run (unit + fast integration tests, ~12 s) excludes tests marked `slow`: the Rubik's solver suites, the live-server websocket/e2e tests (which start their own server on a free port in a temp directory) and the pexpect program audits.
 
 ```bash
 # Run tests (slow tests excluded by default)
@@ -208,7 +217,7 @@ python -m pytest
 # Run slow tests only
 python -m pytest -m slow
 
-# Run all tests including slow
+# Run all tests including slow (~3.5 min)
 python -m pytest -m ""
 
 # Run with coverage
