@@ -106,14 +106,17 @@ Each step PRINTs status messages so the observer can follow the solve on screen.
 - **Sub-actions**: `PRINT "  action..."` (e.g., `"  SOLVING FRONT EDGE..."`, `"  EXTRACTING FROM BFR"`)
 - **Step complete**: `PRINT "  DONE!"` after invariant check passes
 
-Messages are printed before the action they describe. Animation (`AN=1`) is turned on after solving to show the final state; solving runs with `AN=0` for speed.
+Messages are printed before the action they describe. `rubiks_solve.bas` animates the solve (`AN=1`); each animation frame yields to the client, and the runaway-loop guard budgets each resumed slice separately, so the full animated solve (~1,200 frames) runs to completion. Tests solve with `AN=0` for speed.
 
 ### Program Structure
 ```basic
-lib_rubiks_solver.bas:
+rubiks_solve.bas:
   MERGE "lib_rubiks_engine"
+  MERGE "lib_rubiks_solver"
   GOSUB InitCube
-  Scramble (20 random moves)
+  NM=20: GOSUB Scramble    (20 random face turns R U F L D B — never whole-cube
+                            rotations, which would move the centers the solver
+                            treats as fixed)
   GOSUB SolveBottomCross    (Step 1)
   GOSUB SolveBottomCorners  (Step 2)
   GOSUB SolveMiddleEdges    (Step 3)
@@ -165,11 +168,11 @@ lib_rubiks_solver.bas:
 | EI | Slot | EO=0 (bottom-color on top) | EO=1 (bottom-color on side) |
 |----|------|---------------------------|----------------------------|
 | 0 | Front | `FF` | `rF` |
-| 1 | Right | `RR` | `Br` |
+| 1 | Right | `RR` | `bR` |
 | 2 | Back | `BB` | `lB` |
-| 3 | Left | `LL` | `Fl` |
+| 3 | Left | `LL` | `fLF` |
 
-EO=0 inserts with a double face turn. EO=1 uses a 2-move sequence: the adjacent face CCW, then the target face CW.
+EO=0 inserts with a double face turn. EO=1 uses the adjacent face CCW, then the target face CW; for the left slot a trailing `F` restores the front edge (no 2-move sequence inserts it without disturbing solved cross edges). The earlier `Br`/`Fl` entries were wrong — they need the edge in the middle layer, and `b`+`B` cancelled into a retry loop (fixed Sept 2026, task #64; found by brute-force search against pycuber).
 
 **Strategy** (retry loop, up to 3 passes over all 4 edges):
 a. Find the target edge (search all 12 positions for the two target colors)
@@ -376,14 +379,13 @@ A corner is "correctly positioned" if its 3 sticker colors (as a set) match the 
 
 **Corner position cycle under U CW**: TFR→TFL→TBL→TBR→TFR. Cycle positions: TFR=0, TFL=1, TBL=2, TBR=3.
 
-**Strategy** (loop, at most 4 algorithm applications):
-a. For each r=0..3, shift the 4 corner color sets by r positions in the cycle and count how many match their target color sets (TFR={2,4,3}, TFL={2,4,6}, TBR={2,5,3}, TBL={2,5,6}). Pick the r with the highest count.
-b. Apply r U turns (0=none, 1=`U`, 2=`UU`, 3=`u`)
-c. If all 4 correct, done
-d. If no rotation gives any correct corner (rare), apply algorithm once to create one, then loop back to (a)
-e. Rotate U to place a correct corner at TFR (the algorithm keeps TFR fixed)
-f. Apply algorithm (cycles the other 3 corners)
-g. Loop back to step (a). Error out if not solved after 5 iterations.
+**Strategy** (loop, at most 5 algorithm applications). **No net U rotation is allowed**: Step 5 has already aligned the top edges, so any leftover U turn would break them (and an odd one leaves a corner permutation 3-cycles can't solve). An earlier version tried r=0..3 U rotations here; it failed 27% of random scrambles (fixed Sept 2026, task #63).
+a. Count the corners already in their correct positions with no rotation (color-set sums: TFR={2,4,3}, TFL={2,4,6}, TBR={2,5,3}, TBL={2,5,6}).
+b. If all 4 correct, done
+c. If none is correct, apply the algorithm once to create one, then loop back to (a)
+d. Rotate U to place a correct corner at TFR (the algorithm keeps TFR fixed), remembering the inverse turn (`UD$`)
+e. Apply the algorithm (cycles the other 3 corners), then **undo the setup turn** with `UD$` — a conjugation, so the edges stay aligned
+f. Loop back to step (a). Error out if not solved after 5 iterations.
 
 **Invariant**: F2L preserved, top edges aligned, plus 4 top corners in correct positions (colors match adjacent centers, any orientation).
 
