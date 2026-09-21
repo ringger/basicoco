@@ -14,8 +14,8 @@ python -m pytest -m ""
 # Slow tests only
 python -m pytest -m slow
 
-# Run with coverage
-python -m pytest --cov=emulator --cov-report=term-missing
+# Run with coverage (see "Coverage" below)
+python -m pytest -m "" --cov --timeout=300
 
 # Run unit tests only
 python -m pytest tests/unit/ -v
@@ -75,11 +75,32 @@ Tests multiple components working together:
 
 #### Browser tests (`integration/browser/`)
 - `test_browser_client.py` - the web client in headless Google Chrome (Playwright): commands typed into the real REPL, output and scrollback read back, graphics checked pixel by pixel on the real canvas
+- `test_browser_ui.py` - Ctrl+C, INKEY$ key forwarding, the Copy button, the graphics info labels, PCLS with a color, SOUND note queueing
+- `test_browser_reload.py` - reloading the page reconnects to the same session with every tab
 - Marked `browser` and `slow`; they use the installed Chrome (`channel='chrome'`) and are skipped, with the launch error as the reason, if Chrome can't start. Run just these with `python -m pytest -m browser`
 - `tests/client/dual_monitor_harness.js` (run by `unit/test_client_rendering.py`) checks the same client code in Node on a fake canvas, with no browser needed
 
 #### Live server fixture
 `tests/integration/conftest.py` provides `live_server`: it starts `app.py` on a free localhost port with its working directory set to a fresh temp directory, so anything the server writes stays out of the repo's `programs/`. Tests get `live_server.url`, `.port` and `.programs_dir`. A server that fails to start fails the test — nothing is silently skipped.
+
+## Coverage
+
+```bash
+python -m pytest -m "" --cov --cov-report=json:coverage.json --timeout=300
+python tools/diff_coverage.py coverage.json <rev>   # uncovered lines changed since <rev>
+```
+
+`.coveragerc` measures `emulator/`, `app.py`, `cli_client.py` and `basicoco.py`, including the server and CLI subprocesses the integration tests start (`patch = subprocess`; `sigterm = true` so the live server saves its data when stopped). Coverage slows the Rubik's tests past the default 30 s timeout, hence `--timeout=300`; a full run takes about 12 minutes.
+
+Changed-but-uncovered lines left on purpose after the audit's coverage pass (#81), each with its reason:
+- `app.py` `_Pretty.__repr__`: only formats DEBUG log output.
+- `app.py` disconnect with no session / while a program runs: a timing race the socket tests can't set up deterministically.
+- `program_files.py` KILL's `PermissionError` / `OSError`: OS failures after the sandbox check.
+- `graphics.py` DRAW's final `return []`: fallthrough after every known DRAW command.
+- `program_executor.py` exception with an empty message: defensive.
+- `core.py` numeric INPUT overflow → 0: `basic_number_prefix` doesn't raise OverflowError for any input found.
+
+Lines found to be buggy or possibly unreachable are tracked in TASKS.md (#92–#96).
 
 ## Test Framework
 

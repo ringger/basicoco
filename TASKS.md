@@ -11,9 +11,6 @@ match the session task list, where every entry here is mirrored.
 - [ ] **Check the Rubik's static-render bleed-through in a real browser** [#82]
   Reported: in the static "CUBE SOLVED!" view, stickers from back subcubes bleed through at the boundaries between the three visible faces. The Sept 2026 audit could not reproduce it outside a browser: the per-subcube depth sort matched a true per-pixel z-buffer for every move type at 15/45/75°, and a replica of the client's LINE/PAINT rasterization was within 16 px of an ideal fill. Headless-Chrome tests (`tests/integration/browser/`) can now look at the real canvas.
   **Done when:** a browser test renders the solved cube and asserts no back-face sticker color shows inside the front faces. If it passes, close the report; if it reproduces, fix it with that test.
-- [ ] **Coverage pass over every surface touched in the audit** [#81]
-  Run pytest-cov (`-m ""`) over `emulator/`, `app.py`, `cli_client.py`, `basicoco.py`; add tests for real behaviour in uncovered, audit-changed code. Map each changed client method (GraphicsDisplay, TextDisplay, TabManager) to a harness or browser check.
-  **Done when:** every uncovered line in audit-changed code has a test or a one-line reason listed here, and every changed client method has a check. Commit per area.
 - [ ] **Generate the move tables from pycuber** [#55]
   A `tools/` script that derives each move's facelet 4-cycles (R L U D F B M E S X Y Z) from pycuber and emits BASIC DATA for the existing `CL(2,2,2,5)` layout. Extend `tools/validate_moves.py` rather than duplicating it.
   **Done when:** the script emits all 12 moves, and a test applying each move from the tables matches pycuber on every sticker.
@@ -56,6 +53,21 @@ match the session task list, where every entry here is mirrored.
   - Strings: very long strings; empty strings in +, MID$, INSTR; comparisons with trailing spaces.
   - Graphics: PAINT through narrow corridors; LINE/DRAW crossing the screen edge; switching PMODE mid-drawing.
   **Done when:** each bullet has at least one test (tests that expose bugs are marked xfail against a new task).
+- [ ] **Enforce the fast/slow test boundary** [#91]
+  `slow` means "over 1 second", but nothing checks it: `test_lunar_lander` (3.2 s) and `test_simple_lunar` (1.2 s) run in the default suite, and slow marking is spread over file markers, class markers and conftest path rules.
+  **Done when:** a conftest check flags any unmarked test over the budget, the offenders are marked or sped up, and the rule is in tests/README.
+- [ ] **A failing RESUME re-enters the error handler forever** [#92]
+  `10 ON ERROR GOTO 30 / 20 X=1/0 / 30 PRINT "HANDLER" / 40 RESUME "A"`: RESUME's own error is trapped by the same handler, which runs again, until the runaway guard stops the program (found in the #81 pass). An error raised inside the handler should stop the program with that error, as CoCo does.
+  **Done when:** a test shows the program above prints HANDLER once and stops with the RESUME error.
+- [ ] **An IF condition that raises leaks a Python exception at the prompt** [#93]
+  Typing `IF 1/0 THEN` raises ZeroDivisionError out of `process_command` (core.py's multi-line-IF branch catches a hand-written tuple, not `BASIC_RUNTIME_ERRORS`). The web server turns it into "Error: Division by zero"; other callers crash.
+  **Done when:** the branch uses `BASIC_RUNTIME_ERRORS` and a test gets a BASIC error for `IF 1/0 THEN`.
+- [ ] **LINE INPUT # into a numeric variable silently stores 0** [#94]
+  `LINE INPUT #1, A` reads the line and sets A to 0 with no error. LINE INPUT only takes string variables.
+  **Done when:** it gives TYPE MISMATCH (file and console LINE INPUT alike), with tests.
+- [ ] **Decide RENUM's argument order** [#97]
+  BasiCoCo takes `RENUM new,increment,old`; Extended Color BASIC takes `RENUM new,old,increment`. Programs typed from CoCo listings would renumber the wrong lines.
+  **Done when:** the user picks one; if CoCo's, RENUM, its HELP text and tests are changed, and the choice is recorded in docs/audit_decisions.md.
 
 ## Low priority — not implemented from Extended Color BASIC
 
@@ -65,5 +77,11 @@ Rarely needed, or hard to emulate meaningfully.
   Because unknown names with parentheses auto-dimension as arrays, `X=VARPTR(A)` and `X=USR(1)` silently return 0, `PEEK(100)` says BAD SUBSCRIPT, and `EXEC 100` says "Unrecognized command".
   **Done when:** each gives a clear "not supported in BasiCoCo" error with suggestions (they become reserved names, so they can't be used as arrays), with tests. Real PEEK/POKE (a simulated memory map) would be a separate task.
 - [ ] **Random-access files: FIELD, GET/PUT (file)** [#88] — **Done when:** OPEN "R", FIELD, LSET/RSET, GET#/PUT# and LOC/LOF work with tests.
+- [ ] **Error messages that leak Python or suggest the wrong syntax** [#95]
+  `A("X")=5` says "invalid literal for int() with base 10: 'X'" (should be TYPE MISMATCH); a malformed LINE coordinate (`LINE (A,)-(1,1)`) says "LINE requires exactly two coordinates" and suggests `LINE(x,y)`; `IF 1 THEN "A"` reports "Unrecognized command: A", dropping the quotes.
+  **Done when:** each gives a BASIC-style message with correct suggestions, with tests.
+- [ ] **Prove or remove possibly unreachable branches** [#96]
+  No test reaches these, and the #81 probes suggest nothing can: ast_evaluator.py `visit_if_statement` ELSE-with-a-number branch (`IF 0 THEN 30 ELSE 10+10` takes another path); control_flow.py's second NEXT WITHOUT FOR; ast_parser.py's `'` token and leftover-REM checks (the splitter removes comments first); ast_converter.py `_is_jump_target`'s quote branch.
+  **Done when:** each has a test that reaches it, or is deleted with the full suite passing.
 - [ ] **Optimal solver for short scrambles (bidirectional BFS)** [#62] (after #56)
   **Done when:** any ≤8-move scramble is solved optimally, checked against a Python BFS for seeded scrambles.
