@@ -52,6 +52,8 @@ Tests individual components in isolation using pytest fixtures:
 - `test_sandbox.py` - filesystem sandbox, KILL protocol, per-session CD
 - `test_comments_and_crunching.py` - `'`/REM comments, block-IF detection, crunched spacing, ERR codes
 - `test_immediate_mode.py`, `test_chain_directive.py`, `test_renum_references.py`, `test_graphics_arguments.py`, `test_graphics_pixels.py`, `test_file_io_args.py`, `test_help_listing.py`, `test_app_sessions.py`
+- `test_robustness.py` - awkward inputs across file I/O, ON ERROR, CHAIN ALL, loop stacks, strings and graphics; known bugs are strict xfails naming their TASKS.md entry
+- `test_server_sessions.py` - the web server's session handling via Flask-SocketIO's test client; `test_audit_error_paths.py` - error paths found by the coverage pass
 - `test_rubiks_*.py` - Rubik's cube engine and solver (slow); `test_rubiks_regressions.py` solves 100 seeded random scrambles and checks each solution in pycuber
 - And more...
 

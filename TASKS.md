@@ -41,15 +41,18 @@ match the session task list, where every entry here is mirrored.
 - [ ] **PPOINT sees PAINT fills and GPRINT text** [#85]
   The server tracks LINE/CIRCLE/DRAW/PSET pixels but not PAINT or GPRINT, so `PPOINT` inside a painted area or on GPRINT text returns 0.
   **Done when:** the server records PAINT fills (same flood-fill rules as the client) and GPRINT glyph pixels, and tests check PPOINT inside a painted box and on a GPRINT stroke.
-- [ ] **Robustness test sweep** [#86]
-  These areas work but haven't been tested with awkward inputs. Write the tests; any bug found becomes its own task.
-  - File I/O: several files open at once; EOF exactly at the last record; a file of thousands of lines; closing a file mid-read.
-  - ON ERROR / RESUME: handler inside a nested GOSUB using LOCAL; RESUME NEXT across sublines; an error raised inside the handler.
-  - CHAIN ALL carrying arrays, open files and an active error handler.
-  - GOTO out of deeply nested FOR/WHILE/IF blocks, repeated in a loop (stacks mustn't grow without bound).
-  - Strings: very long strings; empty strings in +, MID$, INSTR; comparisons with trailing spaces.
-  - Graphics: PAINT through narrow corridors; LINE/DRAW crossing the screen edge; switching PMODE mid-drawing.
-  **Done when:** each bullet has at least one test (tests that expose bugs are marked xfail against a new task).
+- [ ] **PRINT# writes numbers without PRINT's spaces** [#103]
+  `PRINT #1,5;6;-3` writes `56-3`, so INPUT # reads back one wrong number; PRINT writes ` 5  6 -3 `. PRINT# has its own item tokenizer instead of PRINT's formatting. Also decide commas: PRINT# writes `A,B` for `PRINT #1,"A","B"` (INPUT # then reads two fields), where Color BASIC pads to the next print zone.
+  **Done when:** PRINT# formats items exactly like PRINT (xfail in `test_robustness.py` passes), the comma choice is recorded in docs/audit_decisions.md, and the bundled programs that write files still read them back.
+- [ ] **Re-entering a WHILE or DO leaks a stack frame** [#100]
+  `FOR K=1 TO 2000: WHILE 1: IF 1 THEN GOTO 40 ... 40 NEXT K` leaves 2000 frames on `while_stack` (DO: `do_stack`). FOR already replaces its frame when the same loop starts again (#43); WHILE and DO push a new one each time.
+  **Done when:** starting a WHILE or DO whose frame (same line and subline) is already on its stack replaces it (dropping frames above it), and the two xfails in `test_robustness.py` pass.
+- [ ] **DRAW: a `;` drops the command before it; the pen starts off-centre** [#101]
+  `DRAW "BM100,100;R20"` never moves to (100,100) (`BM100,100R20` does), silently; and the pen starts at (64,48), a leftover of the old per-mode coordinates, not the screen centre (128,96).
+  **Done when:** `;` separates DRAW commands everywhere, a malformed DRAW command is an error instead of being skipped, the pen starts (and resets on NEW/PCLS as today) at (128,96), with tests; the xfail in `test_robustness.py` passes.
+- [ ] **Decide ERR's numbering** [#102]
+  `_ERROR_CODES` (program_executor.py) mixes schemes: SYNTAX 1, OUT OF DATA 4, ILLEGAL FUNCTION CALL 5, OVERFLOW 6, UNDEFINED LINE 7, BAD SUBSCRIPT 9, TYPE MISMATCH 13, STRING TOO LONG 14, division by zero 99. Color BASIC has no ERR; Microsoft BASIC numbers them SN 2, OD 4, FC 5, OV 6, UL 8, BS 9, /0 11, TM 13, LS 15.
+  **Done when:** one scheme is chosen (Microsoft's is the natural fit for an ERR extension) and recorded in docs/audit_decisions.md, the table and tests follow it, and the xfail in `test_robustness.py` passes.
 
 ## Low priority — not implemented from Extended Color BASIC
 

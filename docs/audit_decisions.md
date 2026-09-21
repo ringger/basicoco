@@ -20,6 +20,7 @@ Task numbers (#N) refer to the audit task list.
 | 6 | Empty DATA items (`DATA 1,,3`) read as 0 / "". READ into a numeric variable from non-numeric DATA → TYPE MISMATCH error (real CoCo says ?SN ERROR in the DATA line; the clearer message was preferred). READ into a string variable converts numbers to their text. | auto | `split_args(keep_empty=True)` added to the shared splitter rather than a new one. |
 | 9 | **VAL** follows MS BASIC prefix parsing: spaces ignored, &H/&O accepted, stops at the first non-numeric char, overflow → error. Implemented as `basic_number_prefix()` in functions.py. | auto | |
 | 12 | STRING$ code outside 0–255, or an empty string argument → ILLEGAL FUNCTION CALL. | auto | |
+| 86 | Strings are **not limited to 255 characters** (Color BASIC gives ?LS ERROR). Kept as a modern extension: it breaks no working CoCo program. | auto | Open question: enforce 255 for fidelity? |
 | 97 | **RENUM takes Extended Color BASIC's order**, `RENUM new,start,increment` (was `new,increment,start`); empty positions keep their defaults (`RENUM ,,5`). A single line may now be renumbered to the top (65530), which the old overflow check refused. Line numbers still go to 65535, not CoCo's 63999. | user delegated ("do what makes the most sense") | Two-argument calls with increment 10 (`RENUM 100,10`) mean the same in both orders on programs starting at line 10 or above. |
 
 ## Filesystem sandbox

@@ -111,6 +111,25 @@ check('PAINT inside a CIRCLE does not leak', () => {
     }
     assert.strictEqual(px(g, 0, 0), g.colors[0]);
 });
+check('PAINT flows through a one-pixel corridor and nowhere else (#86)', () => {
+    const g = gd();
+    const wall = (x1, y1, x2, y2) => g.drawLine(x1, y1, x2, y2, 1);
+    // Room A (20..60) and room B (100..140), joined at y=40 by a corridor
+    // whose walls are at y=39 and y=41
+    for (const [left, right] of [[20, 60], [100, 140]]) {
+        wall(left, 20, right, 20); wall(left, 60, right, 60);
+    }
+    wall(20, 20, 20, 60); wall(140, 20, 140, 60);
+    wall(60, 20, 60, 39); wall(60, 41, 60, 60);
+    wall(100, 20, 100, 39); wall(100, 41, 100, 60);
+    wall(60, 39, 100, 39); wall(60, 41, 100, 41);
+    g.paint(40, 40, 4, 1);
+    assert.strictEqual(px(g, 80, 40), g.colors[4], 'corridor not painted');
+    assert.strictEqual(px(g, 120, 50), g.colors[4], 'far room not painted');
+    for (const [x, y] of [[80, 30], [80, 50], [10, 10], [150, 40]]) {
+        assert.strictEqual(px(g, x, y), g.colors[0], `paint leaked to ${x},${y}`);
+    }
+});
 
 // 2. PUT actions
 function putCase(action) {
