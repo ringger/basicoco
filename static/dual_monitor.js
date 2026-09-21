@@ -135,9 +135,16 @@ class DisplayManager {
                     this.graphicsDisplay.drawLine(output.x1, output.y1, output.x2, output.y2, output.color);
                 }
                 break;
-            case 'circle':
-                this.graphicsDisplay.drawCircle(output.x, output.y, output.radius, output.color);
+            case 'circle': {
+                const ratio = output.ratio ?? 1, start = output.start ?? 0, end = output.end ?? 1;
+                if (ratio === 1 && start === 0 && end === 1) {
+                    this.graphicsDisplay.drawCircle(output.x, output.y, output.radius, output.color);
+                } else {
+                    this.graphicsDisplay.drawArc(output.x, output.y, output.radius,
+                                                 ratio, start, end, output.color);
+                }
                 break;
+            }
             case 'paint':
                 this.graphicsDisplay.paint(output.x, output.y, output.fill_color, output.boundary_color);
                 break;
@@ -1050,6 +1057,32 @@ class GraphicsDisplay {
         }
     }
     
+    // Vertices of an ellipse or arc: the same arithmetic, in the same order,
+    // as the server's arc_points() (graphics.py), so both plot the same
+    // pixels. x radius = radius, y radius = radius * ratio; start/end are
+    // fractions of a turn clockwise from 3 o'clock (end < start wraps; equal
+    // is a full turn). Offsets are snapped to 1e-6 before rounding half up.
+    static arcPoints(cx, cy, radius, ratio, start, end) {
+        const snapRound = (v) => Math.floor(Math.floor(v * 1e6 + 0.5) / 1e6 + 0.5);
+        const span = (((end - start) % 1) + 1) % 1 || 1;
+        const steps = Math.max(1, Math.ceil(64 * span));
+        const points = [];
+        for (let i = 0; i <= steps; i++) {
+            const t = (start + span * i / steps) * 2 * Math.PI;
+            points.push([cx + snapRound(radius * Math.cos(t)),
+                         cy + snapRound(radius * ratio * Math.sin(t))]);
+        }
+        return points;
+    }
+
+    // CIRCLE with a ratio or an arc: the polygon through arcPoints
+    drawArc(x, y, radius, ratio, start, end, color = null) {
+        const points = GraphicsDisplay.arcPoints(x, y, radius, ratio, start, end);
+        for (let i = 1; i < points.length; i++) {
+            this.drawLine(points[i - 1][0], points[i - 1][1], points[i][0], points[i][1], color);
+        }
+    }
+
     paint(x, y, paintColor, borderColor) {
         if (this.graphicsMode === null) return;
 

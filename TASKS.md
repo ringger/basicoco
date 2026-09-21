@@ -35,9 +35,6 @@ match the session task list, where every entry here is mirrored.
 - [ ] **Ring (circle-graph) view with synchronized animation** [#61] (after #55, #58)
   9 loops of 12 stickers, one per layer; precompute node positions in Python. Teaching value.
   **Done when:** a program animates the ring view in sync with moves, and a test checks node colors against pycuber.
-- [ ] **CIRCLE ratio and arc arguments** [#84]
-  `CIRCLE(x,y),r,c,ratio,start,end` — the ratio, start and end arguments are parsed but ignored (`CIRCLE(100,100),20,1,.5` still draws a full round circle).
-  **Done when:** server pixel tracking and the client draw ellipses and arcs the same way (shared algorithm, as for circles), with server tests, a harness check and a browser check.
 - [ ] **PPOINT doesn't see what PUT draws** [#106]
   The server records LINE, CIRCLE, DRAW, PSET, PAINT and GPRINT pixels for PPOINT, but not GET/PUT: PUT's block lives only in the client's canvas.
   **Done when:** GET stores the block's pixels on the server and PUT (PSET/PRESET/AND/OR/NOT) records its result, with server tests and a harness check that client and server agree.

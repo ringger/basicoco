@@ -6,6 +6,7 @@ GET, PUT, DRAW, COLOR, PCLEAR, PCLS, and GPRINT.
 """
 
 import functools
+import math
 import os
 import re
 
@@ -24,6 +25,32 @@ _PUT_ACTIONS = frozenset({'PSET', 'PRESET', 'AND', 'OR', 'NOT'})
 PALETTE_SIZE = 9
 _CLIENT_JS = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
                           'static', 'dual_monitor.js')
+
+
+ARC_SEGMENTS = 64  # an ellipse or arc is drawn as a polygon of this many sides per turn
+
+
+def arc_points(cx, cy, radius, ratio, start, end):
+    """Vertices of an ellipse or arc, joined by lines to draw it.
+
+    The same arithmetic as the client's arcPoints() in dual_monitor.js, so
+    both plot identical pixels: x radius = radius, y radius = radius * ratio;
+    start/end are fractions of a turn clockwise from 3 o'clock (end < start
+    wraps past 3 o'clock; equal means a full turn). Offsets are snapped to
+    1e-6 before rounding half up, so last-bit differences between Python's
+    and JavaScript's cos/sin can't move a pixel.
+    """
+    def snap_round(v):
+        return math.floor(math.floor(v * 1e6 + 0.5) / 1e6 + 0.5)
+
+    span = (end - start) % 1 or 1
+    steps = max(1, math.ceil(ARC_SEGMENTS * span))
+    points = []
+    for i in range(steps + 1):
+        t = (start + span * i / steps) * 2 * math.pi
+        points.append((cx + snap_round(radius * math.cos(t)),
+                       cy + snap_round(radius * ratio * math.sin(t))))
+    return points
 
 
 @functools.lru_cache(maxsize=1)
@@ -226,11 +253,13 @@ class BasicGraphics:
             self._plot(x1, y1, color)
             if x1 == x2 and y1 == y2:
                 break
+            # Strict comparisons, exactly as the client's drawLine: at a tie
+            # neither steps, so PPOINT sees the pixels the screen shows
             e2 = 2 * err
-            if e2 >= dy:
+            if e2 > dy:
                 err += dy
                 x1 += sx
-            if e2 <= dx:
+            if e2 < dx:
                 err += dx
                 y1 += sy
 
@@ -535,9 +564,40 @@ class BasicGraphics:
                  'Example: CIRCLE 100,50,25'])
         radius = self.emulator.eval_int(extra[0])
         color = self._parse_optional_int(extra, 1)
-        self._record_circle(x, y, radius,
-                            color if color is not None else self.emulator.current_draw_color)
-        return [{'type': 'circle', 'x': x, 'y': y, 'radius': radius, 'color': color}]
+        # CIRCLE ...,ratio,start,end: height/width ratio (0-4); the arc from
+        # start to end, fractions of a turn clockwise from 3 o'clock (0-1)
+        ratio, start, end = (self._parse_optional_number(extra, i) for i in (2, 3, 4))
+        ratio = 1 if ratio is None else ratio
+        start = 0 if start is None else start
+        end = 1 if end is None else end
+        if not 0 <= ratio <= 4:
+            return self._illegal_function_call(
+                f"CIRCLE ratio must be 0 to 4: {ratio:g}",
+                ['The ratio is height / width: .5 is a flat ellipse, 2 a tall one',
+                 'Example: CIRCLE(128,96),40,1,.5'])
+        if not (0 <= start <= 1 and 0 <= end <= 1):
+            return self._illegal_function_call(
+                "CIRCLE arc start and end must be 0 to 1",
+                ['Start and end are fractions of a turn, clockwise from 3 o\'clock',
+                 'Example: CIRCLE(128,96),40,1,1,0,.5 draws the lower half'])
+        draw_color = color if color is not None else self.emulator.current_draw_color
+        if ratio == 1 and start == 0 and end == 1:
+            self._record_circle(x, y, radius, draw_color)
+        else:
+            points = arc_points(x, y, radius, ratio, start, end)
+            for (x1, y1), (x2, y2) in zip(points, points[1:]):
+                self._record_line(x1, y1, x2, y2, draw_color)
+        return [{'type': 'circle', 'x': x, 'y': y, 'radius': radius, 'color': color,
+                 'ratio': ratio, 'start': start, 'end': end}]
+
+    def _parse_optional_number(self, parts, index):
+        """An optional numeric argument (not truncated to an int), or None."""
+        if len(parts) > index and parts[index].strip():
+            value = self.emulator.evaluate_expression(parts[index])
+            if isinstance(value, str):
+                raise ValueError(f"TYPE MISMATCH: {parts[index].strip()} is a string; a number is needed here")
+            return value
+        return None
     
     @_graphics_command('PAINT', require_graphics=True)
     def execute_paint(self, args):

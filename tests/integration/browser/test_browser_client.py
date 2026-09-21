@@ -45,6 +45,20 @@ def test_circle_is_crisp_and_paint_stays_inside(basic_page):
     assert around <= PALETTE, around - PALETTE
 
 
+def test_circle_ratio_and_arc_on_the_canvas(basic_page):
+    """#84: an ellipse (ratio .5) and the lower half of a circle, and the
+    canvas agrees with PPOINT."""
+    basic_page.run('PMODE 4,1: SCREEN 1,1: PCLS')
+    basic_page.run('CIRCLE(128,96),40,1,.5: CIRCLE(128,96),30,4,1,0,.5')
+    assert basic_page.basic_pixel(168, 96) == GREEN       # ellipse: full width
+    assert basic_page.basic_pixel(128, 116) == GREEN      # ... half height
+    assert basic_page.basic_pixel(128, 136) == BLACK
+    assert basic_page.basic_pixel(128, 126) == RED        # arc: bottom of the half
+    assert basic_page.basic_pixel(128, 66) == BLACK       # no top half
+    basic_page.run('PRINT PPOINT(128,116);PPOINT(128,126);PPOINT(128,66)')
+    assert basic_page.lines()[-2].rstrip() == ' 1  4  0'
+
+
 @pytest.mark.parametrize('mode,block', [(0, (4, 4)), (1, (4, 4)), (3, (4, 2)), (4, (2, 2))])
 def test_pmode_pixels_land_where_the_coco_puts_them(basic_page, mode, block):
     """#79: every PMODE uses 0-255 x 0-191; lower modes draw coarser pixels

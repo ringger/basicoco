@@ -125,6 +125,19 @@ check('GPRINT draws exactly the pixels the server recorded (#85)', () => {
     g.drawText(t.x, t.y, t.text, t.color);
     sameSet(lit(g, g.colors[t.color]), t.pixels);
 });
+check('LINE draws exactly the pixels the server recorded, at every slope (#107)', () => {
+    const g = gd();
+    for (const [x2, y2] of server.fan.ends) g.drawLine(128, 96, x2, y2, 1);
+    sameSet(lit(g, g.colors[1]), server.fan.pixels);
+});
+for (const arc of server.arcs) {
+    check(`CIRCLE ratio/arc ${arc.args.slice(3).join(',')} draws the server's pixels (#84)`, () => {
+        const g = gd();
+        const [x, y, r, ratio, start, end] = arc.args;
+        g.drawArc(x, y, r, ratio, start, end, arc.color);
+        sameSet(lit(g, g.colors[arc.color]), arc.pixels);
+    });
+}
 check('PAINT flows through a one-pixel corridor and nowhere else (#86)', () => {
     const g = gd();
     const wall = (x1, y1, x2, y2) => g.drawLine(x1, y1, x2, y2, 1);

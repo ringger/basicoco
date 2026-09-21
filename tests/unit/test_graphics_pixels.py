@@ -113,6 +113,49 @@ class TestPaintAndGprint:
         assert set(range(ord('A'), ord('Z') + 1)) <= set(font)
 
 
+class TestCircleRatioAndArcs:
+    """#84: CIRCLE(x,y),r,c,ratio,start,end. The ratio scales the height
+    (y radius = r * ratio); start and end are fractions of a turn,
+    clockwise from 3 o'clock."""
+
+    def test_ratio_squashes_the_circle(self, gfx):
+        gfx.process_command('CIRCLE(100,100),20,1,.5')
+        assert ppoint(gfx, 120, 100) == 1 and ppoint(gfx, 80, 100) == 1
+        assert ppoint(gfx, 100, 110) == 1 and ppoint(gfx, 100, 90) == 1
+        assert ppoint(gfx, 100, 120) == 0
+
+    def test_a_ratio_above_one_stretches_it(self, gfx):
+        gfx.process_command('CIRCLE(100,100),20,1,2')
+        assert ppoint(gfx, 100, 140) == 1 and ppoint(gfx, 120, 100) == 1
+
+    def test_quarter_arc_from_3_to_6_oclock(self, gfx):
+        gfx.process_command('CIRCLE(100,100),20,1,1,0,.25')
+        assert ppoint(gfx, 120, 100) == 1 and ppoint(gfx, 100, 120) == 1
+        assert ppoint(gfx, 80, 100) == 0 and ppoint(gfx, 100, 80) == 0
+
+    def test_an_arc_can_wrap_past_3_oclock(self, gfx):
+        gfx.process_command('CIRCLE(100,100),20,1,1,.75,.25')   # 12 -> 3 -> 6 o'clock
+        assert ppoint(gfx, 100, 80) == 1 and ppoint(gfx, 120, 100) == 1
+        assert ppoint(gfx, 100, 120) == 1 and ppoint(gfx, 80, 100) == 0
+
+    def test_ratio_one_with_no_arc_is_the_midpoint_circle(self, gfx, basic):
+        gfx.process_command('CIRCLE(100,100),20,1')
+        plain = dict(gfx.graphics.pixel_buffer)
+        gfx.process_command('PCLS')
+        gfx.process_command('CIRCLE(100,100),20,1,1,0,1')
+        assert gfx.graphics.pixel_buffer == plain
+
+    def test_the_client_gets_ratio_and_arc(self, gfx):
+        out = gfx.process_command('CIRCLE(100,100),20,3,.5,.25,.5')
+        circle = next(o for o in out if o['type'] == 'circle')
+        assert (circle['ratio'], circle['start'], circle['end']) == (.5, .25, .5)
+
+    @pytest.mark.parametrize('args', ['20,1,-1', '20,1,5', '20,1,1,-.1', '20,1,1,0,1.5'])
+    def test_out_of_range_ratio_or_arc_is_illegal(self, gfx, helpers, args):
+        errors = helpers.get_error_messages(gfx.process_command(f'CIRCLE(100,100),{args}'))
+        assert len(errors) == 1 and 'ILLEGAL FUNCTION CALL' in errors[0], errors
+
+
 def test_offscreen_pixels_are_not_stored(gfx):
     gfx.process_command('PSET(99999,-99999)')
     gfx.process_command('LINE (-1000,-1000)-(-900,-900),PSET')
