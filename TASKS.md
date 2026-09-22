@@ -57,6 +57,8 @@ Each was decided provisionally (`auto` in docs/audit_decisions.md) and works as 
   **Done when:** `tools/diff_coverage.py` against 33f5f6e shows every uncovered changed line tested or listed with a reason in tests/README.
 - [ ] **A reusable BASIC probe tool** [#122] The session repeatedly hand-wrote scratch scripts to run snippets and print outputs, errors, stack depths and pixels.
   **Done when:** `tools/basic_probe.py` does that from arguments or stdin (checking conftest helpers first), with a test.
+- [ ] **Restructure Claude's project memory into an index** [#121] `MEMORY.md` (in Claude's per-project memory directory, outside the repo) holds long sections (key bugs, Rubik's solver history, architecture) where it should be a one-line-per-memory index.
+  **Done when:** durable facts live one per memory file, anything CLAUDE.md or the repo already records is dropped, and MEMORY.md is only the index.
 - [ ] **Post-audit chapter in docs/project_evolution.md** [#90]
   **Done when:** the chapter covers the audit's follow-up work (coverage pass, browser tests, parity between server and canvas, decisions) in the document's collaboration-story voice.
 
